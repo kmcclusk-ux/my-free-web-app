@@ -1,12 +1,89 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>My Free Web App</title>
-</head>
-<body>
-  <h1>xxx My Free Web App</h1>
-  <p>xxxx This is My minimal starter app.</p>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Call Amplify Lambda (REST)</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; padding: 16px; }
+      button { padding: 10px 14px; cursor: pointer; }
+      pre { background: #f6f8fa; padding: 12px; border-radius: 8px; overflow: auto; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      input { padding: 8px; width: 220px; }
+    </style>
+  </head>
+  <body>
+    <h1>Amplify REST → Lambda test</h1>
+
+    <div class="row">
+      <label>
+        apiName:
+        <input id="apiName" value="myRestApi" />
+      </label>
+
+      <label>
+        path:
+        <input id="path" value="items" />
+      </label>
+
+      <button id="btn">Call GET</button>
+    </div>
+
+    <h3>Result</h3>
+    <pre id="out">(click “Call GET”)</pre>
+
+    <script type="module">
+      // Load Amplify via an ESM CDN (keeps this as a single HTML file)
+      import { Amplify } from "https://esm.sh/aws-amplify@6";
+      import { parseAmplifyConfig } from "https://esm.sh/aws-amplify@6/utils";
+      import { get } from "https://esm.sh/aws-amplify@6/api";
+
+      // Load your generated Amplify outputs (must be served over http(s))
+      import outputs from "./amplify_outputs.json" assert { type: "json" };
+
+      // IMPORTANT for custom REST APIs:
+      // REST: outputs.custom.API is required or you'll get "API name is invalid" :contentReference[oaicite:3]{index=3}
+      const amplifyConfig = parseAmplifyConfig(outputs);
+      Amplify.configure({
+        ...amplifyConfig,
+        API: {
+          ...amplifyConfig.API,
+          REST: outputs.custom.API,
+        },
+      });
+
+      const $ = (id) => document.getElementById(id);
+      const out = $("out");
+
+      $("btn").addEventListener("click", async () => {
+        out.textContent = "Calling…";
+
+        const apiName = $("apiName").value.trim();
+        const path = $("path").value.trim();
+
+        try {
+          // Amplify REST GET call signature :contentReference[oaicite:4]{index=4}
+          const op = get({ apiName, path });
+          const { body, statusCode, headers } = await op.response;
+
+          // Try JSON first, fall back to text
+          let payload;
+          try {
+            payload = await body.json();
+          } catch {
+            payload = await body.text();
+          }
+
+          out.textContent =
+            "statusCode: " + statusCode + "\n\n" +
+            "headers: " + JSON.stringify(Object.fromEntries(headers), null, 2) + "\n\n" +
+            "body:\n" + (typeof payload === "string" ? payload : JSON.stringify(payload, null, 2));
+        } catch (e) {
+          console.error(e);
+          out.textContent = "ERROR:\n" + (e?.message ?? String(e));
+        }
+      });
+    </script>
+  </body>
 </html>
+
