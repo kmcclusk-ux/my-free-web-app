@@ -1,3 +1,5 @@
+import { testIt } from "./functions/test-it/resource";
+
 export const resources = {
   functions: {
     "my-function": {
@@ -10,3 +12,10 @@ export const resources = {
 };
 
 export default resources;
+
+defineBackend({
+  testIt,
+});
+
+
+
