@@ -1,6 +1,6 @@
 import json
 
-def lambda_handler(event, context):
+def myPythonFunction(event, context):
     # Handle CORS preflight
     if event.get("requestContext", {}).get("http", {}).get("method") == "OPTIONS":
         return {
