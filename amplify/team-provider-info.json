@@ -15,7 +15,7 @@
       "function": {
         "helloWorld": {
           "deploymentBucketName": "amplify-portfolio-portfolio-165b1-deployment",
-          "s3Key": "amplify-builds/helloWorld-5a475731764b6e746b5a-build.zip"
+          "s3Key": "amplify-builds/helloWorld-646a595a567036684e53-build.zip"
         }
       },
       "api": {
