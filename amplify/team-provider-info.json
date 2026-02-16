@@ -1,0 +1,26 @@
+{
+  "portfolio": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-portfolio-portfolio-165b1-authRole",
+      "UnauthRoleArn": "arn:aws:iam::273729718541:role/amplify-portfolio-portfolio-165b1-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::273729718541:role/amplify-portfolio-portfolio-165b1-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-portfolio-portfolio-165b1-deployment",
+      "UnauthRoleName": "amplify-portfolio-portfolio-165b1-unauthRole",
+      "StackName": "amplify-portfolio-portfolio-165b1",
+      "StackId": "arn:aws:cloudformation:us-west-2:273729718541:stack/amplify-portfolio-portfolio-165b1/c286af70-0b4d-11f1-afa8-022e6f6c9bb1",
+      "AmplifyAppId": "d3gqzb2viphf8u"
+    },
+    "categories": {
+      "function": {
+        "helloWorld": {
+          "deploymentBucketName": "amplify-portfolio-portfolio-165b1-deployment",
+          "s3Key": "amplify-builds/helloWorld-5a475731764b6e746b5a-build.zip"
+        }
+      },
+      "api": {
+        "helloapi": {}
+      }
+    }
+  }
+}

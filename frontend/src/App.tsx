@@ -1,35 +1,21 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from "react";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [out, setOut] = useState<any>(null);
+
+  async function callHello() {
+    const base = import.meta.env.VITE_API_BASE_URL;
+    console.log("Calling:", `${base}/hello`);
+    const res = await fetch(`${base}/hello`);
+    const data = await res.json();
+    setOut(data);
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div style={{ padding: 24, fontFamily: "system-ui" }}>
+      <h1>Portfolio App</h1>
+      <button onClick={callHello}>Call Lambda</button>
+      <pre style={{ marginTop: 16 }}>{out ? JSON.stringify(out, null, 2) : ""}</pre>
+    </div>
+  );
 }
-
-export default App
