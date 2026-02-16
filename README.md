@@ -1,1 +1,1 @@
-﻿Hello — this is my Amplify/Lambda project.
+﻿Amplify Lambda + REST API Project
