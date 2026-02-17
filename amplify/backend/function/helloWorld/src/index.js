@@ -60,7 +60,7 @@ const handler = async (event) => {
     if (!Number.isFinite(num)) {
         return jsonResponse(400, { error: "Field 'value' must be a number." }, origin);
     }
-    const output = num * 15;
+    const output = num * 25;
     return jsonResponse(200, { input: num, output }, origin);
 };
 exports.handler = handler;
