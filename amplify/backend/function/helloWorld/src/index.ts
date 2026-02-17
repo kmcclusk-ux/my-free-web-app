@@ -87,7 +87,7 @@ export const handler = async (
     return jsonResponse(400, { error: "Field 'value' must be a number." }, origin);
   }
 
-  const output = num * 10;
+  const output = num * 15;
 
   return jsonResponse(200, { input: num, output }, origin);
 };
