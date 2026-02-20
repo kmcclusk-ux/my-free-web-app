@@ -1,13 +1,16 @@
-﻿import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+﻿"use strict";
 
-type InputBody = {
-  value?: unknown;
-};
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyResult,
+} from "aws-lambda";
 
-function jsonResponse(
+import { fedTax2025Mfj, fedPrefTax2024 } from "./taxCalcs";
+
+function response(
   statusCode: number,
   body: unknown,
-  origin = "*"
+  origin: string = "*"
 ): APIGatewayProxyResult {
   return {
     statusCode,
@@ -21,10 +24,21 @@ function jsonResponse(
   };
 }
 
+function decodeBody(event: APIGatewayProxyEvent): string | null {
+  if (!event.body) return null;
+
+  return event.isBase64Encoded
+    ? Buffer.from(event.body, "base64").toString("utf8")
+    : event.body;
+}
+
+type CalcName = "FED_TAX_2025_MFJ" | "FED_PREF_TAX_2024";
+type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  const origin = "*"; // tighten later for prod domains
+  const origin = "*";
 
   // CORS preflight
   if (event.httpMethod === "OPTIONS") {
@@ -40,54 +54,113 @@ export const handler = async (
     };
   }
 
-  // Enforce POST for this endpoint
   if (event.httpMethod !== "POST") {
-    return jsonResponse(405, { error: "Method not allowed. Use POST." }, origin);
+    return response(405, { error: "Method not allowed. Use POST." }, origin);
   }
 
-  if (!event.body) {
-    return jsonResponse(
+  const raw = decodeBody(event);
+  if (!raw) {
+    return response(
       400,
-      { error: 'Missing JSON body. Expected {"value": <number>}.' },
+      { error: 'Missing JSON body. Expected {"calc":"...", ...}.' },
       origin
     );
   }
 
-  // Decode body (API Gateway sometimes base64 encodes)
-  const rawBody = event.isBase64Encoded
-    ? Buffer.from(event.body, "base64").toString("utf8")
-    : event.body;
+  let body: any;
 
-  const trimmed = rawBody.trim();
-
-  // Parse JSON
-  let parsed: InputBody;
   try {
-    parsed = JSON.parse(trimmed);
+    body = JSON.parse(raw.trim());
   } catch {
-    return jsonResponse(
-      400,
+    return response(400, { error: "Invalid JSON body." }, origin);
+  }
+
+  const calc = body?.calc as CalcName | undefined;
+
+  if (!calc) {
+    return response(400, { error: "Missing field: calc" }, origin);
+  }
+
+  // ===============================
+  // FEDERAL ORDINARY TAX (2025 MFJ)
+  // ===============================
+  if (calc === "FED_TAX_2025_MFJ") {
+    const ti = Number(body.taxableIncome);
+
+    if (!Number.isFinite(ti) || ti < 0) {
+      return response(
+        400,
+        { error: "taxableIncome must be a number >= 0" },
+        origin
+      );
+    }
+
+    const tax = fedTax2025Mfj(ti);
+
+    return response(
+      200,
       {
-        error: "Invalid JSON body.",
-        debug: {
-          isBase64Encoded: !!event.isBase64Encoded,
-          bodyFirst100: trimmed.slice(0, 100),
-        },
+        calc,
+        taxableIncome: ti,
+        tax,
       },
       origin
     );
   }
 
-  // Extract value (accept number or numeric string)
-  const v = parsed.value;
-  const num =
-    typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  // ============================================
+  // PREFERENTIAL TAX (LTCG + Qualified Dividends)
+  // ============================================
+  if (calc === "FED_PREF_TAX_2024") {
+    const ord = Number(body.ordinaryTaxable) || 0;
+    const pref = Number(body.prefTaxable) || 0;
+    const fs = String(body.filingStatus || "single").toLowerCase() as FilingStatus;
 
-  if (!Number.isFinite(num)) {
-    return jsonResponse(400, { error: "Field 'value' must be a number." }, origin);
+    if (!["single", "mfj", "mfs", "hoh"].includes(fs)) {
+      return response(
+        400,
+        { error: "filingStatus must be one of: single, mfj, mfs, hoh" },
+        origin
+      );
+    }
+
+    if (!Number.isFinite(ord) || ord < 0) {
+      return response(
+        400,
+        { error: "ordinaryTaxable must be a number >= 0" },
+        origin
+      );
+    }
+
+    if (!Number.isFinite(pref) || pref < 0) {
+      return response(
+        400,
+        { error: "prefTaxable must be a number >= 0" },
+        origin
+      );
+    }
+
+    const tax = fedPrefTax2024(ord, pref, fs);
+
+    return response(
+      200,
+      {
+        calc,
+        ordinaryTaxable: ord,
+        prefTaxable: pref,
+        filingStatus: fs,
+        tax,
+      },
+      origin
+    );
   }
 
-  const output = num * 15;
-
-  return jsonResponse(200, { input: num, output }, origin);
+  return response(
+    400,
+    {
+      error: "Unknown calc.",
+      allowed: ["FED_TAX_2025_MFJ", "FED_PREF_TAX_2024"],
+    },
+    origin
+  );
 };
