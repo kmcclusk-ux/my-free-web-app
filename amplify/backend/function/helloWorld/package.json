@@ -1,0 +1,15 @@
+{
+  "name": "helloWorld",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "rimraf build && mkdirp build && tsc -p src/tsconfig.json --outDir build"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "@types/node": "^20.0.0",
+    "mkdirp": "^3.0.1",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.0.0"
+  }
+}

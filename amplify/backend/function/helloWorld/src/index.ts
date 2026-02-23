@@ -1,16 +1,15 @@
-﻿"use strict";
+﻿import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import {
+  fedTax2025Mfj,
+  fedPrefTax2024,
+  caTax2025Mfj,
+  type FilingStatus,
+} from "./taxCalcs";
 
-import type {
-  APIGatewayProxyEvent,
-  APIGatewayProxyResult,
-} from "aws-lambda";
-
-import { fedTax2025Mfj, fedPrefTax2024 } from "./taxCalcs";
-
-function response(
+function jsonResponse(
   statusCode: number,
   body: unknown,
-  origin: string = "*"
+  origin = "*"
 ): APIGatewayProxyResult {
   return {
     statusCode,
@@ -24,16 +23,42 @@ function response(
   };
 }
 
+function corsPreflight(origin = "*"): APIGatewayProxyResult {
+  return {
+    statusCode: 204,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    },
+    body: "",
+  };
+}
+
 function decodeBody(event: APIGatewayProxyEvent): string | null {
   if (!event.body) return null;
-
   return event.isBase64Encoded
     ? Buffer.from(event.body, "base64").toString("utf8")
     : event.body;
 }
 
-type CalcName = "FED_TAX_2025_MFJ" | "FED_PREF_TAX_2024";
-type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
+type RequestBody =
+  | { calc: "FED_TAX_2025_MFJ"; taxableIncome: number }
+  | {
+      calc: "FED_PREF_TAX_2024";
+      ordinaryTaxable: number;
+      prefTaxable: number;
+      filingStatus: FilingStatus;
+    }
+  // keep old name (backwards compatible)
+  | { calc: "CA_TAX_2025_MFJ"; taxableIncome: number }
+  // new name (what you were calling from PowerShell)
+  | { calc: "STATE_TAX_2025_CA_MFJ"; taxableIncome: number };
+
+function isFilingStatus(x: string): x is FilingStatus {
+  return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
+}
 
 export const handler = async (
   event: APIGatewayProxyEvent
@@ -42,124 +67,114 @@ export const handler = async (
 
   // CORS preflight
   if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-      },
-      body: "",
-    };
+    return corsPreflight(origin);
   }
 
   if (event.httpMethod !== "POST") {
-    return response(405, { error: "Method not allowed. Use POST." }, origin);
+    return jsonResponse(405, { error: "Method not allowed. Use POST." }, origin);
   }
 
   const raw = decodeBody(event);
   if (!raw) {
-    return response(
+    return jsonResponse(
       400,
       { error: 'Missing JSON body. Expected {"calc":"...", ...}.' },
       origin
     );
   }
 
-  let body: any;
-
+  let body: RequestBody;
   try {
     body = JSON.parse(raw.trim());
   } catch {
-    return response(400, { error: "Invalid JSON body." }, origin);
+    return jsonResponse(400, { error: "Invalid JSON body." }, origin);
   }
 
-  const calc = body?.calc as CalcName | undefined;
-
-  if (!calc) {
-    return response(400, { error: "Missing field: calc" }, origin);
+  const calc = (body as any)?.calc;
+  if (typeof calc !== "string") {
+    return jsonResponse(400, { error: "Missing field: calc" }, origin);
   }
 
-  // ===============================
-  // FEDERAL ORDINARY TAX (2025 MFJ)
-  // ===============================
+  // --- FED ordinary ---
   if (calc === "FED_TAX_2025_MFJ") {
-    const ti = Number(body.taxableIncome);
-
+    const ti = Number((body as any).taxableIncome);
     if (!Number.isFinite(ti) || ti < 0) {
-      return response(
+      return jsonResponse(
         400,
         { error: "taxableIncome must be a number >= 0" },
         origin
       );
     }
-
     const tax = fedTax2025Mfj(ti);
-
-    return response(
-      200,
-      {
-        calc,
-        taxableIncome: ti,
-        tax,
-      },
-      origin
-    );
+    return jsonResponse(200, { calc, taxableIncome: ti, tax }, origin);
   }
 
-  // ============================================
-  // PREFERENTIAL TAX (LTCG + Qualified Dividends)
-  // ============================================
-  if (calc === "FED_PREF_TAX_2024") {
-    const ord = Number(body.ordinaryTaxable) || 0;
-    const pref = Number(body.prefTaxable) || 0;
-    const fs = String(body.filingStatus || "single").toLowerCase() as FilingStatus;
+  // --- CA MFJ (accept BOTH calc names) ---
+  if (calc === "CA_TAX_2025_MFJ" || calc === "STATE_TAX_2025_CA_MFJ") {
+    const ti = Number((body as any).taxableIncome);
+    if (!Number.isFinite(ti) || ti < 0) {
+      return jsonResponse(
+        400,
+        { error: "taxableIncome must be a number >= 0" },
+        origin
+      );
+    }
+    const tax = caTax2025Mfj(ti);
+    return jsonResponse(200, { calc, taxableIncome: ti, tax }, origin);
+  }
 
-    if (!["single", "mfj", "mfs", "hoh"].includes(fs)) {
-      return response(
+  // --- FED preferential ---
+  if (calc === "FED_PREF_TAX_2024") {
+    const ord = Number((body as any).ordinaryTaxable) || 0;
+    const pref = Number((body as any).prefTaxable) || 0;
+    const fsRaw = String((body as any).filingStatus || "single").toLowerCase();
+
+    if (!isFilingStatus(fsRaw)) {
+      return jsonResponse(
         400,
         { error: "filingStatus must be one of: single, mfj, mfs, hoh" },
         origin
       );
     }
-
     if (!Number.isFinite(ord) || ord < 0) {
-      return response(
+      return jsonResponse(
         400,
         { error: "ordinaryTaxable must be a number >= 0" },
         origin
       );
     }
-
     if (!Number.isFinite(pref) || pref < 0) {
-      return response(
+      return jsonResponse(
         400,
         { error: "prefTaxable must be a number >= 0" },
         origin
       );
     }
 
-    const tax = fedPrefTax2024(ord, pref, fs);
-
-    return response(
+    const tax = fedPrefTax2024(ord, pref, fsRaw);
+    return jsonResponse(
       200,
       {
         calc,
         ordinaryTaxable: ord,
         prefTaxable: pref,
-        filingStatus: fs,
+        filingStatus: fsRaw,
         tax,
       },
       origin
     );
   }
 
-  return response(
+  return jsonResponse(
     400,
     {
       error: "Unknown calc.",
-      allowed: ["FED_TAX_2025_MFJ", "FED_PREF_TAX_2024"],
+      allowed: [
+        "FED_TAX_2025_MFJ",
+        "FED_PREF_TAX_2024",
+        "CA_TAX_2025_MFJ",
+        "STATE_TAX_2025_CA_MFJ",
+      ],
     },
     origin
   );

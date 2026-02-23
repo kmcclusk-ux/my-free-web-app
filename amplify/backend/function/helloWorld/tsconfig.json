@@ -1,4 +1,4 @@
-﻿{
+{
   "compilerOptions": {
     "target": "ES2020",
     "lib": ["ES2020"],
@@ -8,10 +8,10 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "rootDir": ".",
-    "outDir": "..",
+    "rootDir": "src",
+    "outDir": ".",
     "types": ["node"]
   },
-  "include": ["./**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "build", "dist"]
 }

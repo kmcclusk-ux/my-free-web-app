@@ -1,0 +1,21 @@
+{
+  "name": "helloWorld",
+  "version": "1.0.0",
+  "description": "Tax calculation Lambda function",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rimraf build",
+    "rebuild": "npm run clean && npm run build",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/aws-lambda": "^8.10.0",
+    "vitest": "^4.0.18",
+    "rimraf": "^5.0.0"
+  }
+}
