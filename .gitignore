@@ -1,5 +1,5 @@
 #amplify-do-not-edit-begin
-amplify/\#current-cloud-backend
+amplify/#current-cloud-backend
 amplify/.config/local-*
 amplify/logs
 amplify/mock-data
@@ -18,5 +18,40 @@ amplify-gradle-config.json
 amplifytools.xcconfig
 .secret-*
 **.sample
-#amplify-do-not-edit-endaws-cli-amplify.txt
+#amplify-do-not-edit-end
 aws-cli-amplify.txt
+
+# -----------------------------
+# Project-wide additions
+# -----------------------------
+
+# Test output
+.vitest/
+coverage/
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / Editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary zip files
+*.zip
+
+# Local Lambda inspection folders
+*-extracted/
+*-deploy.zip
+
+# TypeScript incremental build
+*.tsbuildinfo
