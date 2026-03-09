@@ -1,7 +1,9 @@
+﻿// C:\myapp\amplify\backend\function\helloWorld\src\taxCalcs.ts
+
 export type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
 
 /**
- * 2025 MFJ ordinary income tax on *taxable income*.
+ * 2025 MFJ ordinary income tax on *taxable income* (after deductions).
  */
 export function fedTax2025Mfj(taxableIncome: number): number {
   const ti = Number(taxableIncome);
@@ -59,9 +61,14 @@ export function fedPrefTax2024(
   const QDCG = pref;
   const taxableOrd = TI - QDCG;
 
+  // Amount of QDCG taxed at 0%
   const amount0 = Math.max(0, Math.min(QDCG, b.z0 - taxableOrd));
+
+  // Amount of QDCG taxed at 15%
   const baseFor15 = Math.max(taxableOrd, b.z0);
   const amount15 = Math.max(0, Math.min(QDCG - amount0, b.z15 - baseFor15));
+
+  // Remainder taxed at 20%
   const amount20 = Math.max(0, QDCG - amount0 - amount15);
 
   return amount15 * 0.15 + amount20 * 0.2;
@@ -110,3 +117,38 @@ export function caTax2025Mfj(taxableIncome: number): number {
 
   return tax;
 }
+
+/**
+ * Net Investment Income Tax (NIIT) â€” 3.8% surtax.
+ *
+ * NIIT = 3.8% * min(netInvestmentIncome, MAGI - threshold)
+ *
+ * Thresholds (not inflation-adjusted):
+ *  - single / hoh: 200,000
+ *  - mfj:          250,000
+ *  - mfs:          125,000
+ */
+export function niitTax(
+  magi: number,
+  netInvestmentIncome: number,
+  filingStatus: FilingStatus
+): number {
+  const m = Number(magi);
+  const nii = Number(netInvestmentIncome);
+
+  if (!Number.isFinite(m) || m <= 0) return 0;
+  if (!Number.isFinite(nii) || nii <= 0) return 0;
+
+  const fs = (filingStatus || "single").toLowerCase() as FilingStatus;
+
+  const threshold =
+    fs === "mfj" ? 250_000 : fs === "mfs" ? 125_000 : 200_000; // single, hoh
+
+  const excessMagi = Math.max(0, m - threshold);
+  const base = Math.min(nii, excessMagi);
+
+  return base * 0.038;
+}
+
+
+

@@ -6,12 +6,10 @@
     "moduleResolution": "Node",
     "strict": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "rootDir": "src",
-    "outDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "outDir": "."
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "build", "dist"]
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules"]
 }

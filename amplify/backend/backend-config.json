@@ -24,14 +24,6 @@
     }
   },
   "parameters": {
-    "AMPLIFY_function_helloWorld_abc": {
-      "usedBy": [
-        {
-          "category": "function",
-          "resourceName": "helloWorld"
-        }
-      ]
-    },
     "AMPLIFY_function_helloWorld_deploymentBucketName": {
       "usedBy": [
         {

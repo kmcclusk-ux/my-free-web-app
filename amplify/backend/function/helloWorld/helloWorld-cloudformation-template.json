@@ -15,9 +15,6 @@
     },
     "s3Key": {
       "Type": "String"
-    },
-    "abc": {
-      "Type": "String"
     }
   },
   "Conditions": {
@@ -34,7 +31,7 @@
     "LambdaFunction": {
       "Type": "AWS::Lambda::Function",
       "Metadata": {
-        "aws:asset:path": "./build",
+        "aws:asset:path": "./",
         "aws:asset:property": "Code"
       },
       "Properties": {
@@ -72,9 +69,6 @@
             },
             "REGION": {
               "Ref": "AWS::Region"
-            },
-            "abc": {
-              "Ref": "abc"
             }
           }
         },

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fedTax2025Mfj } from "../amplify/backend/function/helloWorld/src/taxCalcs.ts";;
+import { fedTax2025Mfj } from "../amplify/backend/function/helloWorld/taxCalcs.js";
 
 describe("FED_TAX_2025_MFJ", () => {
   test("0 => 0", () => {
@@ -11,7 +11,6 @@ describe("FED_TAX_2025_MFJ", () => {
   });
 
   test("monotonic", () => {
-    expect(fedTax2025Mfj(100000))
-      .toBeLessThanOrEqual(fedTax2025Mfj(200000));
+    expect(fedTax2025Mfj(100000)).toBeLessThanOrEqual(fedTax2025Mfj(200000));
   });
 });

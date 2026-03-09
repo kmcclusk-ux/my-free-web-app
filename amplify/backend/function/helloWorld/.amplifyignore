@@ -1,0 +1,15 @@
+# Don't ship dev junk
+node_modules/
+src/
+build/
+dist/
+
+# Don't ship TypeScript sources/config
+*.ts
+tsconfig.json
+
+# DO ship compiled JS
+!index.js
+!taxCalcs.js
+!package.json
+!package-lock.json

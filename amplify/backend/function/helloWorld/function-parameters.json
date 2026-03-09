@@ -1,15 +1,6 @@
 {
-    "lambdaLayers":  [
-
-                     ],
-    "permissions":  {
-
-                    },
-    "environmentVariableList":  [
-                                    {
-                                        "cloudFormationParameterName":  "abc",
-                                        "environmentVariableName":  "abc"
-                                    }
-                                ],
-    "DEPLOY_VERSION":  "2026-02-23-4"
+  "lambdaLayers": [],
+  "permissions": {},
+  "environmentVariableList": [],
+  "DEPLOY_VERSION": "2026-02-23-4"
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { fedTax2025Mfj, caTax2025Mfj } from "../amplify/backend/function/helloWorld/src/taxCalcs.ts";
+import { fedTax2025Mfj, caTax2025Mfj } from "../amplify/backend/function/helloWorld/taxCalcs.js";
 
 describe("Golden vectors", () => {
   test("FED_TAX_2025_MFJ", () => {
@@ -14,13 +14,7 @@ describe("Golden vectors", () => {
   });
 
   test("STATE_TAX_2025_CA_MFJ", () => {
-    // Fill these once with your known-good CA outputs
-    const cases: Array<[number, number]> = [
-      [0, 0],
-      // [50000, 1234],
-      // [100000, 2345],
-      // [450000, 34567],
-    ];
+    const cases: Array<[number, number]> = [[0, 0]];
     for (const [ti, expected] of cases) {
       expect(caTax2025Mfj(ti)).toBe(expected);
     }
