@@ -1,8 +1,9 @@
-﻿import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import {
   fedTax2025Mfj,
   fedPrefTax2024,
   caTax2025Mfj,
+  niitTax,
   type FilingStatus,
 } from "./taxCalcs";
 
@@ -51,13 +52,27 @@ type RequestBody =
       prefTaxable: number;
       filingStatus: FilingStatus;
     }
-  // keep old name (backwards compatible)
+  | {
+      calc: "FED_TAX_2025_COMBINED";
+      ordinaryTaxable: number;
+      prefTaxable: number;
+      filingStatus: FilingStatus;
+      magi: number;
+      netInvestmentIncome: number;
+    }
   | { calc: "CA_TAX_2025_MFJ"; taxableIncome: number }
-  // new name (what you were calling from PowerShell)
   | { calc: "STATE_TAX_2025_CA_MFJ"; taxableIncome: number };
 
 function isFilingStatus(x: string): x is FilingStatus {
   return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
+}
+
+function readNonNegativeNumber(value: unknown, fieldName: string) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return { error: `${fieldName} must be a number >= 0` };
+  }
+  return { value: num };
 }
 
 export const handler = async (
@@ -65,7 +80,6 @@ export const handler = async (
 ): Promise<APIGatewayProxyResult> => {
   const origin = "*";
 
-  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return corsPreflight(origin);
   }
@@ -95,70 +109,118 @@ export const handler = async (
     return jsonResponse(400, { error: "Missing field: calc" }, origin);
   }
 
-  // --- FED ordinary ---
   if (calc === "FED_TAX_2025_MFJ") {
-    const ti = Number((body as any).taxableIncome);
-    if (!Number.isFinite(ti) || ti < 0) {
-      return jsonResponse(
-        400,
-        { error: "taxableIncome must be a number >= 0" },
-        origin
-      );
+    const taxableIncome = readNonNegativeNumber((body as any).taxableIncome, "taxableIncome");
+    if ("error" in taxableIncome) {
+      return jsonResponse(400, { error: taxableIncome.error }, origin);
     }
-    const tax = fedTax2025Mfj(ti);
-    return jsonResponse(200, { calc, taxableIncome: ti, tax }, origin);
+
+    const tax = fedTax2025Mfj(taxableIncome.value);
+    return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
   }
 
-  // --- CA MFJ (accept BOTH calc names) ---
   if (calc === "CA_TAX_2025_MFJ" || calc === "STATE_TAX_2025_CA_MFJ") {
-    const ti = Number((body as any).taxableIncome);
-    if (!Number.isFinite(ti) || ti < 0) {
-      return jsonResponse(
-        400,
-        { error: "taxableIncome must be a number >= 0" },
-        origin
-      );
+    const taxableIncome = readNonNegativeNumber((body as any).taxableIncome, "taxableIncome");
+    if ("error" in taxableIncome) {
+      return jsonResponse(400, { error: taxableIncome.error }, origin);
     }
-    const tax = caTax2025Mfj(ti);
-    return jsonResponse(200, { calc, taxableIncome: ti, tax }, origin);
+
+    const tax = caTax2025Mfj(taxableIncome.value);
+    return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
   }
 
-  // --- FED preferential ---
   if (calc === "FED_PREF_TAX_2024") {
-    const ord = Number((body as any).ordinaryTaxable) || 0;
-    const pref = Number((body as any).prefTaxable) || 0;
-    const fsRaw = String((body as any).filingStatus || "single").toLowerCase();
+    const ordinaryTaxable = readNonNegativeNumber((body as any).ordinaryTaxable, "ordinaryTaxable");
+    if ("error" in ordinaryTaxable) {
+      return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
+    }
 
-    if (!isFilingStatus(fsRaw)) {
+    const prefTaxable = readNonNegativeNumber((body as any).prefTaxable, "prefTaxable");
+    if ("error" in prefTaxable) {
+      return jsonResponse(400, { error: prefTaxable.error }, origin);
+    }
+
+    const filingStatus = String((body as any).filingStatus || "single").toLowerCase();
+    if (!isFilingStatus(filingStatus)) {
       return jsonResponse(
         400,
         { error: "filingStatus must be one of: single, mfj, mfs, hoh" },
         origin
       );
     }
-    if (!Number.isFinite(ord) || ord < 0) {
-      return jsonResponse(
-        400,
-        { error: "ordinaryTaxable must be a number >= 0" },
-        origin
-      );
-    }
-    if (!Number.isFinite(pref) || pref < 0) {
-      return jsonResponse(
-        400,
-        { error: "prefTaxable must be a number >= 0" },
-        origin
-      );
-    }
 
-    const tax = fedPrefTax2024(ord, pref, fsRaw);
+    const tax = fedPrefTax2024(ordinaryTaxable.value, prefTaxable.value, filingStatus);
     return jsonResponse(
       200,
       {
         calc,
-        ordinaryTaxable: ord,
-        prefTaxable: pref,
-        filingStatus: fsRaw,
+        ordinaryTaxable: ordinaryTaxable.value,
+        prefTaxable: prefTaxable.value,
+        filingStatus,
+        tax,
+      },
+      origin
+    );
+  }
+
+  if (calc === "FED_TAX_2025_COMBINED") {
+    const ordinaryTaxable = readNonNegativeNumber((body as any).ordinaryTaxable, "ordinaryTaxable");
+    if ("error" in ordinaryTaxable) {
+      return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
+    }
+
+    const prefTaxable = readNonNegativeNumber((body as any).prefTaxable, "prefTaxable");
+    if ("error" in prefTaxable) {
+      return jsonResponse(400, { error: prefTaxable.error }, origin);
+    }
+
+    const filingStatus = String((body as any).filingStatus || "mfj").toLowerCase();
+    if (!isFilingStatus(filingStatus)) {
+      return jsonResponse(
+        400,
+        { error: "filingStatus must be one of: single, mfj, mfs, hoh" },
+        origin
+      );
+    }
+
+    if (filingStatus !== "mfj") {
+      return jsonResponse(
+        400,
+        { error: "FED_TAX_2025_COMBINED currently supports filingStatus=mfj only" },
+        origin
+      );
+    }
+
+    const magi = readNonNegativeNumber((body as any).magi, "magi");
+    if ("error" in magi) {
+      return jsonResponse(400, { error: magi.error }, origin);
+    }
+
+    const netInvestmentIncome = readNonNegativeNumber(
+      (body as any).netInvestmentIncome,
+      "netInvestmentIncome"
+    );
+    if ("error" in netInvestmentIncome) {
+      return jsonResponse(400, { error: netInvestmentIncome.error }, origin);
+    }
+
+    const ordinaryTax = fedTax2025Mfj(ordinaryTaxable.value);
+    const prefTax = fedPrefTax2024(ordinaryTaxable.value, prefTaxable.value, filingStatus);
+    const niit = niitTax(magi.value, netInvestmentIncome.value, filingStatus);
+    const tax = ordinaryTax + prefTax + niit;
+
+    return jsonResponse(
+      200,
+      {
+        calc,
+        ordinaryTaxable: ordinaryTaxable.value,
+        prefTaxable: prefTaxable.value,
+        filingStatus,
+        magi: magi.value,
+        netInvestmentIncome: netInvestmentIncome.value,
+        niit,
+        ordinaryTax,
+        prefTax,
         tax,
       },
       origin
@@ -172,6 +234,7 @@ export const handler = async (
       allowed: [
         "FED_TAX_2025_MFJ",
         "FED_PREF_TAX_2024",
+        "FED_TAX_2025_COMBINED",
         "CA_TAX_2025_MFJ",
         "STATE_TAX_2025_CA_MFJ",
       ],
