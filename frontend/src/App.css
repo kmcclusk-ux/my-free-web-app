@@ -50,3 +50,10 @@
 
 .topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
+.readonly-cell { min-width: 88px; padding: 7px 8px; border-radius: 10px; background: rgba(231, 238, 239, 0.9); color: #21414a; font-size: .84rem; }
+.readonly-cell--text { min-width: 120px; }
+.checkbox-cell { text-align: center; }
+.checkbox-cell input { width: 16px; height: 16px; }
+.sheet-table--workbook { min-width: 3600px; }
+.sheet-table--workbook th, .sheet-table--workbook td { white-space: nowrap; vertical-align: middle; }
+.sheet-table--workbook select, .sheet-table--workbook input { min-width: 92px; }

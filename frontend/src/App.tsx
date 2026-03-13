@@ -11,6 +11,7 @@ type TabKey =
   | "accounts"
   | "accountTaxType"
   | "investmentType";
+
 type FilingStatus = "single" | "mfj";
 type TaxResult = { calc: string; tax: number; ordinaryTax?: number; prefTax?: number; niit?: number };
 type ApiError = { error: string };
@@ -18,76 +19,54 @@ type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
 
 type InvestmentRow = {
   id: number;
+  description: string;
   account: string;
-  name: string;
-  ticker: string;
-  investmentType: string;
-  marketValue: number;
-  annualIncome: number;
-  taxTreatment: string;
-  notes: string;
-};
-type TickerRow = {
-  id: number;
-  ticker: string;
-  issuer: string;
-  assetClass: string;
-  dividendRate: number;
-  exDividendDate: string;
-  payoutDate: string;
-  notes: string;
-};
-type TaxTreatmentRow = {
-  id: number;
-  label: string;
-  federalBucket: string;
-  stateBucket: string;
-  preferredRate: string;
-  notes: string;
-};
-type AccountRow = {
-  id: number;
-  account: string;
-  institution: string;
-  type: string;
-  owner: string;
-  notes: string;
-};
-type AccountTaxTypeRow = {
-  id: number;
-  account: string;
-  taxType: string;
-  includeInCashflow: string;
-  notes: string;
-};
-type InvestmentTypeRow = {
-  id: number;
-  type: string;
-  defaultTaxTreatment: string;
-  preferredEligible: string;
-  stateTreatment: string;
-  notes: string;
+  category: string;
+  totalInvestment: number;
+  yearlyIncome: number;
+  includeIncome: boolean;
+  overrideProposal: boolean;
+  symbol: string;
+  newSymbol: string;
+  newPercent: number;
 };
 
-type FederalSettings = {
-  filingStatus: FilingStatus;
-  extraOrdinaryIncome: number;
-  extraQualifiedIncome: number;
-  extraLongTermCapitalGains: number;
-  socialSecurity: number;
-  mortgageInterest: number;
-  propertyTax: number;
-  stateIncomeTax: number;
-  standardDeduction: number;
-  saltCap: number;
+type DerivedInvestmentRow = InvestmentRow & {
+  monthlyIncome: number;
+  currentPercent: number;
+  effectiveSymbol: string;
+  effectivePercent: number;
+  extraData: number;
+  filteredIncome: number;
+  includedTotal: number;
+  taxStatus: string;
+  taxTreatment: string;
+  investmentType: string;
+  ordinaryMonthly: number;
+  preferredMonthly: number;
+  stateMonthly: number;
+  nonTaxableMonthly: number;
+  nonInvestmentIncome: number;
+  cash: number;
+  stocks: number;
+  preferredStock: number;
+  bonds: number;
+  muniBond: number;
+  muniInterest: number;
+  businessDevelopment: number;
+  coveredCall: number;
+  realEstate: number;
+  bitcoin: number;
 };
-type StateSettings = {
-  extraStateIncome: number;
-  mortgageInterest: number;
-  propertyTax: number;
-  stateIncomeTax: number;
-  standardDeduction: number;
-};
+
+type TickerRow = { id: number; symbol: string; percentReturn: number; category: string; taxTreatment: string; extraData: number; description: string; exDividend: string; divPayout: string };
+type TaxTreatmentRow = { id: number; label: string };
+type AccountRow = { id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
+type AccountTaxTypeRow = { id: number; taxStatus: string };
+type InvestmentTypeRow = { id: number; name: string };
+
+type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number; saltCap: number };
+type StateSettings = { extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 
 type WorkbookResponse = {
@@ -100,109 +79,87 @@ type WorkbookResponse = {
     accountTaxType: AccountTaxTypeRow[];
     investmentType: InvestmentTypeRow[];
   }>;
-  settings?: Partial<{
-    federal: FederalSettings;
-    state: StateSettings;
-    planner: PlannerSettings;
-  }>;
+  settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings }>;
   updatedAt?: string | null;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const WORKSPACE_ID = "default";
+
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
-  { key: "investments", label: "Investments", meta: "holdings grid" },
-  { key: "federal", label: "Federal Tax", meta: "auto from investments" },
+  { key: "investments", label: "Investments", meta: "workbook grid" },
+  { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "CA worksheet" },
-  { key: "calculator", label: "Tax Calculator", meta: "continuous totals" },
-  { key: "tickers", label: "Tickers", meta: "market reference" },
-  { key: "taxTreatment", label: "Tax Treatment", meta: "mapping table" },
-  { key: "accounts", label: "Accounts", meta: "account registry" },
-  { key: "accountTaxType", label: "Account Tax Type", meta: "tax wrappers" },
-  { key: "investmentType", label: "Investment Type", meta: "type defaults" },
+  { key: "calculator", label: "Tax Calculator", meta: "summary" },
+  { key: "tickers", label: "Tickers", meta: "symbol lookups" },
+  { key: "taxTreatment", label: "Tax Treatment", meta: "sheet labels" },
+  { key: "accounts", label: "Accounts", meta: "tax status" },
+  { key: "accountTaxType", label: "Account Tax Type", meta: "status list" },
+  { key: "investmentType", label: "Investment Type", meta: "asset classes" },
 ];
 
 const initialInvestments: InvestmentRow[] = [
-  { id: 1, account: "Vanguard Brokerage", name: "Municipal Bond Ladder", ticker: "NAD", investmentType: "Muni Bond", marketValue: 145000, annualIncome: 45200, taxTreatment: "", notes: "Primary tax-free sleeve" },
-  { id: 2, account: "Interactive Brokers", name: "Dividend Core", ticker: "SPYI", investmentType: "ETF", marketValue: 118500, annualIncome: 31210, taxTreatment: "Qualified-div", notes: "Preferred-rate income" },
-  { id: 3, account: "Rental Portfolio", name: "Palmetto + Sitio", ticker: "PRIVATE", investmentType: "Real Estate", marketValue: 99855, annualIncome: 61836, taxTreatment: "", notes: "Net ordinary cash flow" },
-  { id: 4, account: "Schwab Rollover IRA", name: "Preferred Income ETF", ticker: "PFFA", investmentType: "ETF", marketValue: 84250, annualIncome: 10440, taxTreatment: "Qualified-div", notes: "Deferred wrapper" },
-  { id: 5, account: "Treasury Direct", name: "I Bonds", ticker: "IBOND", investmentType: "Treasury", marketValue: 24000, annualIncome: 840, taxTreatment: "", notes: "State-exempt income" },
+  { id: 1, description: "Social Security", account: "Social Security", category: "core", totalInvestment: 0, yearlyIncome: 10000, includeIncome: true, overrideProposal: false, symbol: "SS", newSymbol: "SS", newPercent: 0 },
+  { id: 2, description: "AUX Social Security", account: "Social Security", category: "core", totalInvestment: 0, yearlyIncome: 24000, includeIncome: true, overrideProposal: false, symbol: "AUX-SS", newSymbol: "SS", newPercent: 0 },
+  { id: 3, description: "Palmetto", account: "rental-Palmetto", category: "core", totalInvestment: 1000, yearlyIncome: 2000, includeIncome: true, overrideProposal: false, symbol: "2767 Palmetto", newSymbol: "2767 Palmetto", newPercent: 0 },
+  { id: 4, description: "Sitio", account: "rental-Sitio", category: "core", totalInvestment: 1000, yearlyIncome: 2000, includeIncome: true, overrideProposal: false, symbol: "7068 Sitio", newSymbol: "7068 Sitio", newPercent: 0 },
+  { id: 5, description: "vanguard - brokerage", account: "vanguard brokerage", category: "core", totalInvestment: 1000, yearlyIncome: 64.7, includeIncome: true, overrideProposal: false, symbol: "BSJS", newSymbol: "BSJS", newPercent: 0 },
+  { id: 6, description: "vanguard - brokerage", account: "vanguard brokerage", category: "core", totalInvestment: 1000, yearlyIncome: 40.1, includeIncome: true, overrideProposal: true, symbol: "BIL", newSymbol: "PFFA", newPercent: 0.0961 },
+  { id: 7, description: "IB", account: "Interactive Brokers", category: "core", totalInvestment: 1000, yearlyIncome: 115.5, includeIncome: true, overrideProposal: false, symbol: "SPYI", newSymbol: "SPYI", newPercent: 0 },
+  { id: 8, description: "IB", account: "Interactive Brokers", category: "core", totalInvestment: 2000, yearlyIncome: 144.6, includeIncome: true, overrideProposal: false, symbol: "NAD", newSymbol: "NAD", newPercent: 0 },
+  { id: 9, description: "deferred comp", account: "Deffered comp - Intuit", category: "core", totalInvestment: 2000, yearlyIncome: 38.8, includeIncome: false, overrideProposal: false, symbol: "ST Cash - Deferred", newSymbol: "ST Cash - Deferred", newPercent: 0 },
 ];
 
 const initialTickers: TickerRow[] = [
-  { id: 1, ticker: "SPYI", issuer: "NEOS", assetClass: "ETF", dividendRate: 0.12, exDividendDate: "2026-03-20", payoutDate: "2026-03-28", notes: "Income ETF" },
-  { id: 2, ticker: "PFFA", issuer: "Virtus", assetClass: "Preferred ETF", dividendRate: 0.11, exDividendDate: "2026-03-21", payoutDate: "2026-03-31", notes: "Preferred sleeve" },
-  { id: 3, ticker: "NAD", issuer: "Nuveen", assetClass: "Muni CEF", dividendRate: 0.047, exDividendDate: "2026-03-10", payoutDate: "2026-04-01", notes: "Federal tax free" },
+  { id: 1, symbol: "SS", percentReturn: 0, category: "social-security", taxTreatment: "ss-85-fed", extraData: 0, description: "social security", exDividend: "", divPayout: "" },
+  { id: 2, symbol: "AUX-SS", percentReturn: 0, category: "social-security", taxTreatment: "tax free", extraData: 0, description: "aux SS", exDividend: "", divPayout: "" },
+  { id: 3, symbol: "BIL", percentReturn: 0.0401, category: "cash", taxTreatment: "state tax free", extraData: 0, description: "short term treasury ETF", exDividend: "", divPayout: "" },
+  { id: 4, symbol: "FLOT", percentReturn: 0.0478, category: "cash", taxTreatment: "non-qualified-div", extraData: 0, description: "short term ETF", exDividend: "", divPayout: "" },
+  { id: 5, symbol: "PFFA", percentReturn: 0.0961, category: "preferred stock", taxTreatment: "non-qualified-div", extraData: 0, description: "Preferred stock ETF", exDividend: "", divPayout: "" },
+  { id: 6, symbol: "BSJS", percentReturn: 0.0647, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "fixed duration", exDividend: "", divPayout: "" },
+  { id: 7, symbol: "BSJQ", percentReturn: 0.061, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "fixed duration", exDividend: "", divPayout: "" },
+  { id: 8, symbol: "BSJT", percentReturn: 0.0673, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "fixed duration", exDividend: "", divPayout: "" },
+  { id: 9, symbol: "SPYI", percentReturn: 0.1155, category: "covered call", taxTreatment: "hold", extraData: 0, description: "covered call ETF", exDividend: "", divPayout: "" },
+  { id: 10, symbol: "NAD", percentReturn: 0.0723, category: "munibond", taxTreatment: "tax free", extraData: 0, description: "municipal bond fund", exDividend: "", divPayout: "" },
+  { id: 11, symbol: "MO", percentReturn: 0.0737, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "equity dividend", exDividend: "", divPayout: "" },
+  { id: 12, symbol: "CASH", percentReturn: 0.01, category: "cash", taxTreatment: "income", extraData: 0, description: "cash sweep", exDividend: "", divPayout: "" },
+  { id: 13, symbol: "non investment income", percentReturn: 0, category: "non investment income", taxTreatment: "income", extraData: 0, description: "ordinary non-investment income", exDividend: "", divPayout: "" },
+  { id: 14, symbol: "ST Cash - Deferred", percentReturn: 0.0388, category: "cash", taxTreatment: "income", extraData: 0, description: "deferred cash", exDividend: "", divPayout: "" },
+  { id: 15, symbol: "2767 Palmetto", percentReturn: 0, category: "real estate", taxTreatment: "real estate", extraData: 0, description: "rental income", exDividend: "", divPayout: "" },
+  { id: 16, symbol: "7068 Sitio", percentReturn: 0, category: "real estate", taxTreatment: "real estate", extraData: 0, description: "rental income", exDividend: "", divPayout: "" },
 ];
 
-const initialTaxTreatments: TaxTreatmentRow[] = [
-  { id: 1, label: "Income", federalBucket: "ordinary", stateBucket: "taxable", preferredRate: "no", notes: "Interest and ordinary income" },
-  { id: 2, label: "Qualified-div", federalBucket: "preferred", stateBucket: "taxable", preferredRate: "yes", notes: "Qualified dividends" },
-  { id: 3, label: "Tax free", federalBucket: "excluded", stateBucket: "excluded", preferredRate: "no", notes: "Federal and CA muni income" },
-  { id: 4, label: "State tax free", federalBucket: "ordinary", stateBucket: "excluded", preferredRate: "no", notes: "Treasuries" },
-];
-
+const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label }));
 const initialAccounts: AccountRow[] = [
-  { id: 1, account: "Vanguard Brokerage", institution: "Vanguard", type: "Brokerage", owner: "Joint", notes: "Taxable core account" },
-  { id: 2, account: "Interactive Brokers", institution: "IBKR", type: "Brokerage", owner: "Joint", notes: "Active income sleeve" },
-  { id: 3, account: "Schwab Rollover IRA", institution: "Schwab", type: "IRA", owner: "Kevin", notes: "Tax deferred" },
-  { id: 4, account: "Treasury Direct", institution: "US Treasury", type: "Direct", owner: "Joint", notes: "Savings bonds" },
+  { id: 1, account: "Social Security", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 2, account: "vanguard brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 3, account: "vanguard IRA inherited", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 4, account: "Schwab Rollover IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 5, account: "Interactive Brokers", taxStatus: "taxable", dividendAccrued: "yes", includeInFreeCashflow: "yes" },
+  { id: 6, account: "Merill Edge", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 7, account: "Fidelity - brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 8, account: "Deffered comp - Intuit", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "no" },
+  { id: 9, account: "rental-Palmetto", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 10, account: "rental-Sitio", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
 ];
-
-const initialAccountTaxTypes: AccountTaxTypeRow[] = [
-  { id: 1, account: "Vanguard Brokerage", taxType: "taxable", includeInCashflow: "yes", notes: "Fully modeled" },
-  { id: 2, account: "Interactive Brokers", taxType: "taxable", includeInCashflow: "yes", notes: "Fully modeled" },
-  { id: 3, account: "Schwab Rollover IRA", taxType: "deferred", includeInCashflow: "no", notes: "Exclude from current tax flow" },
-  { id: 4, account: "Treasury Direct", taxType: "taxable", includeInCashflow: "yes", notes: "Interest taxable federally" },
-];
-
-const initialInvestmentTypes: InvestmentTypeRow[] = [
-  { id: 1, type: "ETF", defaultTaxTreatment: "Qualified-div", preferredEligible: "mixed", stateTreatment: "taxable", notes: "Default equity income treatment" },
-  { id: 2, type: "Muni Bond", defaultTaxTreatment: "Tax free", preferredEligible: "no", stateTreatment: "excluded", notes: "Federal and state tax free" },
-  { id: 3, type: "Treasury", defaultTaxTreatment: "State tax free", preferredEligible: "no", stateTreatment: "excluded", notes: "State exempt interest" },
-  { id: 4, type: "Real Estate", defaultTaxTreatment: "Income", preferredEligible: "no", stateTreatment: "taxable", notes: "Net rental income" },
-];
-
-const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraQualifiedIncome: 0, extraLongTermCapitalGains: 0, socialSecurity: 0, mortgageInterest: 19500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 31500, saltCap: 40400 };
+const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
+const initialInvestmentTypes: InvestmentTypeRow[] = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"].map((name, index) => ({ id: index + 1, name }));
+const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 
-function toNumber(value: number | string) {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : 0;
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
-}
-
-function formatCurrencyDetailed(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
-}
-
-function formatPercent(value: number) {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-function taxableSocialSecurity(ssIncome: number, otherIncome: number, muniBondIncome: number, filingStatus: FilingStatus) {
-  const ss = toNumber(ssIncome);
-  if (ss <= 0) return 0;
-  const provisionalIncome = toNumber(otherIncome) + toNumber(muniBondIncome) + ss * 0.5;
-  const thresholds = filingStatus === "mfj" ? { base1: 32000, base2: 44000, cap: 6000 } : { base1: 25000, base2: 34000, cap: 4500 };
-  if (provisionalIncome <= thresholds.base1) return 0;
-  if (provisionalIncome <= thresholds.base2) return Math.min(ss * 0.5, (provisionalIncome - thresholds.base1) * 0.5);
-  const aboveSecondBand = (provisionalIncome - thresholds.base2) * 0.85;
-  return Math.min(ss * 0.85, aboveSecondBand + Math.min(thresholds.cap, ss * 0.5));
-}
-
+function toNumber(value: number | string | boolean | null | undefined) { const num = Number(value); return Number.isFinite(num) ? num : 0; }
+function normalizeBoolean(value: unknown) { if (typeof value === "boolean") return value; if (typeof value === "number") return value !== 0; const text = String(value || "").trim().toLowerCase(); return text === "1" || text === "true" || text === "yes" || text === "y"; }
+function normalizeYesNo(value: unknown) { return normalizeBoolean(value) ? "yes" : "no"; }
+function normalizeFilingStatus(value: unknown): FilingStatus { return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single"; }
+function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
+function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
+function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
+function fedTaxAdjust(amount: number, taxTreatment: string, extraData: number, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; case "real estate": return pref ? 0 : Math.max(amount - extraData, 0); default: return pref ? 0 : amount; } }
+function stateTaxAdjust(amount: number, taxTreatment: string, extraData: number) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "state tax free": case "ss-85-fed": return 0; case "real estate": return Math.max(amount - extraData, 0); default: return amount; } }
 async function postTaxCalculation(payload: Record<string, number | string>) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const json = (await response.json()) as TaxResult | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "API request failed");
   return json as TaxResult;
@@ -210,11 +167,7 @@ async function postTaxCalculation(payload: Record<string, number | string>) {
 
 async function loadWorkbook(workspaceId: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ calc: "WORKBOOK_GET", workspaceId }),
-  });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calc: "WORKBOOK_GET", workspaceId }) });
   const json = (await response.json()) as WorkbookResponse | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "Workbook load failed");
   return json as WorkbookResponse;
@@ -222,23 +175,19 @@ async function loadWorkbook(workspaceId: string) {
 
 async function saveWorkbook(workspaceId: string, payload: WorkbookResponse) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ calc: "WORKBOOK_SAVE", workspaceId, tabs: payload.tabs, settings: payload.settings }),
-  });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calc: "WORKBOOK_SAVE", workspaceId, tabs: payload.tabs, settings: payload.settings }) });
   const json = (await response.json()) as { updatedAt?: string; error?: string };
   if (!response.ok) throw new Error(json.error || "Workbook save failed");
   return json;
 }
 
-function mergeRows<T>(fallback: T[], incoming: unknown): T[] {
-  return Array.isArray(incoming) ? (incoming as T[]) : fallback;
+function mergeRows<T>(fallback: T[], incoming: unknown, mapper?: (row: T) => T): T[] {
+  if (!Array.isArray(incoming)) return fallback;
+  const rows = incoming as T[];
+  return mapper ? rows.map(mapper) : rows;
 }
-
-function mergeSettings<T extends object>(fallback: T, incoming: unknown): T {
-  return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback;
-}
+function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
+function sanitizeInvestmentRow(row: InvestmentRow): InvestmentRow { return { ...row, includeIncome: normalizeBoolean(row.includeIncome), overrideProposal: normalizeBoolean(row.overrideProposal), totalInvestment: toNumber(row.totalInvestment), yearlyIncome: toNumber(row.yearlyIncome), newPercent: toNumber(row.newPercent) }; }
 
 function MetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "accent" | "warning" }) {
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
@@ -248,14 +197,14 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
   return <section className="sheet-section"><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
 }
 
-function DataTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove }: { title: string; subtitle: string; rows: T[]; columns: Array<{ key: keyof T; label: string; type?: "text" | "number" }>; onChange: (id: number, field: keyof T, value: string) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
-  return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}><input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} /></td>)}<td><button className="ghost-button" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
+function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove }: { title: string; subtitle: string; rows: T[]; columns: Array<{ key: keyof T; label: string; type?: "text" | "number" }>; onChange: (id: number, field: keyof T, value: string) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
+  return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}><input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} /></td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, tickerOptions, investmentTypeOptions, onChange, onAdd, onRemove }: { rows: InvestmentRow[]; accountOptions: string[]; tickerOptions: string[]; investmentTypeOptions: string[]; onChange: (id: number, field: keyof InvestmentRow, value: string) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
-  return <Section title="Investments" subtitle="Primary source table. Account, ticker, and investment type choices flow from the reference tabs, and rows are compressed so more positions fit on screen."><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr><th>Account</th><th>Investment</th><th>Ticker</th><th>Investment Type</th><th>Market Value</th><th>Annual Income</th><th>Tax Treatment Override</th><th>Notes</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><input value={row.name} onChange={(event) => onChange(row.id, "name", event.target.value)} /></td><td><select value={row.ticker} onChange={(event) => onChange(row.id, "ticker", event.target.value)}>{tickerOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><select value={row.investmentType} onChange={(event) => onChange(row.id, "investmentType", event.target.value)}>{investmentTypeOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><input type="number" value={row.marketValue} onChange={(event) => onChange(row.id, "marketValue", event.target.value)} /></td><td><input type="number" value={row.annualIncome} onChange={(event) => onChange(row.id, "annualIncome", event.target.value)} /></td><td><input value={row.taxTreatment} onChange={(event) => onChange(row.id, "taxTreatment", event.target.value)} /></td><td><input value={row.notes} onChange={(event) => onChange(row.id, "notes", event.target.value)} /></td><td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
+function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, onChange, onAdd, onRemove }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
+  const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
+  return <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic."><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact sheet-table--workbook"><thead><tr><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th /></tr></thead><tbody>{rows.map((row) => { const derived = derivedMap[row.id]; return <tr key={row.id}><td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td><td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><input value={row.category} onChange={(event) => onChange(row.id, "category", event.target.value)} /></td><td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td><td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.monthlyIncome || 0)}</div></td><td className="checkbox-cell"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} /></td><td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td><td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td><td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td><td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td><td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.extraData || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.filteredIncome || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.includedTotal || 0)}</div></td><td><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.ordinaryMonthly || 0) * 12)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.preferredMonthly || 0) * 12)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.stateMonthly || 0) * 12)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.nonTaxableMonthly || 0) * 12)}</div></td><td><div className="readonly-cell readonly-cell--text">{derived?.investmentType || ""}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.nonInvestmentIncome || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.cash || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.stocks || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.preferredStock || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bonds || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniBond || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniInterest || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.businessDevelopment || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.coveredCall || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.realEstate || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bitcoin || 0)}</div></td><td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>; })}</tbody></table></div></Section>;
 }
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [investments, setInvestments] = useState(initialInvestments);
@@ -272,34 +221,83 @@ export default function App() {
   const [federalError, setFederalError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageState, setStorageState] = useState<SaveState>("loading");
-  const [storageMessage, setStorageMessage] = useState("Loading shared workbook");
+  const [storageMessage, setStorageMessage] = useState("Loading workbook...");
+  const saveTimeout = useRef<number | null>(null);
   const hasLoadedStorage = useRef(false);
 
-  const accountTaxMap = useMemo(() => Object.fromEntries(accountTaxTypes.map((row) => [row.account, row.taxType.toLowerCase()])), [accountTaxTypes]);
-  const typeTreatmentMap = useMemo(() => Object.fromEntries(investmentTypes.map((row) => [row.type, row.defaultTaxTreatment])), [investmentTypes]);
-  const treatmentMap = useMemo(() => Object.fromEntries(taxTreatments.map((row) => [row.label.toLowerCase(), row])), [taxTreatments]);
-  const accountOptions = useMemo(() => accounts.map((row) => row.account).filter(Boolean), [accounts]);
-  const tickerOptions = useMemo(() => ["", ...tickers.map((row) => row.ticker).filter(Boolean), "PRIVATE"].filter((value, index, array) => array.indexOf(value) === index), [tickers]);
-  const investmentTypeOptions = useMemo(() => investmentTypes.map((row) => row.type).filter(Boolean), [investmentTypes]);
+  const tickerMap = useMemo(() => Object.fromEntries(tickers.map((row) => [row.symbol, row])), [tickers]);
+  const accountMap = useMemo(() => Object.fromEntries(accounts.map((row) => [row.account, row])), [accounts]);
+  const accountOptions = useMemo(() => ["", ...accounts.map((row) => row.account).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [accounts]);
+  const symbolOptions = useMemo(() => ["", ...tickers.map((row) => row.symbol).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [tickers]);
 
-  const flows = useMemo(() => investments.reduce((acc, row) => {
-    const accountTaxType = accountTaxMap[row.account] || "taxable";
-    const includeInCashflow = (accountTaxTypes.find((item) => item.account === row.account)?.includeInCashflow || "yes").toLowerCase() !== "no";
-    const effectiveTreatment = (row.taxTreatment || typeTreatmentMap[row.investmentType] || "Income").toLowerCase();
-    const treatment = treatmentMap[effectiveTreatment] || treatmentMap.income;
-    acc.totalInvestmentAmount += row.marketValue;
-    if (includeInCashflow) acc.totalIncome += row.annualIncome;
-    if (accountTaxType !== "taxable") return acc;
-    if (treatment?.federalBucket === "ordinary") acc.federalOrdinary += row.annualIncome;
-    if (treatment?.federalBucket === "preferred") acc.federalPreferred += row.annualIncome;
-    if (effectiveTreatment === "tax free") acc.muniIncome += row.annualIncome;
-    if (treatment?.stateBucket === "taxable") acc.stateTaxable += row.annualIncome;
+  const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
+    const currentTicker = tickerMap[row.symbol];
+    const effectiveSymbol = row.overrideProposal && row.newSymbol ? row.newSymbol : row.symbol;
+    const effectiveTicker = tickerMap[effectiveSymbol] || currentTicker;
+    const currentPercent = currentTicker?.percentReturn || 0;
+    const effectivePercent = row.overrideProposal ? toNumber(row.newPercent) || currentPercent : currentPercent;
+    const monthlyIncome = toNumber(row.yearlyIncome) / 12;
+    const filteredIncome = row.includeIncome ? toNumber(row.yearlyIncome) : 0;
+    const includedTotal = row.includeIncome ? toNumber(row.totalInvestment) : 0;
+    const account = accountMap[row.account];
+    const taxStatus = (account?.taxStatus || "taxable").toLowerCase();
+    const taxTreatment = String(effectiveTicker?.taxTreatment || "income").toLowerCase();
+    const investmentType = String(effectiveTicker?.category || "").toLowerCase();
+    const extraData = toNumber(effectiveTicker?.extraData || 0);
+    const taxableMonthlyBase = taxStatus === "taxable" && row.includeIncome ? filteredIncome / 12 : 0;
+    return {
+      ...row,
+      monthlyIncome,
+      currentPercent,
+      effectiveSymbol,
+      effectivePercent,
+      extraData,
+      filteredIncome,
+      includedTotal,
+      taxStatus,
+      taxTreatment,
+      investmentType,
+      ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, false),
+      preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, true),
+      stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, extraData),
+      nonTaxableMonthly: taxStatus !== "taxable" && row.includeIncome ? monthlyIncome : 0,
+      nonInvestmentIncome: ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0,
+      cash: investmentType === "cash" ? includedTotal : 0,
+      stocks: investmentType === "stock" ? includedTotal : 0,
+      preferredStock: investmentType === "preferred stock" ? includedTotal : 0,
+      bonds: investmentType === "bond" || investmentType === "treasury bond" ? includedTotal : 0,
+      muniBond: investmentType === "munibond" ? includedTotal : 0,
+      muniInterest: investmentType === "munibond" ? filteredIncome : 0,
+      businessDevelopment: investmentType === "business development" ? includedTotal : 0,
+      coveredCall: investmentType === "covered call" ? includedTotal : 0,
+      realEstate: investmentType === "real estate" ? includedTotal : 0,
+      bitcoin: investmentType === "bitcoin" ? includedTotal : 0,
+    };
+  }), [investments, tickerMap, accountMap]);
+
+  const flows = useMemo(() => derivedRows.reduce((acc, row) => {
+    acc.totalInvestmentAmount += row.includedTotal;
+    acc.totalIncome += row.filteredIncome;
+    acc.federalOrdinary += row.ordinaryMonthly * 12;
+    acc.federalPreferred += row.preferredMonthly * 12;
+    acc.stateTaxable += row.stateMonthly * 12;
+    acc.nonTaxableIncome += row.nonTaxableMonthly * 12;
+    acc.nonInvestmentIncome += row.nonInvestmentIncome;
+    acc.muniIncome += row.muniInterest;
+    acc.cash += row.cash;
+    acc.stocks += row.stocks;
+    acc.preferredStock += row.preferredStock;
+    acc.bonds += row.bonds;
+    acc.muniBond += row.muniBond;
+    acc.businessDevelopment += row.businessDevelopment;
+    acc.coveredCall += row.coveredCall;
+    acc.realEstate += row.realEstate;
+    acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestmentAmount: 0, totalIncome: 0, federalOrdinary: 0, federalPreferred: 0, muniIncome: 0, stateTaxable: 0 }), [investments, accountTaxMap, accountTaxTypes, typeTreatmentMap, treatmentMap]);
+  }, { totalInvestmentAmount: 0, totalIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
 
-  const taxableSs = taxableSocialSecurity(federalSettings.socialSecurity, flows.federalOrdinary + federalSettings.extraOrdinaryIncome + federalSettings.extraQualifiedIncome + federalSettings.extraLongTermCapitalGains, flows.muniIncome, federalSettings.filingStatus);
-  const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome + taxableSs;
-  const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraQualifiedIncome + federalSettings.extraLongTermCapitalGains;
+  const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome;
+  const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
   const itemizedFederalDeduction = Math.min(federalSettings.propertyTax + federalSettings.stateIncomeTax, federalSettings.saltCap) + federalSettings.mortgageInterest;
   const federalDeduction = Math.max(federalSettings.standardDeduction, itemizedFederalDeduction);
@@ -307,10 +305,9 @@ export default function App() {
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
   const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
   const magi = grossFederalTaxable;
-  const netInvestmentIncome = flows.federalOrdinary + flows.federalPreferred + federalSettings.extraQualifiedIncome + federalSettings.extraLongTermCapitalGains;
+  const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome, 0);
   const niitThreshold = federalSettings.filingStatus === "mfj" ? 250000 : 200000;
   const niitBase = Math.max(Math.min(netInvestmentIncome, Math.max(magi - niitThreshold, 0)), 0);
-
   const stateGross = flows.stateTaxable + stateSettings.extraStateIncome;
   const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax + stateSettings.stateIncomeTax;
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
@@ -318,138 +315,79 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    async function hydrateWorkbook() {
-      try {
-        const response = await loadWorkbook(WORKSPACE_ID);
-        if (cancelled) return;
-        setInvestments(mergeRows(initialInvestments, response.tabs?.investments));
-        setTickers(mergeRows(initialTickers, response.tabs?.tickers));
-        setTaxTreatments(mergeRows(initialTaxTreatments, response.tabs?.taxTreatment));
-        setAccounts(mergeRows(initialAccounts, response.tabs?.accounts));
-        setAccountTaxTypes(mergeRows(initialAccountTaxTypes, response.tabs?.accountTaxType));
-        setInvestmentTypes(mergeRows(initialInvestmentTypes, response.tabs?.investmentType));
-        setFederalSettings(mergeSettings(initialFederalSettings, response.settings?.federal));
-        setStateSettings(mergeSettings(initialStateSettings, response.settings?.state));
-        setPlannerSettings(mergeSettings(initialPlannerSettings, response.settings?.planner));
-        hasLoadedStorage.current = true;
-        setStorageState("ready");
-        setStorageMessage(response.updatedAt ? `Synced ${new Date(response.updatedAt).toLocaleString()}` : "Ready to save");
-      } catch (error) {
-        if (cancelled) return;
-        hasLoadedStorage.current = true;
-        setStorageState("error");
-        setStorageMessage(error instanceof Error ? error.message : "Workbook load failed");
-      }
-    }
-    hydrateWorkbook();
-    return () => {
-      cancelled = true;
-    };
+    loadWorkbook(WORKSPACE_ID).then((response) => {
+      if (cancelled) return;
+      setInvestments(mergeRows(initialInvestments, response.tabs?.investments, sanitizeInvestmentRow));
+      setTickers(mergeRows(initialTickers, response.tabs?.tickers, (row) => ({ ...row, percentReturn: toNumber(row.percentReturn), extraData: toNumber(row.extraData) })));
+      setTaxTreatments(mergeRows(initialTaxTreatments, response.tabs?.taxTreatment));
+      setAccounts(mergeRows(initialAccounts, response.tabs?.accounts, (row) => ({ ...row, includeInFreeCashflow: normalizeYesNo(row.includeInFreeCashflow) })));
+      setAccountTaxTypes(mergeRows(initialAccountTaxTypes, response.tabs?.accountTaxType));
+      setInvestmentTypes(mergeRows(initialInvestmentTypes, response.tabs?.investmentType));
+      setFederalSettings(mergeSettings(initialFederalSettings, response.settings?.federal));
+      setStateSettings(mergeSettings(initialStateSettings, response.settings?.state));
+      setPlannerSettings(mergeSettings(initialPlannerSettings, response.settings?.planner));
+      hasLoadedStorage.current = true;
+      setStorageState("ready");
+      setStorageMessage(response.updatedAt ? `Synced ${new Date(response.updatedAt).toLocaleString()}` : "Ready to save");
+    }).catch((error: Error) => {
+      setStorageState("error");
+      setStorageMessage(error.message);
+      hasLoadedStorage.current = true;
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await postTaxCalculation({ calc: "FED_TAX_2025_COMBINED", ordinaryTaxable, prefTaxable, filingStatus: federalSettings.filingStatus, magi, netInvestmentIncome });
-        if (!cancelled) {
-          setFederalResult(response);
-          setFederalError(null);
-        }
-      } catch (error) {
-        if (!cancelled) setFederalError(error instanceof Error ? error.message : "Unknown federal API error");
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome]);
+    postTaxCalculation({ calc: "FED_TAX_2025_COMBINED", ordinaryTaxable, prefTaxable, filingStatus: federalSettings.filingStatus, magi, netInvestmentIncome }).then((result) => {
+      if (!cancelled) { setFederalResult(result); setFederalError(null); }
+    }).catch((error: Error) => {
+      if (!cancelled) { setFederalResult(null); setFederalError(error.message); }
+    });
 
-  useEffect(() => {
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await postTaxCalculation({ calc: "STATE_TAX_2025_CA_MFJ", taxableIncome: stateTaxableAfterDeductions });
-        if (!cancelled) {
-          setStateResult(response);
-          setStateError(null);
-        }
-      } catch (error) {
-        if (!cancelled) setStateError(error instanceof Error ? error.message : "Unknown state API error");
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [stateTaxableAfterDeductions]);
+    postTaxCalculation({ calc: "STATE_TAX_2025_CA_MFJ", taxableIncome: stateTaxableAfterDeductions }).then((result) => {
+      if (!cancelled) { setStateResult(result); setStateError(null); }
+    }).catch((error: Error) => {
+      if (!cancelled) { setStateResult(null); setStateError(error.message); }
+    });
+
+    return () => { cancelled = true; };
+  }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions]);
 
   useEffect(() => {
     if (!hasLoadedStorage.current) return;
-    let cancelled = false;
+    if (saveTimeout.current) window.clearTimeout(saveTimeout.current);
     setStorageState("saving");
-    setStorageMessage("Saving shared workbook");
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await saveWorkbook(WORKSPACE_ID, {
-          workspaceId: WORKSPACE_ID,
-          tabs: { investments, tickers, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes },
-          settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings },
-        });
-        if (!cancelled) {
-          setStorageState("saved");
-          setStorageMessage(response.updatedAt ? `Saved ${new Date(response.updatedAt).toLocaleTimeString()}` : "Saved");
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setStorageState("error");
-          setStorageMessage(error instanceof Error ? error.message : "Workbook save failed");
-        }
-      }
+    setStorageMessage("Saving workbook...");
+    saveTimeout.current = window.setTimeout(() => {
+      let cancelled = false;
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings } }).then((response) => {
+        if (!cancelled) { setStorageState("saved"); setStorageMessage(response.updatedAt ? `Saved ${new Date(response.updatedAt).toLocaleTimeString()}` : "Saved"); }
+      }).catch((error: Error) => {
+        if (!cancelled) { setStorageState("error"); setStorageMessage(error.message); }
+      });
+      return () => { cancelled = true; };
     }, 700);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
+    return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
   }, [investments, tickers, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings]);
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
   const netAfterWithholding = totalTax - plannerSettings.federalWithholding - plannerSettings.stateWithholding;
 
-  function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = []) {
-    return (id: number, field: keyof T, value: string) => setter((current) => current.map((row) => (row.id === id ? { ...row, [field]: numericFields.includes(field) ? toNumber(value) : value } : row)));
+  function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = [], booleanFields: Array<keyof T> = []) {
+    return (id: number, field: keyof T, value: string | boolean) => {
+      setter((current) => current.map((row) => row.id !== id ? row : booleanFields.includes(field) ? { ...row, [field]: Boolean(value) } : numericFields.includes(field) ? { ...row, [field]: toNumber(value) } : { ...row, [field]: value }));
+    };
   }
-
-  function addRow<T>(setter: React.Dispatch<React.SetStateAction<T[]>>, row: T) {
-    setter((current) => [...current, row]);
-  }
-
-  function removeRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) {
-    return (id: number) => setter((current) => current.filter((row) => row.id !== id));
-  }
-
-  const storageTone = storageState === "error" ? "warning" : storageState === "saved" ? "accent" : "default";
-
+  function addRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, row: T) { setter((current) => [...current, row]); }
+  function removeRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) { return (id: number) => setter((current) => current.filter((row) => row.id !== id)); }
   return (
     <div className="workspace-shell">
       <aside className="sidebar">
-        <div className="sidebar__brand">
-          <p>Portfolio Workbench</p>
-          <h1>Tax + investment planner</h1>
-          <span>Workbook-style navigation with live Lambda tax runs and shared storage.</span>
-        </div>
-        <nav className="sidebar__nav">
-          {navItems.map((item) => (
-            <button key={item.key} type="button" className={item.key === activeTab ? "nav-item nav-item--active" : "nav-item"} onClick={() => setActiveTab(item.key)}>
-              <strong>{item.label}</strong>
-              <span>{item.meta}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="sidebar__brand"><p>Portfolio Planner</p><h1>Workbook Frontend</h1><span>Git-backed Amplify app using the same tax backend and workbook storage as the sheet.</span></div>
+        <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
-
       <main className="content-panel">
         <div className="summary-ribbon">
           <MetricCard label="Total investment amount" value={formatCurrency(flows.totalInvestmentAmount)} tone="accent" />
@@ -458,33 +396,21 @@ export default function App() {
           <MetricCard label="After-tax income" value={formatCurrency(afterTaxIncome)} tone="warning" />
           <MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} />
           <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
-          <MetricCard label="Total tax" value={formatCurrencyDetailed(totalTax)} />
-          <MetricCard label="Workbook sync" value={storageMessage} tone={storageTone} />
+          <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
         </div>
+        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div></div></div>
 
-        <div className="content-topbar">
-          <div>
-            <p className="eyebrow">Current Sheet</p>
-            <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
-          </div>
-          <div className="topbar-stack">
-            <div className="topbar-chip">API: {API_BASE_URL ? "connected" : "missing .env"}</div>
-            <div className="topbar-chip">Workspace: {WORKSPACE_ID}</div>
-          </div>
-        </div>
+        {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} derivedRows={derivedRows} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} />}
+        {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment" }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
+        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status" }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
+        {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} />}
+        {activeTab === "accountTaxType" && <LookupTable title="Account Tax Type" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} />}
+        {activeTab === "investmentType" && <LookupTable title="Investment Type" subtitle="Reference list for the asset classes used by the workbook rollups." rows={investmentTypes} columns={[{ key: "name", label: "Investment type" }]} onChange={updateCollection(setInvestmentTypes)} onAdd={() => addRow(setInvestmentTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setInvestmentTypes)} />}
 
-        {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions.length ? accountOptions : [""]} tickerOptions={tickerOptions.length ? tickerOptions : [""]} investmentTypeOptions={investmentTypeOptions.length ? investmentTypeOptions : [""]} onChange={updateCollection(setInvestments, ["marketValue", "annualIncome"])} onAdd={() => addRow(setInvestments, { id: Date.now(), account: accountOptions[0] || "", name: "New Investment", ticker: tickerOptions[0] || "", investmentType: investmentTypeOptions[0] || "", marketValue: 0, annualIncome: 0, taxTreatment: "", notes: "" })} onRemove={removeRow(setInvestments)} />}
-        {activeTab === "tickers" && <DataTable title="Tickers" subtitle="Reference table for symbols, issuers, dividend dates, and notes." rows={tickers} columns={[{ key: "ticker", label: "Ticker" }, { key: "issuer", label: "Issuer" }, { key: "assetClass", label: "Asset Class" }, { key: "dividendRate", label: "Dividend Rate", type: "number" }, { key: "exDividendDate", label: "Ex-Date" }, { key: "payoutDate", label: "Payout" }, { key: "notes", label: "Notes" }]} onChange={updateCollection(setTickers, ["dividendRate"])} onAdd={() => addRow(setTickers, { id: Date.now(), ticker: "", issuer: "", assetClass: "", dividendRate: 0, exDividendDate: "", payoutDate: "", notes: "" })} onRemove={removeRow(setTickers)} />}
-        {activeTab === "taxTreatment" && <DataTable title="Tax Treatment" subtitle="Maps effective investment treatment into federal and state tax buckets." rows={taxTreatments} columns={[{ key: "label", label: "Label" }, { key: "federalBucket", label: "Federal Bucket" }, { key: "stateBucket", label: "State Bucket" }, { key: "preferredRate", label: "Preferred Rate" }, { key: "notes", label: "Notes" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "", federalBucket: "ordinary", stateBucket: "taxable", preferredRate: "no", notes: "" })} onRemove={removeRow(setTaxTreatments)} />}
-        {activeTab === "accounts" && <DataTable title="Accounts" subtitle="Institution and wrapper registry used by the investments table." rows={accounts} columns={[{ key: "account", label: "Account" }, { key: "institution", label: "Institution" }, { key: "type", label: "Type" }, { key: "owner", label: "Owner" }, { key: "notes", label: "Notes" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", institution: "", type: "", owner: "", notes: "" })} onRemove={removeRow(setAccounts)} />}
-        {activeTab === "accountTaxType" && <DataTable title="Account Tax Type" subtitle="Determines whether an account is taxable, deferred, or tax-free, and whether it flows into cashflow and current tax calculations." rows={accountTaxTypes} columns={[{ key: "account", label: "Account" }, { key: "taxType", label: "Tax Type" }, { key: "includeInCashflow", label: "Include In Cashflow" }, { key: "notes", label: "Notes" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), account: "", taxType: "taxable", includeInCashflow: "yes", notes: "" })} onRemove={removeRow(setAccountTaxTypes)} />}
-        {activeTab === "investmentType" && <DataTable title="Investment Type" subtitle="Provides default tax treatment behavior when the investment row does not override it." rows={investmentTypes} columns={[{ key: "type", label: "Type" }, { key: "defaultTaxTreatment", label: "Default Tax Treatment" }, { key: "preferredEligible", label: "Preferred Eligible" }, { key: "stateTreatment", label: "State Treatment" }, { key: "notes", label: "Notes" }]} onChange={updateCollection(setInvestmentTypes)} onAdd={() => addRow(setInvestmentTypes, { id: Date.now(), type: "", defaultTaxTreatment: "Income", preferredEligible: "no", stateTreatment: "taxable", notes: "" })} onRemove={removeRow(setInvestmentTypes)} />}
-
-        {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the investments sheet plus deduction and filing-status settings."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(e) => setFederalSettings((current) => ({ ...current, filingStatus: e.target.value as FilingStatus }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(e) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(e.target.value) }))} /></label><label><span>Extra qualified income</span><input type="number" value={federalSettings.extraQualifiedIncome} onChange={(e) => setFederalSettings((current) => ({ ...current, extraQualifiedIncome: toNumber(e.target.value) }))} /></label><label><span>Extra LTCG</span><input type="number" value={federalSettings.extraLongTermCapitalGains} onChange={(e) => setFederalSettings((current) => ({ ...current, extraLongTermCapitalGains: toNumber(e.target.value) }))} /></label><label><span>Social Security</span><input type="number" value={federalSettings.socialSecurity} onChange={(e) => setFederalSettings((current) => ({ ...current, socialSecurity: toNumber(e.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(e) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(e.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(e) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(e.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(e) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(e.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(e) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(e.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(e) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(e.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from investments" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from investments" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Muni income" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
-        {activeTab === "state" && <Section title="State Tax" subtitle="Continuously recalculated California worksheet using investment-driven taxable income plus manual adjustments."><div className="status-card status-card--note">Current backend support is still modeled for the California MFJ route.</div><div className="form-grid form-grid--compact-wide"><label><span>Extra California income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(e) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(e.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(e) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(e.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(e) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(e.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(e) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(e.target.value) }))} /></label><label><span>CA standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(e) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(e.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from investments" value={formatCurrency(flows.stateTaxable)} /><MetricCard label="CA gross" value={formatCurrency(stateGross)} /><MetricCard label="CA deduction used" value={formatCurrency(stateDeduction)} /><MetricCard label="CA taxable after deductions" value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{stateResult && <div className="api-grid"><MetricCard label="California tax" value={formatCurrencyDetailed(stateResult.tax)} tone="accent" /></div>}</Section>}
-        {activeTab === "calculator" && <Section title="Tax Calculator" subtitle="Always-live scenario summary. As investments or settings change, total tax and after-tax income update automatically."><div className="form-grid form-grid--compact"><label><span>Federal withholding</span><input type="number" value={plannerSettings.federalWithholding} onChange={(e) => setPlannerSettings((current) => ({ ...current, federalWithholding: toNumber(e.target.value) }))} /></label><label><span>State withholding</span><input type="number" value={plannerSettings.stateWithholding} onChange={(e) => setPlannerSettings((current) => ({ ...current, stateWithholding: toNumber(e.target.value) }))} /></label></div><div className="api-grid"><MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} /><MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} /><MetricCard label="Total tax" value={formatCurrencyDetailed(totalTax)} tone="accent" /><MetricCard label="After-tax income" value={formatCurrencyDetailed(afterTaxIncome)} /><MetricCard label="Net owed / refund" value={formatCurrencyDetailed(netAfterWithholding)} tone={netAfterWithholding > 0 ? "warning" : "accent"} /></div></Section>}
+        {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label><label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} /><MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
+        {activeTab === "state" && <Section title="State Tax" subtitle="California worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">Current backend support is still modeled for the California MFJ route.</div><div className="form-grid form-grid--compact-wide"><label><span>Extra California income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>CA standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label="CA gross" value={formatCurrency(stateGross)} /><MetricCard label="CA deduction used" value={formatCurrency(stateDeduction)} /><MetricCard label="CA taxable after deductions" value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{stateResult && <div className="api-grid"><MetricCard label="California tax" value={formatCurrencyDetailed(stateResult.tax)} tone="accent" /></div>}</Section>}
+        {activeTab === "calculator" && <Section title="Tax Calculator" subtitle="Always-live scenario summary based on the workbook investment grid and the same live tax APIs used by the spreadsheet."><div className="form-grid form-grid--compact"><label><span>Federal withholding</span><input type="number" value={plannerSettings.federalWithholding} onChange={(event) => setPlannerSettings((current) => ({ ...current, federalWithholding: toNumber(event.target.value) }))} /></label><label><span>State withholding</span><input type="number" value={plannerSettings.stateWithholding} onChange={(event) => setPlannerSettings((current) => ({ ...current, stateWithholding: toNumber(event.target.value) }))} /></label></div><div className="api-grid"><MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} /><MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} /><MetricCard label="Total tax" value={formatCurrencyDetailed(totalTax)} tone="accent" /><MetricCard label="After-tax income" value={formatCurrencyDetailed(afterTaxIncome)} /><MetricCard label="Net owed / refund" value={formatCurrencyDetailed(netAfterWithholding)} tone={netAfterWithholding > 0 ? "warning" : "accent"} /><MetricCard label="Muni interest" value={formatCurrencyDetailed(flows.muniIncome)} /><MetricCard label="Cash sleeve" value={formatCurrencyDetailed(flows.cash)} /><MetricCard label="Equity sleeve" value={formatCurrencyDetailed(flows.stocks + flows.preferredStock + flows.coveredCall + flows.bitcoin)} /></div></Section>}
       </main>
     </div>
   );
 }
-
