@@ -30,17 +30,23 @@
 .form-grid--compact-wide { max-width: 920px; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; }
 .form-grid span { font-size: .82rem; color: #61767a; }
-.form-grid input,.form-grid select,.sheet-table input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(24,49,58,.12); background: rgba(250,249,245,.94); color: #18313a; }
+.form-grid input,.form-grid select,.sheet-table input,.sheet-table select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(24,49,58,.12); background: rgba(250,249,245,.94); color: #18313a; }
 .actions-row { display: flex; gap: 10px; margin-bottom: 14px; }
 .primary-button,.ghost-button { border-radius: 999px; padding: 10px 16px; font-size: .92rem; }
 .primary-button { background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; }
 .ghost-button { background: rgba(255,255,255,.72); color: #2e5057; }
+.ghost-button--compact { padding: 7px 10px; font-size: .82rem; }
 .table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(24,49,58,.1); background: rgba(255,255,255,.7); }
 .table-wrap--tall { max-height: 68vh; }
 .sheet-table { width: 100%; min-width: 980px; border-collapse: collapse; }
 .sheet-table th,.sheet-table td { padding: 10px; border-bottom: 1px solid rgba(24,49,58,.08); text-align: left; }
+.sheet-table--compact th,.sheet-table--compact td { padding: 6px 8px; }
+.sheet-table--compact input,.sheet-table--compact select { padding: 7px 8px; border-radius: 10px; font-size: .88rem; }
 .sheet-table th { position: sticky; top: 0; z-index: 1; background: rgba(228,239,241,.98); color: #284951; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; }
 .status-card { margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; }
 .status-card--error { border: 1px solid rgba(167,63,43,.14); background: rgba(255,236,232,.92); color: #8f3623; }
 .status-card--note { border: 1px solid rgba(35,96,106,.14); background: rgba(235,246,248,.94); color: #285860; }
 @media (max-width: 980px) { .workspace-shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .content-panel { padding: 0 16px 20px; } .content-topbar { flex-direction: column; align-items: flex-start; } }
+
+.topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+

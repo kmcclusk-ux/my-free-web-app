@@ -7,6 +7,7 @@ import {
   niitTax,
   type FilingStatus,
 } from "./taxCalcs";
+import { WorkbookStore, type WorkbookPayload } from "./workbookStore";
 
 function jsonResponse(
   statusCode: number,
@@ -18,7 +19,7 @@ function jsonResponse(
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type,Authorization",
     },
     body: JSON.stringify(body),
@@ -31,7 +32,7 @@ function corsPreflight(origin = "*"): APIGatewayProxyResult {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type,Authorization",
     },
     body: "",
@@ -67,7 +68,11 @@ type RequestBody =
       netInvestmentIncome: number;
     }
   | { calc: "CA_TAX_2025_MFJ"; taxableIncome: number }
-  | { calc: "STATE_TAX_2025_CA_MFJ"; taxableIncome: number };
+  | { calc: "STATE_TAX_2025_CA_MFJ"; taxableIncome: number }
+  | { calc: "WORKBOOK_GET"; workspaceId?: string }
+  | { calc: "WORKBOOK_GET_TAB"; workspaceId?: string; tabName: string }
+  | { calc: "WORKBOOK_SAVE"; workspaceId?: string; tabs?: Record<string, unknown>; settings?: Record<string, unknown> }
+  | { calc: "WORKBOOK_SAVE_TAB"; workspaceId?: string; tabName: string; data: unknown };
 
 function isFilingStatus(x: string): x is FilingStatus {
   return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
@@ -85,6 +90,117 @@ function readNonNegativeNumber(value: unknown, fieldName: string) {
   return { value: num };
 }
 
+function getProxySegments(event: APIGatewayProxyEvent): string[] {
+  const pathParameters = (event.pathParameters ?? {}) as Record<string, string | undefined>;
+  const directProxy = pathParameters.proxy || pathParameters["proxy+"];
+  if (directProxy) {
+    return directProxy.split("/").filter(Boolean);
+  }
+
+  const candidates = [
+    event.path,
+    (event as any).resource,
+    (event as any).requestContext?.path,
+    (event as any).requestContext?.resourcePath,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  for (const candidate of candidates) {
+    const workbookMatch = candidate.match(/workbook\/(.+)$/);
+    if (workbookMatch?.[1]) {
+      return ["workbook", ...workbookMatch[1].split("/").filter(Boolean)];
+    }
+
+    const helloMatch = candidate.match(/\/hello\/(.+)$/);
+    if (helloMatch?.[1]) {
+      return helloMatch[1].split("/").filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+function parseJsonBody<T>(event: APIGatewayProxyEvent): T | null {
+  const raw = decodeBody(event);
+  if (!raw) return null;
+  return JSON.parse(raw.trim()) as T;
+}
+
+async function handleWorkbookRoute(
+  event: APIGatewayProxyEvent,
+  origin: string
+): Promise<APIGatewayProxyResult> {
+  let store: WorkbookStore;
+  try {
+    store = new WorkbookStore();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Workbook storage is unavailable.";
+    return jsonResponse(500, { error: message }, origin);
+  }
+
+  const [, workspaceId = "default", tabName, action] = getProxySegments(event);
+
+  try {
+    if (event.httpMethod === "GET") {
+      if (!workspaceId) {
+        return jsonResponse(400, { error: "Missing workspaceId in workbook path." }, origin);
+      }
+
+      if (tabName) {
+        const result = await store.getTab(workspaceId, tabName);
+        return jsonResponse(200, result, origin);
+      }
+
+      const result = await store.getWorkspace(workspaceId);
+      return jsonResponse(200, result, origin);
+    }
+
+    if (event.httpMethod === "PUT") {
+      if (!workspaceId || !tabName) {
+        return jsonResponse(400, { error: "PUT requires /hello/workbook/{workspaceId}/{tabName}." }, origin);
+      }
+
+      let body: { data?: unknown } | null = null;
+      try {
+        body = parseJsonBody<{ data?: unknown }>(event);
+      } catch {
+        return jsonResponse(400, { error: "Invalid JSON body." }, origin);
+      }
+
+      if (!body || !("data" in body)) {
+        return jsonResponse(400, { error: "PUT body must include a data field." }, origin);
+      }
+
+      const result = await store.putTab(workspaceId, tabName, body.data);
+      return jsonResponse(200, result, origin);
+    }
+
+    if (event.httpMethod === "POST") {
+      if (!workspaceId || action !== "save") {
+        return jsonResponse(400, { error: "POST requires /hello/workbook/{workspaceId}/save." }, origin);
+      }
+
+      let body: WorkbookPayload | null = null;
+      try {
+        body = parseJsonBody<WorkbookPayload>(event);
+      } catch {
+        return jsonResponse(400, { error: "Invalid JSON body." }, origin);
+      }
+
+      if (!body || (typeof body !== "object")) {
+        return jsonResponse(400, { error: "Missing workbook payload." }, origin);
+      }
+
+      const result = await store.saveWorkspace(workspaceId, body);
+      return jsonResponse(200, result, origin);
+    }
+
+    return jsonResponse(405, { error: "Workbook route supports GET, PUT, and POST." }, origin);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Workbook storage error.";
+    return jsonResponse(400, { error: message }, origin);
+  }
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
@@ -92,6 +208,11 @@ export const handler = async (
 
   if (event.httpMethod === "OPTIONS") {
     return corsPreflight(origin);
+  }
+
+  const segments = getProxySegments(event);
+  if (segments[0] === "workbook") {
+    return handleWorkbookRoute(event, origin);
   }
 
   if (event.httpMethod !== "POST") {
@@ -117,6 +238,52 @@ export const handler = async (
   const calc = (body as any)?.calc;
   if (typeof calc !== "string") {
     return jsonResponse(400, { error: "Missing field: calc" }, origin);
+  }
+
+  if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
+    let store: WorkbookStore;
+    try {
+      store = new WorkbookStore();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Workbook storage is unavailable.";
+      return jsonResponse(500, { error: message }, origin);
+    }
+
+    try {
+      const workspaceId = String((body as any).workspaceId || "default");
+
+      if (calc === "WORKBOOK_GET") {
+        const result = await store.getWorkspace(workspaceId);
+        return jsonResponse(200, result, origin);
+      }
+
+      if (calc === "WORKBOOK_GET_TAB") {
+        const tabName = String((body as any).tabName || "");
+        if (!tabName) {
+          return jsonResponse(400, { error: "WORKBOOK_GET_TAB requires tabName" }, origin);
+        }
+        const result = await store.getTab(workspaceId, tabName);
+        return jsonResponse(200, result, origin);
+      }
+
+      if (calc === "WORKBOOK_SAVE_TAB") {
+        const tabName = String((body as any).tabName || "");
+        if (!tabName) {
+          return jsonResponse(400, { error: "WORKBOOK_SAVE_TAB requires tabName" }, origin);
+        }
+        const result = await store.putTab(workspaceId, tabName, (body as any).data);
+        return jsonResponse(200, result, origin);
+      }
+
+      const result = await store.saveWorkspace(workspaceId, {
+        tabs: (body as any).tabs,
+        settings: (body as any).settings,
+      });
+      return jsonResponse(200, result, origin);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Workbook storage error.";
+      return jsonResponse(400, { error: message }, origin);
+    }
   }
 
   if (calc === "FED_TAX_2025_MFJ") {
@@ -280,3 +447,6 @@ export const handler = async (
     origin
   );
 };
+
+
+

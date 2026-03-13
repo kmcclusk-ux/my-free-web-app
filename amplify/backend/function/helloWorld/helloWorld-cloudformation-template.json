@@ -69,6 +69,9 @@
             },
             "REGION": {
               "Ref": "AWS::Region"
+            },
+            "WORKBOOK_TABLE_NAME": {
+              "Ref": "WorkbookTable"
             }
           }
         },
@@ -81,6 +84,53 @@
         "Runtime": "nodejs22.x",
         "Layers": [],
         "Timeout": 25
+      }
+    },
+    "WorkbookTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {
+          "Fn::If": [
+            "ShouldNotCreateEnvResources",
+            "portfolio-workbook",
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "portfolio-workbook-",
+                  {
+                    "Ref": "env"
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "workspaceId",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "entityKey",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "workspaceId",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "entityKey",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PROVISIONED",
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        }
       }
     },
     "LambdaExecutionRole": {
@@ -124,7 +174,8 @@
     },
     "lambdaexecutionpolicy": {
       "DependsOn": [
-        "LambdaExecutionRole"
+        "LambdaExecutionRole",
+        "WorkbookTable"
       ],
       "Type": "AWS::IAM::Policy",
       "Properties": {
@@ -160,6 +211,23 @@
                   }
                 ]
               }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:BatchWriteItem",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "WorkbookTable",
+                    "Arn"
+                  ]
+                }
+              ]
             }
           ]
         }
@@ -196,6 +264,11 @@
           "LambdaExecutionRole",
           "Arn"
         ]
+      }
+    },
+    "WorkbookTableName": {
+      "Value": {
+        "Ref": "WorkbookTable"
       }
     }
   }

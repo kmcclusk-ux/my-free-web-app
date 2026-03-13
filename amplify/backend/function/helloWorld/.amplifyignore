@@ -11,5 +11,6 @@ tsconfig.json
 # DO ship compiled JS
 !index.js
 !taxCalcs.js
+!workbookStore.js
 !package.json
 !package-lock.json

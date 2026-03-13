@@ -476,3 +476,41 @@ function FED_TAX_FROM_BUCKETS(ordinaryTaxable, prefTaxable, muniBondIncome, regu
     netInvestmentIncome
   );
 }
+
+function callWorkbookApi(payload) {
+  return callTaxApi(payload);
+}
+
+function WORKBOOK_GET(workspaceId) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_GET",
+    workspaceId: String(workspaceId || "default")
+  });
+}
+
+function WORKBOOK_GET_TAB(workspaceId, tabName) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_GET_TAB",
+    workspaceId: String(workspaceId || "default"),
+    tabName: String(tabName || "")
+  });
+}
+
+function WORKBOOK_SAVE_TAB(workspaceId, tabName, data) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_SAVE_TAB",
+    workspaceId: String(workspaceId || "default"),
+    tabName: String(tabName || ""),
+    data: data
+  });
+}
+
+function WORKBOOK_SAVE(workspaceId, tabs, settings) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_SAVE",
+    workspaceId: String(workspaceId || "default"),
+    tabs: tabs || {},
+    settings: settings || {}
+  });
+}
+

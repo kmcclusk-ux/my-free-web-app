@@ -4,7 +4,11 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "build": "rimraf index.js taxCalcs.js && npx tsc -p tsconfig.json --outDir ."
+    "build": "rimraf index.js taxCalcs.js workbookStore.js && npx tsc -p tsconfig.json --outDir ."
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.888.0",
+    "@aws-sdk/lib-dynamodb": "^3.888.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.0",
