@@ -1,12 +1,6 @@
 version: 1
 applications:
   - appRoot: frontend
-    backend:
-      phases:
-        build:
-          commands:
-            - npm ci
-            - npx amplifyPush --simple
     frontend:
       phases:
         preBuild:
