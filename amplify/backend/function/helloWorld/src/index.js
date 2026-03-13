@@ -36,6 +36,9 @@ function decodeBody(event) {
 function isFilingStatus(x) {
     return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
 }
+function isOrdinary2025FilingStatus(x) {
+    return x === "single" || x === "mfj";
+}
 function readNonNegativeNumber(value, fieldName) {
     const num = Number(value);
     if (!Number.isFinite(num) || num < 0) {
@@ -73,6 +76,21 @@ const handler = async (event) => {
         }
         const tax = (0, taxCalcs_1.fedTax2025Mfj)(taxableIncome.value);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
+    }
+    if (calc === "FED_TAX_2025_ORDINARY") {
+        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
+        if ("error" in taxableIncome) {
+            return jsonResponse(400, { error: taxableIncome.error }, origin);
+        }
+        const filingStatus = String(body.filingStatus || "single").toLowerCase();
+        if (!isFilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
+        }
+        if (!isOrdinary2025FilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "FED_TAX_2025_ORDINARY currently supports filingStatus=single or mfj" }, origin);
+        }
+        const tax = (0, taxCalcs_1.fedTax2025Ordinary)(taxableIncome.value, filingStatus);
+        return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, filingStatus, tax }, origin);
     }
     if (calc === "CA_TAX_2025_MFJ" || calc === "STATE_TAX_2025_CA_MFJ") {
         const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
@@ -117,8 +135,8 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        if (filingStatus !== "mfj") {
-            return jsonResponse(400, { error: "FED_TAX_2025_COMBINED currently supports filingStatus=mfj only" }, origin);
+        if (!isOrdinary2025FilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "FED_TAX_2025_COMBINED currently supports filingStatus=single or mfj" }, origin);
         }
         const magi = readNonNegativeNumber(body.magi, "magi");
         if ("error" in magi) {
@@ -128,7 +146,7 @@ const handler = async (event) => {
         if ("error" in netInvestmentIncome) {
             return jsonResponse(400, { error: netInvestmentIncome.error }, origin);
         }
-        const ordinaryTax = (0, taxCalcs_1.fedTax2025Mfj)(ordinaryTaxable.value);
+        const ordinaryTax = (0, taxCalcs_1.fedTax2025Ordinary)(ordinaryTaxable.value, filingStatus);
         const prefTax = (0, taxCalcs_1.fedPrefTax2024)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
         const niit = (0, taxCalcs_1.niitTax)(magi.value, netInvestmentIncome.value, filingStatus);
         const tax = ordinaryTax + prefTax + niit;
@@ -149,6 +167,7 @@ const handler = async (event) => {
         error: "Unknown calc.",
         allowed: [
             "FED_TAX_2025_MFJ",
+            "FED_TAX_2025_ORDINARY",
             "FED_PREF_TAX_2024",
             "FED_TAX_2025_COMBINED",
             "CA_TAX_2025_MFJ",

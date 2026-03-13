@@ -1,23 +1,13 @@
-﻿// C:\myapp\amplify\backend\function\helloWorld\src\taxCalcs.ts
+// C:\myapp\amplify\backend\function\helloWorld\src\taxCalcs.ts
 
 export type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
 
-/**
- * 2025 MFJ ordinary income tax on *taxable income* (after deductions).
- */
-export function fedTax2025Mfj(taxableIncome: number): number {
+function computeBracketedTax(
+  taxableIncome: number,
+  brackets: ReadonlyArray<{ max: number; rate: number }>
+): number {
   const ti = Number(taxableIncome);
   if (!Number.isFinite(ti) || ti <= 0) return 0;
-
-  const brackets = [
-    { max: 23850, rate: 0.10 },
-    { max: 96950, rate: 0.12 },
-    { max: 206700, rate: 0.22 },
-    { max: 394600, rate: 0.24 },
-    { max: 501050, rate: 0.32 },
-    { max: 751600, rate: 0.35 },
-    { max: Number.POSITIVE_INFINITY, rate: 0.37 },
-  ] as const;
 
   let tax = 0;
   let prevMax = 0;
@@ -31,6 +21,47 @@ export function fedTax2025Mfj(taxableIncome: number): number {
   }
 
   return tax;
+}
+
+/**
+ * 2025 MFJ ordinary income tax on taxable income (after deductions).
+ */
+export function fedTax2025Mfj(taxableIncome: number): number {
+  const brackets = [
+    { max: 23850, rate: 0.10 },
+    { max: 96950, rate: 0.12 },
+    { max: 206700, rate: 0.22 },
+    { max: 394600, rate: 0.24 },
+    { max: 501050, rate: 0.32 },
+    { max: 751600, rate: 0.35 },
+    { max: Number.POSITIVE_INFINITY, rate: 0.37 },
+  ] as const;
+
+  return computeBracketedTax(taxableIncome, brackets);
+}
+
+/**
+ * 2025 Single ordinary income tax on taxable income (after deductions).
+ */
+export function fedTax2025Single(taxableIncome: number): number {
+  const brackets = [
+    { max: 11925, rate: 0.10 },
+    { max: 48475, rate: 0.12 },
+    { max: 103350, rate: 0.22 },
+    { max: 197300, rate: 0.24 },
+    { max: 250525, rate: 0.32 },
+    { max: 626350, rate: 0.35 },
+    { max: Number.POSITIVE_INFINITY, rate: 0.37 },
+  ] as const;
+
+  return computeBracketedTax(taxableIncome, brackets);
+}
+
+export function fedTax2025Ordinary(
+  taxableIncome: number,
+  filingStatus: FilingStatus
+): number {
+  return filingStatus === "mfj" ? fedTax2025Mfj(taxableIncome) : fedTax2025Single(taxableIncome);
 }
 
 /**
@@ -61,14 +92,9 @@ export function fedPrefTax2024(
   const QDCG = pref;
   const taxableOrd = TI - QDCG;
 
-  // Amount of QDCG taxed at 0%
   const amount0 = Math.max(0, Math.min(QDCG, b.z0 - taxableOrd));
-
-  // Amount of QDCG taxed at 15%
   const baseFor15 = Math.max(taxableOrd, b.z0);
   const amount15 = Math.max(0, Math.min(QDCG - amount0, b.z15 - baseFor15));
-
-  // Remainder taxed at 20%
   const amount20 = Math.max(0, QDCG - amount0 - amount15);
 
   return amount15 * 0.15 + amount20 * 0.2;
@@ -77,24 +103,21 @@ export function fedPrefTax2024(
 /**
  * Calculates 2025 California income tax for Married Filing Jointly (MFJ)
  * given CA taxable income (Form 540, line 19).
- *
- * Includes 1% Mental Health Services tax on taxable income over $1,000,000.
- * Ignores credits, AMT, etc.
  */
 export function caTax2025Mfj(taxableIncome: number): number {
   const ti = Number(taxableIncome);
   if (!Number.isFinite(ti) || ti <= 0) return 0;
 
   const brackets = [
-    { max: 21512, rate: 0.010 }, // 1%
-    { max: 50998, rate: 0.020 }, // 2%
-    { max: 80490, rate: 0.040 }, // 4%
-    { max: 111732, rate: 0.060 }, // 6%
-    { max: 141212, rate: 0.080 }, // 8%
-    { max: 721318, rate: 0.093 }, // 9.3%
-    { max: 865574, rate: 0.103 }, // 10.3%
-    { max: 1442628, rate: 0.113 }, // 11.3%
-    { max: Number.POSITIVE_INFINITY, rate: 0.123 }, // 12.3%
+    { max: 21512, rate: 0.010 },
+    { max: 50998, rate: 0.020 },
+    { max: 80490, rate: 0.040 },
+    { max: 111732, rate: 0.060 },
+    { max: 141212, rate: 0.080 },
+    { max: 721318, rate: 0.093 },
+    { max: 865574, rate: 0.103 },
+    { max: 1442628, rate: 0.113 },
+    { max: Number.POSITIVE_INFINITY, rate: 0.123 },
   ] as const;
 
   let tax = 0;
@@ -110,7 +133,6 @@ export function caTax2025Mfj(taxableIncome: number): number {
     prevMax = b.max;
   }
 
-  // Mental Health Services tax: extra 1% on taxable income over $1,000,000
   if (ti > 1_000_000) {
     tax += (ti - 1_000_000) * 0.01;
   }
@@ -119,14 +141,7 @@ export function caTax2025Mfj(taxableIncome: number): number {
 }
 
 /**
- * Net Investment Income Tax (NIIT) â€” 3.8% surtax.
- *
- * NIIT = 3.8% * min(netInvestmentIncome, MAGI - threshold)
- *
- * Thresholds (not inflation-adjusted):
- *  - single / hoh: 200,000
- *  - mfj:          250,000
- *  - mfs:          125,000
+ * Net Investment Income Tax (NIIT) - 3.8% surtax.
  */
 export function niitTax(
   magi: number,
@@ -140,15 +155,9 @@ export function niitTax(
   if (!Number.isFinite(nii) || nii <= 0) return 0;
 
   const fs = (filingStatus || "single").toLowerCase() as FilingStatus;
-
-  const threshold =
-    fs === "mfj" ? 250_000 : fs === "mfs" ? 125_000 : 200_000; // single, hoh
-
+  const threshold = fs === "mfj" ? 250_000 : fs === "mfs" ? 125_000 : 200_000;
   const excessMagi = Math.max(0, m - threshold);
   const base = Math.min(nii, excessMagi);
 
   return base * 0.038;
 }
-
-
-

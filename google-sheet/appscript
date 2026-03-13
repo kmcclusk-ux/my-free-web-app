@@ -175,22 +175,29 @@ function CA_TAX_2025_MFJ(taxableIncome) {
   return tax;
 }
 
-function FED_TAX_2025_MFJ_API(taxableIncome) {
+function FED_TAX_2025_ORDINARY_API(taxableIncome, filingStatus) {
   taxableIncome = Number(taxableIncome);
   if (!isFinite(taxableIncome) || taxableIncome <= 0) return 0;
 
+  filingStatus = normalizeFilingStatus(filingStatus || 'single');
+
   var json = callTaxApi({
-    calc: 'FED_TAX_2025_MFJ',
-    taxableIncome: taxableIncome
+    calc: 'FED_TAX_2025_ORDINARY',
+    taxableIncome: taxableIncome,
+    filingStatus: filingStatus
   });
 
   return Number(json.tax || 0);
 }
 
+function FED_TAX_2025_MFJ_API(taxableIncome) {
+  return FED_TAX_2025_ORDINARY_API(taxableIncome, 'mfj');
+}
+
 function FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus) {
   ordinaryTaxable = Number(ordinaryTaxable) || 0;
   prefTaxable = Number(prefTaxable) || 0;
-  filingStatus = String(filingStatus || 'single').toLowerCase();
+  filingStatus = normalizeFilingStatus(filingStatus || 'single');
 
   if (prefTaxable <= 0) return 0;
 
@@ -206,21 +213,26 @@ function FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus) {
 
 /**
  * Unified federal tax wrapper.
- * Sheet usage: =FED_TAX_API("FED_TAX_2025_COMBINED",150000,25000,"mfj",310000,50000)
+ * Sheet usage: =FED_TAX_API("FED_TAX_2025_COMBINED",150000,25000,"single",310000,50000)
  *
- * For FED_TAX_2025_COMBINED, pass MAGI and net investment income so the backend
- * can calculate NIIT as part of the total federal liability.
+ * FED_TAX_2025_COMBINED currently supports filingStatus of mfj and single.
+ * Pass MAGI and net investment income so the backend can calculate NIIT as part
+ * of the total federal liability.
  */
 function FED_TAX_API(calc, ordinaryTaxable, prefTaxable, filingStatus, magi, netInvestmentIncome) {
   calc = String(calc || 'FED_TAX_2025_COMBINED').toUpperCase();
   ordinaryTaxable = Number(ordinaryTaxable) || 0;
   prefTaxable = Number(prefTaxable) || 0;
-  filingStatus = String(filingStatus || 'mfj').toLowerCase();
+  filingStatus = normalizeFilingStatus(filingStatus || 'mfj');
   magi = Number(magi) || 0;
   netInvestmentIncome = Number(netInvestmentIncome) || 0;
 
   if (calc === 'FED_TAX_2025_MFJ') {
     return FED_TAX_2025_MFJ_API(ordinaryTaxable);
+  }
+
+  if (calc === 'FED_TAX_2025_ORDINARY') {
+    return FED_TAX_2025_ORDINARY_API(ordinaryTaxable, filingStatus);
   }
 
   if (calc === 'FED_PREF_TAX_2024') {
@@ -305,7 +317,7 @@ function callLambda() {
     calc: 'FED_TAX_2025_COMBINED',
     ordinaryTaxable: 150000,
     prefTaxable: 25000,
-    filingStatus: 'mfj',
+    filingStatus: 'single',
     magi: 310000,
     netInvestmentIncome: 50000
   });
@@ -337,10 +349,10 @@ function STATE_TAX_2025_CA_MFJ_API(taxableIncome) {
 
 function normalizeFilingStatus(filingStatus) {
   var fs = String(filingStatus || 'mfj').toLowerCase().trim();
-  if (fs === 'married filing jointly') return 'mfj';
+  if (fs === 'married filing jointly' || fs === 'joint' || fs === 'married joint') return 'mfj';
   if (fs === 'married filing separately') return 'mfs';
   if (fs === 'head of household') return 'hoh';
-  if (fs === 'single') return 'single';
+  if (fs === 'single' || fs === 'individual') return 'single';
   return fs;
 }
 
