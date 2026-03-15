@@ -370,10 +370,22 @@ async function saveWorkbook(workspaceId: string, payload: WorkbookResponse) {
   return json;
 }
 
-function mergeRows<T>(fallback: T[], incoming: unknown, mapper?: (row: T) => T): T[] {
+function mergeRows<T>(
+  fallback: T[],
+  incoming: unknown,
+  mapper?: (row: T) => T,
+  validator?: (row: T) => boolean
+): T[] {
   if (!Array.isArray(incoming)) return fallback;
-  const rows = incoming as T[];
-  return mapper ? rows.map(mapper) : rows;
+  const rows = (incoming as T[]).map((row) => (mapper ? mapper(row) : row));
+  if (rows.length === 0) return fallback;
+  if (validator && !rows.some(validator)) {
+    return fallback;
+  }
+  return rows;
+}
+function hasInvestmentValues(row: InvestmentRow) {
+  return (row.totalInvestment || row.yearlyIncome || 0) > 0 || row.includeIncome;
 }
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
 function sanitizeInvestmentRow(row: InvestmentRow): InvestmentRow { return { ...row, includeIncome: normalizeBoolean(row.includeIncome), overrideProposal: normalizeBoolean(row.overrideProposal), totalInvestment: toNumber(row.totalInvestment), yearlyIncome: toNumber(row.yearlyIncome), newPercent: toNumber(row.newPercent) }; }
@@ -507,7 +519,9 @@ export default function App() {
     loadWorkbook(WORKSPACE_ID).then((response) => {
       if (cancelled) return;
       const workbookSettings = parseWorkbookSettings(response.settings);
-      setInvestments(mergeRows(initialInvestments, response.tabs?.investments, sanitizeInvestmentRow));
+      setInvestments(
+        mergeRows(initialInvestments, response.tabs?.investments, sanitizeInvestmentRow, hasInvestmentValues)
+      );
       setTickers(mergeRows(initialTickers, response.tabs?.tickers, (row) => ({ ...row, percentReturn: toNumber(row.percentReturn), extraData: toNumber(row.extraData) })));
       setTaxTreatments(mergeRows(initialTaxTreatments, response.tabs?.taxTreatment));
       setAccounts(mergeRows(initialAccounts, response.tabs?.accounts, (row) => ({ ...row, includeInFreeCashflow: normalizeYesNo(row.includeInFreeCashflow) })));
