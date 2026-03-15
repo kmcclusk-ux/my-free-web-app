@@ -68,6 +68,7 @@ type InvestmentTypeRow = { id: number; name: string };
 type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
+type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus">;
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -269,7 +270,7 @@ function parseFederalSettingsSection(section: unknown): Partial<FederalSettings>
   const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
   const result: Partial<FederalSettings> = {};
 
-  const setNumberField = (field: keyof FederalSettings, label: string) => {
+  const setNumberField = (field: FederalNumericField, label: string) => {
     const value = parseNumberFromSection(sectionObj, rows, field, label);
     if (value !== undefined) {
       result[field] = value as FederalSettings[typeof field];
@@ -370,26 +371,102 @@ async function saveWorkbook(workspaceId: string, payload: WorkbookResponse) {
   return json;
 }
 
-function mergeRows<T>(
+function workbookField(row: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+    const value = row[key];
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text === "") continue;
+    return text;
+  }
+  return undefined;
+}
+function mapWorkbookRows<T>(
   fallback: T[],
   incoming: unknown,
-  mapper?: (row: T) => T,
+  mapper: (row: Record<string, unknown>, index: number, fallbackRow?: T) => T,
   validator?: (row: T) => boolean
 ): T[] {
-  if (!Array.isArray(incoming)) return fallback;
-  const rows = (incoming as T[]).map((row) => (mapper ? mapper(row) : row));
-  if (rows.length === 0) return fallback;
-  if (validator && !rows.some(validator)) {
-    return fallback;
-  }
-  return rows;
+  if (!Array.isArray(incoming) || incoming.length === 0) return fallback;
+  const mapped = incoming
+    .map((row, index) => mapper(typeof row === "object" && row ? (row as Record<string, unknown>) : {}, index, fallback[index]))
+    .filter((value): value is T => Boolean(value));
+  if (mapped.length === 0) return fallback;
+  if (validator && !mapped.some(validator)) return fallback;
+  return mapped;
 }
-function hasInvestmentValues(row: InvestmentRow) {
-  return (row.totalInvestment || row.yearlyIncome || 0) > 0 || row.includeIncome;
+function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fallback?: InvestmentRow): InvestmentRow {
+  const base = fallback || initialInvestments[index] || initialInvestments[0];
+  const idValue = workbookField(row, "id");
+  const id = idValue ? Number(idValue) || base.id : base.id;
+  const totalInvestmentValue = workbookField(row, "total_inv", "total_investment", "totalinvestment", "total_inv_amount");
+  const yearlyIncomeValue = workbookField(row, "yr_inc", "yearly_income", "yearinc", "yearly_income_amount");
+  const includeIncomeValue = workbookField(row, "inc", "include_income", "income", "include_investment_income");
+  const overrideValue = workbookField(row, "override", "override_proposal");
+  const newPercentValue = workbookField(row, "new_percent", "new_pct", "newpercent");
+  return {
+    id: Number(id) || index + 1,
+    description: workbookField(row, "desc", "description") ?? base.description,
+    account: workbookField(row, "accnt", "account", "account_name", "account_names") ?? base.account,
+    category: workbookField(row, "category") ?? base.category,
+    totalInvestment: totalInvestmentValue !== undefined ? toNumber(totalInvestmentValue) : base.totalInvestment,
+    yearlyIncome: yearlyIncomeValue !== undefined ? toNumber(yearlyIncomeValue) : base.yearlyIncome,
+    includeIncome: includeIncomeValue !== undefined ? normalizeBoolean(includeIncomeValue) : base.includeIncome,
+    overrideProposal: overrideValue !== undefined ? normalizeBoolean(overrideValue) : base.overrideProposal,
+    symbol: workbookField(row, "symbol", "current_symbol", "ticker") ?? base.symbol,
+    newSymbol: workbookField(row, "new_symbol", "proposed_symbol") ?? base.newSymbol,
+    newPercent: newPercentValue !== undefined ? toNumber(newPercentValue) : base.newPercent,
+  };
+}
+function workbookToTickerRow(row: Record<string, unknown>, index: number, fallback?: TickerRow): TickerRow {
+  const base = fallback || initialTickers[index] || initialTickers[0];
+  const percentValue = workbookField(row, "percent_return", "percentReturn", "percent_return_rate", "percent");
+  const extraDataValue = workbookField(row, "extra_data", "extraData");
+  return {
+    id: Number(workbookField(row, "id")) || base.id,
+    symbol: workbookField(row, "symbol", "ticker") ?? base.symbol,
+    percentReturn: percentValue !== undefined ? toNumber(percentValue) : base.percentReturn,
+    category: workbookField(row, "category") ?? base.category,
+    taxTreatment: workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment,
+    extraData: extraDataValue !== undefined ? toNumber(extraDataValue) : base.extraData,
+    description: workbookField(row, "description", "desc") ?? base.description,
+    exDividend: workbookField(row, "ex_dividend", "exDividend") ?? base.exDividend,
+    divPayout: workbookField(row, "div_payout", "divPayout") ?? base.divPayout,
+  };
+}
+function workbookToAccountRow(row: Record<string, unknown>, index: number, fallback?: AccountRow): AccountRow {
+  const base = fallback || initialAccounts[index] || initialAccounts[0];
+  return {
+    id: Number(workbookField(row, "id")) || base.id,
+    account: workbookField(row, "account", "account_name", "account_names") ?? base.account,
+    taxStatus: workbookField(row, "tax_status", "taxStatus") ?? base.taxStatus,
+    dividendAccrued: workbookField(row, "dividend_accrued", "dividendAccrued") ?? base.dividendAccrued,
+    includeInFreeCashflow: normalizeYesNo(workbookField(row, "include_in_free_cashflow", "includeInFreeCashflow", "include_in_free_cash_flow", "include")),
+  };
+}
+function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number, fallback?: TaxTreatmentRow): TaxTreatmentRow {
+  const base = fallback || initialTaxTreatments[index] || initialTaxTreatments[0];
+  return {
+    id: Number(workbookField(row, "id")) || base.id,
+    label: workbookField(row, "label", "tax_treatment") ?? base.label,
+  };
+}
+function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number, fallback?: AccountTaxTypeRow): AccountTaxTypeRow {
+  const base = fallback || initialAccountTaxTypes[index] || initialAccountTaxTypes[0];
+  return {
+    id: Number(workbookField(row, "id")) || base.id,
+    taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_status") ?? base.taxStatus,
+  };
+}
+function workbookToInvestmentTypeRow(row: Record<string, unknown>, index: number, fallback?: InvestmentTypeRow): InvestmentTypeRow {
+  const base = fallback || initialInvestmentTypes[index] || initialInvestmentTypes[0];
+  return {
+    id: Number(workbookField(row, "id")) || base.id,
+    name: workbookField(row, "name", "investment_type", "inv_type") ?? base.name,
+  };
 }
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
-function sanitizeInvestmentRow(row: InvestmentRow): InvestmentRow { return { ...row, includeIncome: normalizeBoolean(row.includeIncome), overrideProposal: normalizeBoolean(row.overrideProposal), totalInvestment: toNumber(row.totalInvestment), yearlyIncome: toNumber(row.yearlyIncome), newPercent: toNumber(row.newPercent) }; }
-
 function MetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "accent" | "warning" }) {
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -520,13 +597,23 @@ export default function App() {
       if (cancelled) return;
       const workbookSettings = parseWorkbookSettings(response.settings);
       setInvestments(
-        mergeRows(initialInvestments, response.tabs?.investments, sanitizeInvestmentRow, hasInvestmentValues)
+        mapWorkbookRows(initialInvestments, response.tabs?.investments, workbookToInvestmentRow)
       );
-      setTickers(mergeRows(initialTickers, response.tabs?.tickers, (row) => ({ ...row, percentReturn: toNumber(row.percentReturn), extraData: toNumber(row.extraData) })));
-      setTaxTreatments(mergeRows(initialTaxTreatments, response.tabs?.taxTreatment));
-      setAccounts(mergeRows(initialAccounts, response.tabs?.accounts, (row) => ({ ...row, includeInFreeCashflow: normalizeYesNo(row.includeInFreeCashflow) })));
-      setAccountTaxTypes(mergeRows(initialAccountTaxTypes, response.tabs?.accountTaxType));
-      setInvestmentTypes(mergeRows(initialInvestmentTypes, response.tabs?.investmentType));
+      setTickers(
+        mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
+      );
+      setTaxTreatments(
+        mapWorkbookRows(initialTaxTreatments, response.tabs?.taxTreatment, workbookToTaxTreatmentRow)
+      );
+      setAccounts(
+        mapWorkbookRows(initialAccounts, response.tabs?.accounts, workbookToAccountRow)
+      );
+      setAccountTaxTypes(
+        mapWorkbookRows(initialAccountTaxTypes, response.tabs?.accountTaxType, workbookToAccountTaxTypeRow)
+      );
+      setInvestmentTypes(
+        mapWorkbookRows(initialInvestmentTypes, response.tabs?.investmentType, workbookToInvestmentTypeRow)
+      );
       setFederalSettings(mergeSettings(initialFederalSettings, workbookSettings.federal));
       setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
       setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
