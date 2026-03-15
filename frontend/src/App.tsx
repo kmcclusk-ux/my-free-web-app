@@ -590,6 +590,10 @@ export default function App() {
   const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax + stateSettings.stateIncomeTax;
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
+  const hasRealData = useMemo(
+    () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
+    [investments]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -647,6 +651,9 @@ export default function App() {
 
   useEffect(() => {
     if (!hasLoadedStorage.current) return;
+    if (!hasRealData) {
+      return;
+    }
     if (saveTimeout.current) window.clearTimeout(saveTimeout.current);
     setStorageState("saving");
     setStorageMessage("Saving workbook...");
@@ -660,7 +667,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, tickers, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings]);
+  }, [investments, tickers, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, hasRealData]);
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
