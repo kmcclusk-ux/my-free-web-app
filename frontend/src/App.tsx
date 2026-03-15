@@ -151,7 +151,183 @@ const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWi
 function toNumber(value: number | string | boolean | null | undefined) { const num = Number(value); return Number.isFinite(num) ? num : 0; }
 function normalizeBoolean(value: unknown) { if (typeof value === "boolean") return value; if (typeof value === "number") return value !== 0; const text = String(value || "").trim().toLowerCase(); return text === "1" || text === "true" || text === "yes" || text === "y"; }
 function normalizeYesNo(value: unknown) { return normalizeBoolean(value) ? "yes" : "no"; }
-function normalizeFilingStatus(value: unknown): FilingStatus { return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single"; }
+function normalizeFilingStatus(value: unknown): FilingStatus {
+  return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single";
+}
+
+type SettingsSection = Record<string, unknown>;
+
+function parseNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const normalized = typeof value === "string" ? value.replace(/,/g, "") : value;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function normalizeSheetRows(raw: unknown): string[][] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const rows: string[][] = [];
+  for (const row of raw) {
+    if (!Array.isArray(row)) continue;
+    const normalizedRow = row.map((cell) => (cell === null || cell === undefined ? "" : String(cell)));
+    if (normalizedRow.some((cell) => cell.trim() !== "")) {
+      rows.push(normalizedRow);
+    }
+  }
+  return rows.length > 0 ? rows : undefined;
+}
+
+function findRowByLabel(rows: string[][] | undefined, label: string): { row: string[]; labelIndex: number } | null {
+  if (!rows) return null;
+  const target = label.trim().toLowerCase();
+  for (const row of rows) {
+    for (let index = 0; index < row.length; index += 1) {
+      if (row[index].trim().toLowerCase() === target) {
+        return { row, labelIndex: index };
+      }
+    }
+  }
+  return null;
+}
+
+function extractNumberFromRow(row: string[], labelIndex: number): number | undefined {
+  for (let idx = labelIndex + 1; idx < row.length; idx += 1) {
+    const candidate = row[idx] ? row[idx].trim() : "";
+    if (!candidate) continue;
+    const num = Number(candidate.replace(/,/g, ""));
+    if (Number.isFinite(num)) {
+      return num;
+    }
+  }
+  return undefined;
+}
+
+function extractStringFromRow(row: string[], labelIndex: number): string | undefined {
+  for (let idx = labelIndex + 1; idx < row.length; idx += 1) {
+    const candidate = row[idx] ? row[idx].trim() : "";
+    if (candidate) return candidate;
+  }
+  return undefined;
+}
+
+function parseNumberFromSection(
+  section: SettingsSection | undefined,
+  rows: string[][] | undefined,
+  field: string,
+  label?: string
+): number | undefined {
+  if (section && field in section) {
+    const value = parseNumber(section[field]);
+    if (value !== undefined) return value;
+  }
+  if (label && rows) {
+    const match = findRowByLabel(rows, label);
+    if (match) {
+      return extractNumberFromRow(match.row, match.labelIndex);
+    }
+  }
+  return undefined;
+}
+
+function parseStringFromSection(
+  section: SettingsSection | undefined,
+  rows: string[][] | undefined,
+  field: string,
+  label?: string
+): string | undefined {
+  if (section && field in section) {
+    const value = section[field];
+    if (value !== null && value !== undefined) {
+      const text = String(value).trim();
+      if (text) return text;
+    }
+  }
+  if (label && rows) {
+    const match = findRowByLabel(rows, label);
+    if (match) {
+      return extractStringFromRow(match.row, match.labelIndex);
+    }
+  }
+  return undefined;
+}
+
+function parseFederalSettingsSection(section: unknown): Partial<FederalSettings> {
+  const sectionObj = section && typeof section === "object" ? (section as SettingsSection) : undefined;
+  const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
+  const result: Partial<FederalSettings> = {};
+
+  const setNumberField = (field: keyof FederalSettings, label: string) => {
+    const value = parseNumberFromSection(sectionObj, rows, field, label);
+    if (value !== undefined) {
+      result[field] = value as FederalSettings[typeof field];
+    }
+  };
+
+  setNumberField("mortgageInterest", "Mortgage interest");
+  setNumberField("propertyTax", "Property tax");
+  setNumberField("stateIncomeTax", "State income tax");
+  setNumberField("standardDeduction", "Standard deduction");
+  setNumberField("saltCap", "SALT cap");
+
+  const filingValue = parseStringFromSection(sectionObj, rows, "filingStatus", "Filing status");
+  if (filingValue) {
+    result.filingStatus = normalizeFilingStatus(filingValue);
+  }
+
+  return result;
+}
+
+function parseStateSettingsSection(section: unknown): Partial<StateSettings> {
+  const sectionObj = section && typeof section === "object" ? (section as SettingsSection) : undefined;
+  const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
+  const result: Partial<StateSettings> = {};
+
+  const setNumberField = (field: keyof StateSettings, label: string) => {
+    const value = parseNumberFromSection(sectionObj, rows, field, label);
+    if (value !== undefined) {
+      result[field] = value as StateSettings[typeof field];
+    }
+  };
+
+  setNumberField("mortgageInterest", "mortgage interest");
+  setNumberField("propertyTax", "property tax");
+  setNumberField("stateIncomeTax", "state tax");
+  setNumberField("standardDeduction", "Standard deduction");
+
+  const extraStateIncome = parseNumberFromSection(sectionObj, rows, "extraStateIncome", "Extra state income");
+  if (extraStateIncome !== undefined) {
+    result.extraStateIncome = extraStateIncome;
+  }
+
+  return result;
+}
+
+function parsePlannerSettingsSection(section: unknown): Partial<PlannerSettings> {
+  const sectionObj = section && typeof section === "object" ? (section as SettingsSection) : undefined;
+  const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
+  const result: Partial<PlannerSettings> = {};
+
+  const federalWithholding = parseNumberFromSection(sectionObj, rows, "federalWithholding", "Withhold amounts - fed");
+  if (federalWithholding !== undefined) {
+    result.federalWithholding = federalWithholding;
+  }
+
+  const stateWithholding = parseNumberFromSection(sectionObj, rows, "stateWithholding", "Withhold amounts - state");
+  if (stateWithholding !== undefined) {
+    result.stateWithholding = stateWithholding;
+  }
+
+  return result;
+}
+
+function parseWorkbookSettings(settings: unknown) {
+  const settingsObj = settings && typeof settings === "object" ? (settings as Record<string, unknown>) : {};
+  return {
+    federal: parseFederalSettingsSection(settingsObj.federal),
+    state: parseStateSettingsSection(settingsObj.state),
+    planner: parsePlannerSettingsSection(settingsObj.planner),
+  };
+}
 function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
 function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
 function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
@@ -317,15 +493,16 @@ export default function App() {
     let cancelled = false;
     loadWorkbook(WORKSPACE_ID).then((response) => {
       if (cancelled) return;
+      const workbookSettings = parseWorkbookSettings(response.settings);
       setInvestments(mergeRows(initialInvestments, response.tabs?.investments, sanitizeInvestmentRow));
       setTickers(mergeRows(initialTickers, response.tabs?.tickers, (row) => ({ ...row, percentReturn: toNumber(row.percentReturn), extraData: toNumber(row.extraData) })));
       setTaxTreatments(mergeRows(initialTaxTreatments, response.tabs?.taxTreatment));
       setAccounts(mergeRows(initialAccounts, response.tabs?.accounts, (row) => ({ ...row, includeInFreeCashflow: normalizeYesNo(row.includeInFreeCashflow) })));
       setAccountTaxTypes(mergeRows(initialAccountTaxTypes, response.tabs?.accountTaxType));
       setInvestmentTypes(mergeRows(initialInvestmentTypes, response.tabs?.investmentType));
-      setFederalSettings(mergeSettings(initialFederalSettings, response.settings?.federal));
-      setStateSettings(mergeSettings(initialStateSettings, response.settings?.state));
-      setPlannerSettings(mergeSettings(initialPlannerSettings, response.settings?.planner));
+      setFederalSettings(mergeSettings(initialFederalSettings, workbookSettings.federal));
+      setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
+      setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
       hasLoadedStorage.current = true;
       setStorageState("ready");
       setStorageMessage(response.updatedAt ? `Synced ${new Date(response.updatedAt).toLocaleString()}` : "Ready to save");
