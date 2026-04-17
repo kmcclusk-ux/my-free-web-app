@@ -495,7 +495,19 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
     ) !== undefined;
   if (!hasAnyInvestmentField) return null;
 
-  const base = fallback || initialInvestments[index] || initialInvestments[0];
+  const base: InvestmentRow = fallback || {
+    id: index + 1,
+    description: "",
+    account: "",
+    category: "core",
+    totalInvestment: 0,
+    yearlyIncome: 0,
+    includeIncome: true,
+    overrideProposal: false,
+    symbol: "",
+    newSymbol: "",
+    newPercent: 0,
+  };
   const idValue = workbookField(row, "id");
   const id = idValue ? Number(idValue) || base.id : base.id;
   const totalInvestmentValue = workbookField(row, "total_inv", "total_investment", "totalinvestment", "total_inv_amount");
