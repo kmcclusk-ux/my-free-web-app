@@ -71,3 +71,7 @@
 .field-note { display: block; margin-top: 6px; font-size: .72rem; color: #61767a; }
 .calculator-results__grid { margin-bottom: 10px; }
 .calculator-summary-grid { margin-bottom: 0; }
+
+.debug-panel { display: flex; flex-direction: column; gap: 8px; }
+.debug-panel__stats { display: flex; flex-wrap: wrap; gap: 12px; font-size: .82rem; }
+.debug-panel__list { display: flex; flex-wrap: wrap; gap: 10px; font-size: .8rem; color: #285860; }
