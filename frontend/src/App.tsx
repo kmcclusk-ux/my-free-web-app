@@ -121,6 +121,7 @@ type WorkbookResponse = {
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
@@ -456,7 +457,7 @@ function workbookField(row: Record<string, unknown>, ...keys: string[]) {
 function mapWorkbookRows<T>(
   fallback: T[],
   incoming: unknown,
-  mapper: (row: Record<string, unknown>, index: number, fallbackRow?: T) => T,
+  mapper: (row: Record<string, unknown>, index: number, fallbackRow?: T) => T | null,
   validator?: (row: T) => boolean
 ): T[] {
   if (!Array.isArray(incoming) || incoming.length === 0) return fallback;
@@ -467,7 +468,33 @@ function mapWorkbookRows<T>(
   if (validator && !mapped.some(validator)) return fallback;
   return mapped;
 }
-function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fallback?: InvestmentRow): InvestmentRow {
+function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fallback?: InvestmentRow): InvestmentRow | null {
+  const hasAnyInvestmentField =
+    workbookField(
+      row,
+      "id",
+      "desc",
+      "description",
+      "accnt",
+      "account",
+      "account_name",
+      "account_names",
+      "symbol",
+      "current_symbol",
+      "ticker",
+      "new_symbol",
+      "proposed_symbol",
+      "total_inv",
+      "total_investment",
+      "totalinvestment",
+      "total_inv_amount",
+      "yr_inc",
+      "yearly_income",
+      "yearinc",
+      "yearly_income_amount"
+    ) !== undefined;
+  if (!hasAnyInvestmentField) return null;
+
   const base = fallback || initialInvestments[index] || initialInvestments[0];
   const idValue = workbookField(row, "id");
   const id = idValue ? Number(idValue) || base.id : base.id;
@@ -953,7 +980,7 @@ export default function App() {
           <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
           <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
         </div>
-        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div></div></div>
+        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
 
         {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} derivedRows={derivedRows} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} />}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment" }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
