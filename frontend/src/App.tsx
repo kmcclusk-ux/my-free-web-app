@@ -68,6 +68,42 @@ type InvestmentTypeRow = { id: number; name: string };
 type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
+type TaxCalculatorInputs = {
+  filingStatus: FilingStatus;
+  federalStandardDeduction: number;
+  federalSaltCap: number;
+  caStandardDeduction: number;
+  nonInvestmentOrdinaryIncome: number;
+  otherOrdinaryInvestmentIncome: number;
+  ordinaryDividends: number;
+  qualifiedDividends: number;
+  longTermCapitalGains: number;
+  grossSocialSecurity: number;
+  muniBondInterest: number;
+  mortgageInterest: number;
+  propertyTax: number;
+  stateIncomeTax: number;
+  federalWithholding: number;
+  stateWithholding: number;
+};
+const initialTaxCalculatorInputs: TaxCalculatorInputs = {
+  filingStatus: "mfj",
+  federalStandardDeduction: 31500,
+  federalSaltCap: 40400,
+  caStandardDeduction: 11000,
+  nonInvestmentOrdinaryIncome: 300000,
+  otherOrdinaryInvestmentIncome: 0,
+  ordinaryDividends: 0,
+  qualifiedDividends: 0,
+  longTermCapitalGains: 0,
+  grossSocialSecurity: 0,
+  muniBondInterest: 0,
+  mortgageInterest: 0,
+  propertyTax: 0,
+  stateIncomeTax: 0,
+  federalWithholding: 0,
+  stateWithholding: 0,
+};
 type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus">;
 
 type WorkbookResponse = {
@@ -167,6 +203,41 @@ function normalizeBoolean(value: unknown) { if (typeof value === "boolean") retu
 function normalizeYesNo(value: unknown) { return normalizeBoolean(value) ? "yes" : "no"; }
 function normalizeFilingStatus(value: unknown): FilingStatus {
   return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single";
+}
+
+const SS_THRESHOLDS: Record<string, { base1: number; base2: number; bandCap: number }> = {
+  mfj: { base1: 32000, base2: 44000, bandCap: 6000 },
+  single: { base1: 25000, base2: 34000, bandCap: 4500 },
+  hoh: { base1: 25000, base2: 34000, bandCap: 4500 },
+  mfs: { base1: 0, base2: 0, bandCap: 0 },
+};
+
+function resolveSsThresholds(filingStatus: FilingStatus) {
+  return SS_THRESHOLDS[filingStatus] || SS_THRESHOLDS.single;
+}
+
+function calculateTaxableSocialSecurity(
+  grossBenefits: number,
+  otherIncome: number,
+  muniInterest: number,
+  filingStatus: FilingStatus
+) {
+  const ssIncome = Math.max(0, grossBenefits);
+  if (ssIncome <= 0) return 0;
+  const thresholds = resolveSsThresholds(filingStatus);
+  const provisionalIncome = Math.max(0, otherIncome) + Math.max(0, muniInterest) + 0.5 * ssIncome;
+
+  if (provisionalIncome <= thresholds.base1) {
+    return 0;
+  }
+
+  if (provisionalIncome <= thresholds.base2) {
+    return Math.min(0.5 * ssIncome, 0.5 * (provisionalIncome - thresholds.base1));
+  }
+
+  const aboveSecondBand = 0.85 * (provisionalIncome - thresholds.base2);
+  const carryFromFirstBand = Math.min(thresholds.bandCap, 0.5 * ssIncome);
+  return Math.min(0.85 * ssIncome, aboveSecondBand + carryFromFirstBand);
 }
 
 type SettingsSection = Record<string, unknown>;
@@ -481,7 +552,80 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, onChange, onAdd, onRemove }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
-  return <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic."><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact sheet-table--workbook"><thead><tr><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th /></tr></thead><tbody>{rows.map((row) => { const derived = derivedMap[row.id]; return <tr key={row.id}><td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td><td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><input value={row.category} onChange={(event) => onChange(row.id, "category", event.target.value)} /></td><td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td><td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.monthlyIncome || 0)}</div></td><td className="checkbox-cell"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} /></td><td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td><td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td><td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td><td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td><td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td><td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.extraData || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.filteredIncome || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.includedTotal || 0)}</div></td><td><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.ordinaryMonthly || 0) * 12)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.preferredMonthly || 0) * 12)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.stateMonthly || 0) * 12)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed((derived?.nonTaxableMonthly || 0) * 12)}</div></td><td><div className="readonly-cell readonly-cell--text">{derived?.investmentType || ""}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.nonInvestmentIncome || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.cash || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.stocks || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.preferredStock || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bonds || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniBond || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniInterest || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.businessDevelopment || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.coveredCall || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.realEstate || 0)}</div></td><td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bitcoin || 0)}</div></td><td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>; })}</tbody></table></div></Section>;
+  const partiallyTaxableTreatments = new Set(["index-60-40", "ss-85-fed", "real estate"]);
+
+  const getRowClassName = (derived?: DerivedInvestmentRow) => {
+    const taxStatus = String(derived?.taxStatus || "").toLowerCase();
+    const taxTreatment = String(derived?.taxTreatment || "").toLowerCase();
+
+    if (taxStatus.includes("deferred")) return "investment-row investment-row--deferred";
+    if (taxStatus.includes("partially taxable") || partiallyTaxableTreatments.has(taxTreatment)) {
+      return "investment-row investment-row--partial";
+    }
+
+    return "investment-row";
+  };
+
+  return (
+    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic.">
+      <div className="actions-row">
+        <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
+      </div>
+      <div className="table-wrap table-wrap--tall">
+        <table className="sheet-table sheet-table--compact sheet-table--workbook">
+          <thead>
+            <tr>
+              <th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const derived = derivedMap[row.id];
+              return (
+                <tr key={row.id} className={getRowClassName(derived)}>
+                  <td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td>
+                  <td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
+                  <td><input value={row.category} onChange={(event) => onChange(row.id, "category", event.target.value)} /></td>
+                  <td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td>
+                  <td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.monthlyIncome || 0)}</div></td>
+                  <td className="checkbox-cell"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} /></td>
+                  <td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>
+                  <td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
+                  <td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>
+                  <td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
+                  <td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
+                  <td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.extraData || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.filteredIncome || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.includedTotal || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.ordinaryMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.preferredMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.stateMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.nonTaxableMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--text">{derived?.investmentType || ""}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.nonInvestmentIncome || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.cash || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.stocks || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.preferredStock || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bonds || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniBond || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniInterest || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.businessDevelopment || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.coveredCall || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.realEstate || 0)}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bitcoin || 0)}</div></td>
+                  <td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  );
 }
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
@@ -494,6 +638,11 @@ export default function App() {
   const [federalSettings, setFederalSettings] = useState(initialFederalSettings);
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
+  const [taxCalcInputs, setTaxCalcInputs] = useState(initialTaxCalculatorInputs);
+  const [taxCalcResult, setTaxCalcResult] = useState<TaxResult | null>(null);
+  const [taxCalcError, setTaxCalcError] = useState<string | null>(null);
+  const [taxCalcStateResult, setTaxCalcStateResult] = useState<TaxResult | null>(null);
+  const [taxCalcStateError, setTaxCalcStateError] = useState<string | null>(null);
   const [federalResult, setFederalResult] = useState<TaxResult | null>(null);
   const [stateResult, setStateResult] = useState<TaxResult | null>(null);
   const [federalError, setFederalError] = useState<string | null>(null);
@@ -594,6 +743,51 @@ export default function App() {
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
     [investments]
   );
+  const otherIncomeForSs =
+    taxCalcInputs.nonInvestmentOrdinaryIncome +
+    taxCalcInputs.otherOrdinaryInvestmentIncome +
+    taxCalcInputs.ordinaryDividends +
+    taxCalcInputs.qualifiedDividends +
+    taxCalcInputs.longTermCapitalGains;
+  const taxableSocialSecurity = calculateTaxableSocialSecurity(
+    taxCalcInputs.grossSocialSecurity,
+    otherIncomeForSs,
+    taxCalcInputs.muniBondInterest,
+    taxCalcInputs.filingStatus
+  );
+  const ordinaryTaxableBeforeDeductions = taxCalcInputs.nonInvestmentOrdinaryIncome + taxableSocialSecurity;
+  const preferredTaxableBeforeDeductions = taxCalcInputs.qualifiedDividends + taxCalcInputs.longTermCapitalGains;
+  const federalGrossTaxable = ordinaryTaxableBeforeDeductions + preferredTaxableBeforeDeductions;
+  const cappedSalt = Math.min(taxCalcInputs.propertyTax + taxCalcInputs.stateIncomeTax, taxCalcInputs.federalSaltCap);
+  const federalItemizedDeduction = taxCalcInputs.mortgageInterest + cappedSalt;
+  const federalDeductionUsed = Math.max(taxCalcInputs.federalStandardDeduction, federalItemizedDeduction);
+  const federalTaxableAfterDeductionsStandalone = Math.max(federalGrossTaxable - federalDeductionUsed, 0);
+  const ordinaryTaxableForApi = Math.max(federalTaxableAfterDeductionsStandalone - preferredTaxableBeforeDeductions, 0);
+  const preferredTaxableForApi = Math.max(0, Math.min(preferredTaxableBeforeDeductions, federalTaxableAfterDeductionsStandalone));
+  const magiStandalone =
+    taxCalcInputs.nonInvestmentOrdinaryIncome +
+    taxableSocialSecurity +
+    taxCalcInputs.otherOrdinaryInvestmentIncome +
+    taxCalcInputs.ordinaryDividends +
+    taxCalcInputs.qualifiedDividends +
+    taxCalcInputs.longTermCapitalGains;
+  const netInvestmentIncomeStandalone =
+    taxCalcInputs.otherOrdinaryInvestmentIncome +
+    taxCalcInputs.ordinaryDividends +
+    taxCalcInputs.qualifiedDividends +
+    taxCalcInputs.longTermCapitalGains;
+  const niitThresholdCalc = taxCalcInputs.filingStatus === "mfj" ? 250000 : 200000;
+  const magiAboveThreshold = Math.max(magiStandalone - niitThresholdCalc, 0);
+  const niitBaseCalc = Math.min(netInvestmentIncomeStandalone, magiAboveThreshold);
+  const caItemizedDeduction = taxCalcInputs.mortgageInterest + taxCalcInputs.propertyTax + taxCalcInputs.stateIncomeTax;
+  const caDeductionUsed = Math.max(taxCalcInputs.caStandardDeduction, caItemizedDeduction);
+  const caTaxableIncome = Math.max(magi - caDeductionUsed, 0);
+  const stateTaxableForCalc = caTaxableIncome;
+  const totalTaxCalc = (taxCalcResult?.tax || 0) + (taxCalcStateResult?.tax || 0);
+  const netAfterWithholdingsCalc =
+    totalTaxCalc - (taxCalcInputs.federalWithholding + taxCalcInputs.stateWithholding);
+  const afterTaxIncomeCalc =
+    magiStandalone - totalTaxCalc + taxCalcInputs.federalWithholding + taxCalcInputs.stateWithholding;
 
   useEffect(() => {
     let cancelled = false;
@@ -647,7 +841,59 @@ export default function App() {
     });
 
     return () => { cancelled = true; };
-  }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions]);
+    }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTaxCalcError(null);
+    postTaxCalculation({
+      calc: "FED_TAX_2025_COMBINED",
+      ordinaryTaxable: ordinaryTaxableForApi,
+      prefTaxable: preferredTaxableForApi,
+      filingStatus: taxCalcInputs.filingStatus,
+      magi: magiStandalone,
+      netInvestmentIncome: netInvestmentIncomeStandalone,
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setTaxCalcResult(result);
+          setTaxCalcError(null);
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setTaxCalcResult(null);
+          setTaxCalcError(error.message);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ordinaryTaxableForApi, preferredTaxableForApi, taxCalcInputs.filingStatus, magiStandalone, netInvestmentIncomeStandalone]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTaxCalcStateError(null);
+    postTaxCalculation({
+      calc: "STATE_TAX_2025_CA_MFJ",
+      taxableIncome: stateTaxableForCalc,
+    })
+      .then((result) => {
+        if (!cancelled) {
+          setTaxCalcStateResult(result);
+          setTaxCalcStateError(null);
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setTaxCalcStateResult(null);
+          setTaxCalcStateError(error.message);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stateTaxableForCalc]);
 
   useEffect(() => {
     if (!hasLoadedStorage.current) return;
@@ -671,7 +917,18 @@ export default function App() {
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
-  const netAfterWithholding = totalTax - plannerSettings.federalWithholding - plannerSettings.stateWithholding;
+
+  const updateTaxCalculatorNumber = (field: Exclude<keyof TaxCalculatorInputs, "filingStatus">, value: string | number) => {
+    const numeric = toNumber(value);
+    setTaxCalcInputs((current) => ({ ...current, [field]: numeric }));
+  };
+  const handleWithholdingChange = (field: "federalWithholding" | "stateWithholding", value: string | number) => {
+    updateTaxCalculatorNumber(field, value);
+    setPlannerSettings((current) => ({ ...current, [field]: toNumber(value) }));
+  };
+  const updateTaxCalculatorStatus = (status: FilingStatus) => {
+    setTaxCalcInputs((current) => ({ ...current, filingStatus: status }));
+  };
 
   function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = [], booleanFields: Array<keyof T> = []) {
     return (id: number, field: keyof T, value: string | boolean) => {
@@ -707,7 +964,173 @@ export default function App() {
 
         {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label><label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} /><MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
         {activeTab === "state" && <Section title="State Tax" subtitle="California worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">Current backend support is still modeled for the California MFJ route.</div><div className="form-grid form-grid--compact-wide"><label><span>Extra California income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>CA standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label="CA gross" value={formatCurrency(stateGross)} /><MetricCard label="CA deduction used" value={formatCurrency(stateDeduction)} /><MetricCard label="CA taxable after deductions" value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{stateResult && <div className="api-grid"><MetricCard label="California tax" value={formatCurrencyDetailed(stateResult.tax)} tone="accent" /></div>}</Section>}
-        {activeTab === "calculator" && <Section title="Tax Calculator" subtitle="Always-live scenario summary based on the workbook investment grid and the same live tax APIs used by the spreadsheet."><div className="form-grid form-grid--compact"><label><span>Federal withholding</span><input type="number" value={plannerSettings.federalWithholding} onChange={(event) => setPlannerSettings((current) => ({ ...current, federalWithholding: toNumber(event.target.value) }))} /></label><label><span>State withholding</span><input type="number" value={plannerSettings.stateWithholding} onChange={(event) => setPlannerSettings((current) => ({ ...current, stateWithholding: toNumber(event.target.value) }))} /></label></div><div className="api-grid"><MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} /><MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} /><MetricCard label="Total tax" value={formatCurrencyDetailed(totalTax)} tone="accent" /><MetricCard label="After-tax income" value={formatCurrencyDetailed(afterTaxIncome)} /><MetricCard label="Net owed / refund" value={formatCurrencyDetailed(netAfterWithholding)} tone={netAfterWithholding > 0 ? "warning" : "accent"} /><MetricCard label="Muni interest" value={formatCurrencyDetailed(flows.muniIncome)} /><MetricCard label="Cash sleeve" value={formatCurrencyDetailed(flows.cash)} /><MetricCard label="Equity sleeve" value={formatCurrencyDetailed(flows.stocks + flows.preferredStock + flows.coveredCall + flows.bitcoin)} /></div></Section>}
+        {activeTab === "calculator" && (
+          <Section title="Tax Calculator" subtitle="Standalone inputs that mirror the spreadsheet layout and call the shared federal + CA Lambdas.">
+            <div className="calculator-section-grid">
+              <div className="calculator-section">
+                <h3>Setup</h3>
+                <div className="form-grid form-grid--compact">
+                  <label>
+                    <span>Filing status</span>
+                    <select value={taxCalcInputs.filingStatus} onChange={(event) => updateTaxCalculatorStatus(normalizeFilingStatus(event.target.value))}>
+                      <option value="mfj">mfj</option>
+                      <option value="single">single</option>
+                    </select>
+                    <small className="field-note">Use `mfj` for the combined federal backend route.</small>
+                  </label>
+                  <label>
+                    <span>Federal standard deduction</span>
+                    <input type="number" value={taxCalcInputs.federalStandardDeduction} onChange={(event) => updateTaxCalculatorNumber("federalStandardDeduction", event.target.value)} />
+                    <small className="field-note">Edit if your standard deduction changes.</small>
+                  </label>
+                  <label>
+                    <span>Federal SALT cap</span>
+                    <input type="number" value={taxCalcInputs.federalSaltCap} onChange={(event) => updateTaxCalculatorNumber("federalSaltCap", event.target.value)} />
+                    <small className="field-note">Current value used in your other tabs.</small>
+                  </label>
+                  <label>
+                    <span>CA standard deduction</span>
+                    <input type="number" value={taxCalcInputs.caStandardDeduction} onChange={(event) => updateTaxCalculatorNumber("caStandardDeduction", event.target.value)} />
+                    <small className="field-note">Edit if needed.</small>
+                  </label>
+                </div>
+              </div>
+              <div className="calculator-section">
+                <h3>Income inputs</h3>
+                <div className="form-grid">
+                  <label>
+                    <span>Non-investment ordinary income</span>
+                    <input type="number" value={taxCalcInputs.nonInvestmentOrdinaryIncome} onChange={(event) => updateTaxCalculatorNumber("nonInvestmentOrdinaryIncome", event.target.value)} />
+                    <small className="field-note">Wages, pension, RMDs, etc.</small>
+                  </label>
+                  <label>
+                    <span>Other ordinary-taxable investment income</span>
+                    <input type="number" value={taxCalcInputs.otherOrdinaryInvestmentIncome} onChange={(event) => updateTaxCalculatorNumber("otherOrdinaryInvestmentIncome", event.target.value)} />
+                    <small className="field-note">Interest, non-qualified distributions, short-term gains.</small>
+                  </label>
+                  <label>
+                    <span>Ordinary dividends</span>
+                    <input type="number" value={taxCalcInputs.ordinaryDividends} onChange={(event) => updateTaxCalculatorNumber("ordinaryDividends", event.target.value)} />
+                    <small className="field-note">Non-qualified dividends only.</small>
+                  </label>
+                  <label>
+                    <span>Qualified dividends</span>
+                    <input type="number" value={taxCalcInputs.qualifiedDividends} onChange={(event) => updateTaxCalculatorNumber("qualifiedDividends", event.target.value)} />
+                    <small className="field-note">Preferred-rate dividends.</small>
+                  </label>
+                  <label>
+                    <span>Long-term capital gains</span>
+                    <input type="number" value={taxCalcInputs.longTermCapitalGains} onChange={(event) => updateTaxCalculatorNumber("longTermCapitalGains", event.target.value)} />
+                    <small className="field-note">Preferred-rate capital gains.</small>
+                  </label>
+                  <label>
+                    <span>Gross Social Security benefits</span>
+                    <input type="number" value={taxCalcInputs.grossSocialSecurity} onChange={(event) => updateTaxCalculatorNumber("grossSocialSecurity", event.target.value)} />
+                    <small className="field-note">Enter gross annual SS benefits.</small>
+                  </label>
+                  <label>
+                    <span>Muni bond interest</span>
+                    <input type="number" value={taxCalcInputs.muniBondInterest} onChange={(event) => updateTaxCalculatorNumber("muniBondInterest", event.target.value)} />
+                    <small className="field-note">Excluded from federal income but affects the SS test.</small>
+                  </label>
+                </div>
+              </div>
+              <div className="calculator-section">
+                <h3>Deduction inputs</h3>
+                <div className="form-grid">
+                  <label>
+                    <span>Mortgage interest</span>
+                    <input type="number" value={taxCalcInputs.mortgageInterest} onChange={(event) => updateTaxCalculatorNumber("mortgageInterest", event.target.value)} />
+                    <small className="field-note">Federal and CA itemized deduction input.</small>
+                  </label>
+                  <label>
+                    <span>Property tax</span>
+                    <input type="number" value={taxCalcInputs.propertyTax} onChange={(event) => updateTaxCalculatorNumber("propertyTax", event.target.value)} />
+                    <small className="field-note">Included in SALT.</small>
+                  </label>
+                  <label>
+                    <span>State income tax</span>
+                    <input type="number" value={taxCalcInputs.stateIncomeTax} onChange={(event) => updateTaxCalculatorNumber("stateIncomeTax", event.target.value)} />
+                    <small className="field-note">Included in SALT.</small>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="calculator-section-grid">
+              <div className="calculator-section">
+                <h3>Federal derived</h3>
+                <div className="derived-row"><span>Taxable Social Security</span><strong>{formatCurrency(taxableSocialSecurity)}</strong></div>
+                <div className="derived-row"><span>Federal preferred taxable before deductions</span><strong>{formatCurrency(preferredTaxableBeforeDeductions)}</strong></div>
+                <div className="derived-row"><span>Federal ordinary taxable before deductions</span><strong>{formatCurrency(ordinaryTaxableBeforeDeductions)}</strong></div>
+                <div className="derived-row"><span>Federal gross taxable income</span><strong>{formatCurrency(federalGrossTaxable)}</strong></div>
+                <div className="derived-row"><span>Federal itemized deduction</span><strong>{formatCurrency(federalItemizedDeduction)}</strong></div>
+                <div className="derived-row"><span>Federal deduction used</span><strong>{formatCurrency(federalDeductionUsed)}</strong></div>
+                <div className="derived-row"><span>Federal taxable after deductions</span><strong>{formatCurrency(federalTaxableAfterDeductionsStandalone)}</strong></div>
+                <div className="derived-row"><span>Ordinary taxable passed to API</span><strong>{formatCurrency(ordinaryTaxableForApi)}</strong></div>
+                <div className="derived-row"><span>Preferred taxable passed to API</span><strong>{formatCurrency(preferredTaxableForApi)}</strong></div>
+              </div>
+              <div className="calculator-section">
+                <h3>NIIT derived</h3>
+                <div className="derived-row"><span>MAGI</span><strong>{formatCurrency(magiStandalone)}</strong></div>
+                <div className="derived-row"><span>NIIT threshold ({taxCalcInputs.filingStatus})</span><strong>{formatCurrency(niitThresholdCalc)}</strong></div>
+                <div className="derived-row"><span>MAGI above threshold</span><strong>{formatCurrency(magiAboveThreshold)}</strong></div>
+                <div className="derived-row"><span>Net investment income</span><strong>{formatCurrency(netInvestmentIncomeStandalone)}</strong></div>
+                <div className="derived-row"><span>NIIT base</span><strong>{formatCurrency(niitBaseCalc)}</strong></div>
+                <div className="derived-row"><span>Estimated NIIT</span><strong>{formatCurrency(taxCalcResult?.niit ?? niitBaseCalc * 0.038)}</strong></div>
+              </div>
+              <div className="calculator-section">
+                <h3>CA derived</h3>
+                <div className="derived-row"><span>CA itemized deduction</span><strong>{formatCurrency(caItemizedDeduction)}</strong></div>
+                <div className="derived-row"><span>CA deduction used</span><strong>{formatCurrency(caDeductionUsed)}</strong></div>
+                <div className="derived-row"><span>CA taxable income</span><strong>{formatCurrency(caTaxableIncome)}</strong></div>
+                <div className="derived-row"><span>CA state tax</span><strong>{formatCurrencyDetailed(taxCalcStateResult?.tax || 0)}</strong></div>
+              </div>
+            </div>
+            <div className="calculator-section-grid">
+              <div className="calculator-section">
+                <h3>Totals</h3>
+                <div className="form-grid">
+                  <label>
+                    <span>Federal withholding</span>
+                    <input type="number" value={taxCalcInputs.federalWithholding} onChange={(event) => handleWithholdingChange("federalWithholding", event.target.value)} />
+                    <small className="field-note">Optional input.</small>
+                  </label>
+                  <label>
+                    <span>State withholding</span>
+                    <input type="number" value={taxCalcInputs.stateWithholding} onChange={(event) => handleWithholdingChange("stateWithholding", event.target.value)} />
+                    <small className="field-note">Optional input.</small>
+                  </label>
+                </div>
+                <div className="derived-row"><span>Combined federal + state tax</span><strong>{formatCurrencyDetailed(totalTaxCalc)}</strong></div>
+                <div className="derived-row"><span>Monthly tax impact</span><strong>{formatCurrencyDetailed(totalTaxCalc / 12)}</strong></div>
+                <div className="derived-row"><span>Net owed / (refund)</span><strong>{formatCurrency(totalTaxCalc - (taxCalcInputs.federalWithholding + taxCalcInputs.stateWithholding))}</strong></div>
+              </div>
+              <div className="calculator-section">
+                <h3>Audit</h3>
+                <div className="derived-row"><span>Backend formula used</span><strong>FED_TAX_2025_COMBINED</strong></div>
+                <div className="derived-row"><span>CA formula used</span><strong>STATE_TAX_2025_CA_MFJ</strong></div>
+                <div className="derived-row"><span>Notes</span><strong>Combined federal route currently supports `mfj`.</strong></div>
+              </div>
+            </div>
+            {taxCalcError && <div className="status-card status-card--error">{taxCalcError}</div>}
+            {taxCalcStateError && <div className="status-card status-card--error">{taxCalcStateError}</div>}
+            <div className="metric-grid calculator-results__grid">
+              <MetricCard label="Federal tax (calc)" value={formatCurrencyDetailed(taxCalcResult?.tax || 0)} tone="accent" />
+              <MetricCard label="State tax (calc)" value={formatCurrencyDetailed(taxCalcStateResult?.tax || 0)} />
+              <MetricCard label="Federal NIIT" value={formatCurrencyDetailed(taxCalcResult?.niit || 0)} />
+              <MetricCard label="Preferred tax" value={formatCurrencyDetailed(taxCalcResult?.prefTax || 0)} />
+              <MetricCard label="Ordinary tax" value={formatCurrencyDetailed(taxCalcResult?.ordinaryTax || 0)} />
+            </div>
+            <div className="metric-grid calculator-summary-grid">
+              <MetricCard label="Total tax" value={formatCurrencyDetailed(totalTaxCalc)} tone="accent" />
+              <MetricCard label="After-tax income" value={formatCurrencyDetailed(afterTaxIncomeCalc)} tone="warning" />
+              <MetricCard label="Net owed / refund" value={formatCurrencyDetailed(netAfterWithholdingsCalc)} tone={netAfterWithholdingsCalc > 0 ? "warning" : "accent"} />
+              <MetricCard label="MAGI used by calc" value={formatCurrency(magiStandalone)} />
+              <MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncomeStandalone)} />
+              <MetricCard label="CA taxable" value={formatCurrency(caTaxableIncome)} />
+            </div>
+          </Section>
+        )}
       </main>
     </div>
   );

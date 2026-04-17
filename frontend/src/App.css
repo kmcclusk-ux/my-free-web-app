@@ -57,3 +57,17 @@
 .sheet-table--workbook { min-width: 3600px; }
 .sheet-table--workbook th, .sheet-table--workbook td { white-space: nowrap; vertical-align: middle; }
 .sheet-table--workbook select, .sheet-table--workbook input { min-width: 92px; }
+.sheet-table--workbook tr.investment-row--deferred td { background: rgba(93, 175, 111, 0.28); }
+.sheet-table--workbook tr.investment-row--partial td { background: rgba(212, 86, 86, 0.26); }
+.sheet-table--workbook tr.investment-row--deferred td .readonly-cell { background: rgba(226, 245, 230, 0.94); }
+.sheet-table--workbook tr.investment-row--partial td .readonly-cell { background: rgba(255, 231, 231, 0.95); }
+
+.calculator-section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.calculator-section { padding: 18px; border-radius: 20px; border: 1px solid rgba(23,49,58,.12); background: rgba(255,255,255,.9); box-shadow: 0 24px 60px rgba(23,49,58,.08); }
+.calculator-section h3 { margin: 0 0 12px; font-size: .9rem; letter-spacing: .2em; text-transform: uppercase; color: #1d3b42; }
+.derived-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid rgba(18,41,54,.08); font-size: .85rem; color: #1a3b41; }
+.derived-row:first-of-type { border-top: none; padding-top: 0; }
+.derived-row strong { font-size: .95rem; color: #142b32; }
+.field-note { display: block; margin-top: 6px; font-size: .72rem; color: #61767a; }
+.calculator-results__grid { margin-bottom: 10px; }
+.calculator-summary-grid { margin-bottom: 0; }
