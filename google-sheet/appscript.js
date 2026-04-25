@@ -597,10 +597,19 @@ function sheetToRowObjects_(sheet) {
   if (!values || values.length < 2) return [];
 
   var headers = values[0].map(normalizeExportHeader_);
+  var descIndex = headers.indexOf('desc');
+  if (descIndex < 0) {
+    descIndex = headers.indexOf('description');
+  }
   var rows = [];
 
   for (var r = 1; r < values.length; r++) {
     var row = values[r];
+    if (descIndex >= 0) {
+      var descValue = String(row[descIndex] || '').trim().toUpperCase();
+      if (descValue === 'END') break;
+    }
+
     var hasData = row.some(function(cell) {
       return String(cell || '').trim() !== '';
     });
@@ -624,20 +633,28 @@ function sheetToRowObjectsFromLine8UntilEndDescription_(sheet) {
   var values = sheet.getDataRange().getDisplayValues();
   if (!values || values.length < 8) return [];
 
-  var headerRowIndex = 6; // line 7
+  var primaryHeaderRowIndex = 4; // line 5 (canonical headers)
+  var secondaryHeaderRowIndex = 6; // line 7 (short aliases)
   var dataStartIndex = 7; // line 8
-  var headers = values[headerRowIndex].map(normalizeExportHeader_);
-  var descriptionIndex = headers.indexOf('description');
+  var primaryHeaders = values[primaryHeaderRowIndex].map(normalizeExportHeader_);
+  var secondaryHeaders = values[secondaryHeaderRowIndex].map(normalizeExportHeader_);
+  var primaryHasDesc = primaryHeaders.indexOf('description') >= 0 || primaryHeaders.indexOf('desc') >= 0;
+  var headers = primaryHasDesc ? primaryHeaders : secondaryHeaders;
+  var endSentinelIndex = headers.indexOf('description');
+  if (endSentinelIndex < 0) {
+    endSentinelIndex = headers.indexOf('desc');
+  }
+  if (endSentinelIndex < 0) {
+    endSentinelIndex = 0; // fallback to first column (typically A / desc)
+  }
   var rows = [];
 
   for (var r = dataStartIndex; r < values.length; r++) {
     var row = values[r];
 
-    if (descriptionIndex >= 0) {
-      var descriptionValue = String(row[descriptionIndex] || '').trim().toUpperCase();
-      if (descriptionValue === 'END') {
-        break;
-      }
+    var sentinelValue = String(row[endSentinelIndex] || '').trim().toUpperCase();
+    if (sentinelValue === 'END') {
+      break;
     }
 
     var hasData = row.some(function(cell) {
@@ -651,6 +668,14 @@ function sheetToRowObjectsFromLine8UntilEndDescription_(sheet) {
       var key = headers[c] || ('col_' + (c + 1));
       record[key] = row[c];
     }
+
+    // Normalize older/short column aliases into canonical keys expected by downstream apps.
+    if (!record.total_inv && record.inv !== undefined) record.total_inv = record.inv;
+    if (!record.yr_inc && record.yr !== undefined) record.yr_inc = record.yr;
+    if (!record.symbol && record.symb !== undefined) record.symbol = record.symb;
+    if (!record.new_symbol && record.n !== undefined) record.new_symbol = record.n;
+    if (!record.new_percent && record.new !== undefined) record.new_percent = record.new;
+
     rows.push(record);
   }
 
