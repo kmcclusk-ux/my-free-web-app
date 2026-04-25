@@ -202,6 +202,12 @@ function toNumber(value: number | string | boolean | null | undefined) {
 }
 function normalizeBoolean(value: unknown) { if (typeof value === "boolean") return value; if (typeof value === "number") return value !== 0; const text = String(value || "").trim().toLowerCase(); return text === "1" || text === "true" || text === "yes" || text === "y"; }
 function normalizeYesNo(value: unknown) { return normalizeBoolean(value) ? "yes" : "no"; }
+function normalizeLookupKey(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
 function normalizeFilingStatus(value: unknown): FilingStatus {
   return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single";
 }
@@ -606,9 +612,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, on
   const getRowClassName = (derived?: DerivedInvestmentRow) => {
     const taxStatus = String(derived?.taxStatus || "").toLowerCase();
     const taxTreatment = String(derived?.taxTreatment || "").toLowerCase();
+    const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
+    const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
+    const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
 
-    if (taxStatus.includes("deferred")) return "investment-row investment-row--deferred";
-    if (taxStatus.includes("partially taxable") || partiallyTaxableTreatments.has(taxTreatment)) {
+    if (!isTaxableAccount) {
+      return "investment-row investment-row--non-taxable";
+    }
+    if (isPartiallyTaxableStatus || partiallyTaxableTreatments.has(taxTreatment)) {
       return "investment-row investment-row--partial";
     }
 
@@ -717,7 +728,13 @@ export default function App() {
   const hasLoadedStorage = useRef(false);
 
   const tickerMap = useMemo(() => Object.fromEntries(tickers.map((row) => [row.symbol, row])), [tickers]);
-  const accountMap = useMemo(() => Object.fromEntries(accounts.map((row) => [row.account, row])), [accounts]);
+  const accountMap = useMemo(
+    () =>
+      Object.fromEntries(
+        accounts.map((row) => [normalizeLookupKey(row.account), row]).filter((entry) => entry[0] !== "")
+      ),
+    [accounts]
+  );
   const accountOptions = useMemo(() => ["", ...accounts.map((row) => row.account).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [accounts]);
   const symbolOptions = useMemo(() => ["", ...tickers.map((row) => row.symbol).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [tickers]);
 
@@ -730,12 +747,15 @@ export default function App() {
     const monthlyIncome = toNumber(row.yearlyIncome) / 12;
     const filteredIncome = row.includeIncome ? toNumber(row.yearlyIncome) : 0;
     const includedTotal = row.includeIncome ? toNumber(row.totalInvestment) : 0;
-    const account = accountMap[row.account];
-    const taxStatus = (account?.taxStatus || "taxable").toLowerCase();
+    const account = accountMap[normalizeLookupKey(row.account)];
+    const taxStatus = String(account?.taxStatus || "taxable").toLowerCase();
+    const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
+    const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
+    const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
     const taxTreatment = String(effectiveTicker?.taxTreatment || "income").toLowerCase();
     const investmentType = String(effectiveTicker?.category || "").toLowerCase();
     const extraData = toNumber(effectiveTicker?.extraData || 0);
-    const taxableMonthlyBase = taxStatus === "taxable" && row.includeIncome ? filteredIncome / 12 : 0;
+    const taxableMonthlyBase = isTaxableAccount && row.includeIncome ? filteredIncome / 12 : 0;
     return {
       ...row,
       monthlyIncome,
@@ -751,7 +771,7 @@ export default function App() {
       ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, false),
       preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, true),
       stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, extraData),
-      nonTaxableMonthly: taxStatus !== "taxable" && row.includeIncome ? monthlyIncome : 0,
+      nonTaxableMonthly: !isTaxableAccount && row.includeIncome ? monthlyIncome : 0,
       nonInvestmentIncome: ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0,
       cash: investmentType === "cash" ? includedTotal : 0,
       stocks: investmentType === "stock" ? includedTotal : 0,
