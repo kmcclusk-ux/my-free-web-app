@@ -510,11 +510,11 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
   };
   const idValue = workbookField(row, "id");
   const id = idValue ? Number(idValue) || base.id : base.id;
-  const totalInvestmentValue = workbookField(row, "total_inv", "total_investment", "totalinvestment", "total_inv_amount");
-  const yearlyIncomeValue = workbookField(row, "yr_inc", "yearly_income", "yearinc", "yearly_income_amount");
-  const includeIncomeValue = workbookField(row, "inc", "include_income", "income", "include_investment_income");
-  const overrideValue = workbookField(row, "override", "override_proposal");
-  const newPercentValue = workbookField(row, "new_percent", "new_pct", "newpercent");
+  const totalInvestmentValue = workbookField(row, "totalInvestment", "total_inv", "total_investment", "totalinvestment", "total_inv_amount");
+  const yearlyIncomeValue = workbookField(row, "yearlyIncome", "yr_inc", "yearly_income", "yearinc", "yearly_income_amount");
+  const includeIncomeValue = workbookField(row, "includeIncome", "inc", "include_income", "income", "include_investment_income");
+  const overrideValue = workbookField(row, "overrideProposal", "override", "override_proposal");
+  const newPercentValue = workbookField(row, "newPercent", "new_percent", "new_pct", "newpercent");
   return {
     id: Number(id) || index + 1,
     description: workbookField(row, "desc", "description") ?? base.description,
@@ -525,7 +525,7 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
     includeIncome: includeIncomeValue !== undefined ? normalizeBoolean(includeIncomeValue) : base.includeIncome,
     overrideProposal: overrideValue !== undefined ? normalizeBoolean(overrideValue) : base.overrideProposal,
     symbol: workbookField(row, "symbol", "current_symbol", "ticker") ?? base.symbol,
-    newSymbol: workbookField(row, "new_symbol", "proposed_symbol") ?? base.newSymbol,
+    newSymbol: workbookField(row, "newSymbol", "new_symbol", "proposed_symbol") ?? base.newSymbol,
     newPercent: newPercentValue !== undefined ? toNumber(newPercentValue) : base.newPercent,
   };
 }
@@ -589,7 +589,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}><input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} /></td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, onChange, onAdd, onRemove, onClear, onSelectAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
   const partiallyTaxableTreatments = new Set(["index-60-40", "ss-85-fed", "real estate"]);
   const topDescriptions = Object.entries(
@@ -620,6 +620,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, on
       <div className="actions-row">
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
         <button className="ghost-button" type="button" onClick={onSelectAllInc}>Select all Inc</button>
+        <button className="ghost-button" type="button" onClick={onClearAllInc}>Clear all Inc</button>
         <button className="ghost-button" type="button" onClick={onClear}>Remove all rows</button>
       </div>
       <div className="status-card status-card--note debug-panel">
@@ -1018,7 +1019,7 @@ export default function App() {
         </div>
         <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
 
-        {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} derivedRows={derivedRows} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} />}
+        {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} derivedRows={derivedRows} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment" }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status" }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} />}
