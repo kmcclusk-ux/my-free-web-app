@@ -1,0 +1,731 @@
+function clearDelta() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  sheet.getRange(4, 12).setValue(0); // row 4, col 12 -> sets to zero
+}
+
+const TAX_API_URL = "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
+
+function callTaxApi(payload) {
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  var resp = UrlFetchApp.fetch(TAX_API_URL, options);
+  var code = resp.getResponseCode();
+  var text = resp.getContentText();
+
+  if (code !== 200) {
+    throw new Error("HTTP " + code + ": " + text);
+  }
+
+  return JSON.parse(text);
+}
+
+/**
+ * Calculates a new amount based on the tax treatment.
+ *
+ * @param {number} amount - The input amount.
+ * @param {string} taxTreatment - The tax treatment type (e.g., "qualified", "nonqualified", "tax-free").
+ * @return {number} The adjusted amount after tax treatment.
+ *
+ * @customfunction
+ */
+function FED_TAX_ADJUST(amount, taxTreatment, extra, pref) {
+  Logger.log('Starting TAX_ADJUST test...');
+
+  switch (taxTreatment.toLowerCase()) {
+    case 'hold':
+      return 0;
+    case 'tax free':
+      return 0;
+    case 'state tax free':
+      if (pref) return 0;
+      return amount;
+    case 'fed tax free':
+      return 0;
+    case 'index-60-40':
+      if (pref) return amount * 0.60;
+      return amount * 0.40;
+    case 'income':
+      if (pref) return 0;
+      return amount;
+    case 'ss-85-fed':
+      if (pref) return 0;
+      return amount * 0.85;
+    case 'qualified-div':
+      if (!pref) return 0;
+      return amount;
+    case 'non-qualified-div':
+      if (pref) return 0;
+      return amount;
+    case 'short term gain':
+      if (pref) return 0;
+      return amount;
+    case 'long term gain':
+      if (!pref) return 0;
+      return amount;
+    case 'real estate':
+      if (pref) return 0;
+      return amount - extra;
+    default:
+      if (pref) return 0;
+      return amount;
+  }
+}
+
+/**
+ * Calculates CA state tax for an amount based on tax treatment.
+ *
+ * @param {number} amount        The item's pre-tax amount.
+ * @param {string} taxTreatment  Label describing the tax type.
+ * @param {number} extra         Base CA taxable income (Form 540 line 19) BEFORE this item.
+ * @return {number} Incremental CA-taxable amount attributable to this item.
+ *
+ * @customfunction
+ */
+function STATE_TAX_ADJUST(amount, taxTreatment, extra) {
+  Logger.log('Starting STATE_TAX_ADJUST...');
+
+  var amt = Number(amount);
+  var base = Number(extra) || 0;
+  if (!isFinite(amt) || amt <= 0) return 0;
+
+  var t = (taxTreatment || '').toString().toLowerCase().trim();
+  var stateTaxable = 0;
+
+  switch (t) {
+    case 'hold':
+      return 0;
+    case 'tax free':
+    case 'state tax free':
+      stateTaxable = 0;
+      break;
+    case 'fed tax free':
+      stateTaxable = amt;
+      break;
+    case 'index-60-40':
+    case 'income':
+    case 'qualified-div':
+    case 'non-qualified-div':
+    case 'short term gain':
+    case 'long term gain':
+      stateTaxable = amt;
+      break;
+    case 'ss-85-fed':
+      Logger.log('STATE_TAX_ADJUST: Social Security is CA tax free.');
+      stateTaxable = 0;
+      break;
+    case 'real estate':
+      stateTaxable = amt - base;
+      if (stateTaxable < 0) stateTaxable = 0;
+      break;
+    default:
+      stateTaxable = amt;
+      break;
+  }
+
+  if (stateTaxable <= 0) return 0;
+  return stateTaxable;
+}
+
+/**
+ * Backward-compatible alias used by older sheet formulas.
+ *
+ * @customfunction
+ */
+function FED_ADJUST(amount, taxTreatment, extra, pref) {
+  return FED_TAX_ADJUST(amount, taxTreatment, extra, pref);
+}
+
+/**
+ * Backward-compatible alias used by older sheet formulas.
+ *
+ * @customfunction
+ */
+function STATE_ADJUST(amount, taxTreatment, extra) {
+  return STATE_TAX_ADJUST(amount, taxTreatment, extra);
+}
+
+function CA_TAX_2025_MFJ(taxableIncome) {
+  taxableIncome = Number(taxableIncome);
+  if (!isFinite(taxableIncome) || taxableIncome <= 0) {
+    return 0;
+  }
+
+  const brackets = [
+    { max: 21512, rate: 0.010 },
+    { max: 50998, rate: 0.020 },
+    { max: 80490, rate: 0.040 },
+    { max: 111732, rate: 0.060 },
+    { max: 141212, rate: 0.080 },
+    { max: 721318, rate: 0.093 },
+    { max: 865574, rate: 0.103 },
+    { max: 1442628, rate: 0.113 },
+    { max: Number.POSITIVE_INFINITY, rate: 0.123 }
+  ];
+
+  let tax = 0;
+  let prevMax = 0;
+
+  for (let i = 0; i < brackets.length; i++) {
+    const b = brackets[i];
+    if (taxableIncome <= prevMax) break;
+
+    const incomeInBracket = Math.min(taxableIncome, b.max) - prevMax;
+    if (incomeInBracket > 0) {
+      tax += incomeInBracket * b.rate;
+    }
+
+    if (taxableIncome <= b.max) {
+      break;
+    }
+
+    prevMax = b.max;
+  }
+
+  if (taxableIncome > 1000000) {
+    tax += (taxableIncome - 1000000) * 0.01;
+  }
+
+  return tax;
+}
+
+function FED_TAX_2025_ORDINARY_API(taxableIncome, filingStatus) {
+  taxableIncome = Number(taxableIncome);
+  if (!isFinite(taxableIncome) || taxableIncome <= 0) return 0;
+
+  filingStatus = normalizeFilingStatus(filingStatus || 'single');
+
+  var json = callTaxApi({
+    calc: 'FED_TAX_2025_ORDINARY',
+    taxableIncome: taxableIncome,
+    filingStatus: filingStatus
+  });
+
+  return Number(json.tax || 0);
+}
+
+function FED_TAX_2025_MFJ_API(taxableIncome) {
+  return FED_TAX_2025_ORDINARY_API(taxableIncome, 'mfj');
+}
+
+function FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus) {
+  ordinaryTaxable = Number(ordinaryTaxable) || 0;
+  prefTaxable = Number(prefTaxable) || 0;
+  filingStatus = normalizeFilingStatus(filingStatus || 'single');
+
+  if (prefTaxable <= 0) return 0;
+
+  var json = callTaxApi({
+    calc: 'FED_PREF_TAX_2024',
+    ordinaryTaxable: ordinaryTaxable,
+    prefTaxable: prefTaxable,
+    filingStatus: filingStatus
+  });
+
+  return Number(json.tax || 0);
+}
+
+/**
+ * Unified federal tax wrapper.
+ * Sheet usage: =FED_TAX_API("FED_TAX_2025_COMBINED",150000,25000,"single",310000,50000)
+ *
+ * FED_TAX_2025_COMBINED currently supports filingStatus of mfj and single.
+ * Pass MAGI and net investment income so the backend can calculate NIIT as part
+ * of the total federal liability.
+ */
+function FED_TAX_API(calc, ordinaryTaxable, prefTaxable, filingStatus, magi, netInvestmentIncome) {
+  calc = String(calc || 'FED_TAX_2025_COMBINED').toUpperCase();
+  ordinaryTaxable = Number(ordinaryTaxable) || 0;
+  prefTaxable = Number(prefTaxable) || 0;
+  filingStatus = normalizeFilingStatus(filingStatus || 'mfj');
+  magi = Number(magi) || 0;
+  netInvestmentIncome = Number(netInvestmentIncome) || 0;
+
+  if (calc === 'FED_TAX_2025_MFJ') {
+    return FED_TAX_2025_MFJ_API(ordinaryTaxable);
+  }
+
+  if (calc === 'FED_TAX_2025_ORDINARY') {
+    return FED_TAX_2025_ORDINARY_API(ordinaryTaxable, filingStatus);
+  }
+
+  if (calc === 'FED_PREF_TAX_2024') {
+    return FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus);
+  }
+
+  if (calc === 'FED_TAX_2025_COMBINED') {
+    var json = callTaxApi({
+      calc: 'FED_TAX_2025_COMBINED',
+      ordinaryTaxable: ordinaryTaxable,
+      prefTaxable: prefTaxable,
+      filingStatus: filingStatus,
+      magi: magi,
+      netInvestmentIncome: netInvestmentIncome
+    });
+    return Number(json.tax || 0);
+  }
+
+  throw new Error('Unsupported calc: ' + calc);
+}
+
+function FED_PREF_TAX(ordinaryTaxable, prefTaxable, filingStatus) {
+  ordinaryTaxable = Number(ordinaryTaxable) || 0;
+  prefTaxable = Number(prefTaxable) || 0;
+  if (prefTaxable <= 0) return 0;
+
+  filingStatus = String(filingStatus || '').toLowerCase();
+
+  var brackets = {
+    single: { z0: 47025, z15: 518900 },
+    mfj: { z0: 94050, z15: 583750 },
+    mfs: { z0: 47025, z15: 291850 },
+    hoh: { z0: 63000, z15: 551350 }
+  };
+
+  var b = brackets[filingStatus] || brackets.single;
+  var TI = ordinaryTaxable + prefTaxable;
+  var QDCG = prefTaxable;
+  var taxableOrd = TI - QDCG;
+
+  var amount0 = Math.max(0, Math.min(QDCG, b.z0 - taxableOrd));
+  var baseFor15 = Math.max(taxableOrd, b.z0);
+  var amount15 = Math.max(0, Math.min(QDCG - amount0, b.z15 - baseFor15));
+  var amount20 = Math.max(0, QDCG - amount0 - amount15);
+
+  return amount15 * 0.15 + amount20 * 0.20;
+}
+
+function onEdit(e) {
+  const sheetName = 'investments';
+  const outputCellA1 = 'F4';
+  const prevCellA1 = 'J4';
+  const deltaCellA1 = 'K4';
+
+  const sheet = e.source.getSheetByName(sheetName);
+  if (!sheet) return;
+
+  const outputCell = sheet.getRange(outputCellA1);
+  const prevCell = sheet.getRange(prevCellA1);
+  const deltaCell = sheet.getRange(deltaCellA1);
+
+  const newOutput = outputCell.getValue();
+  const prevOutput = prevCell.getValue();
+
+  if (prevOutput !== '' && !isNaN(prevOutput) && !isNaN(newOutput)) {
+    const delta = newOutput - prevOutput;
+    deltaCell.setValue(delta);
+  }
+
+  prevCell.setValue(newOutput);
+}
+
+function copyValuesOnly() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const source = sheet.getRange('G4');
+  const target = sheet.getRange('L4');
+  target.setValue(source.getValue());
+}
+
+function callLambda() {
+  return callTaxApi({
+    calc: 'FED_TAX_2025_COMBINED',
+    ordinaryTaxable: 150000,
+    prefTaxable: 25000,
+    filingStatus: 'single',
+    magi: 310000,
+    netInvestmentIncome: 50000
+  });
+}
+
+function LAMBDA_MULTIPLY(value) {
+  if (value === '' || value === null) {
+    return 'Missing value';
+  }
+
+  try {
+    return FED_TAX_2025_MFJ_API(value);
+  } catch (err) {
+    return 'Exception: ' + err;
+  }
+}
+
+function STATE_TAX_2025_CA_MFJ_API(taxableIncome) {
+  taxableIncome = Number(taxableIncome);
+  if (!isFinite(taxableIncome) || taxableIncome <= 0) return 0;
+
+  var json = callTaxApi({
+    calc: 'STATE_TAX_2025_CA_MFJ',
+    taxableIncome: taxableIncome
+  });
+
+  return Number(json.tax || 0);
+}
+
+function normalizeFilingStatus(filingStatus) {
+  var fs = String(filingStatus || 'mfj').toLowerCase().trim();
+  if (fs === 'married filing jointly' || fs === 'joint' || fs === 'married joint') return 'mfj';
+  if (fs === 'married filing separately') return 'mfs';
+  if (fs === 'head of household') return 'hoh';
+  if (fs === 'single' || fs === 'individual') return 'single';
+  return fs;
+}
+
+function socialSecurityThresholds(filingStatus) {
+  var fs = normalizeFilingStatus(filingStatus);
+
+  if (fs === 'mfj') {
+    return { base1: 32000, base2: 44000, bandCap: 6000 };
+  }
+
+  if (fs === 'single' || fs === 'hoh') {
+    return { base1: 25000, base2: 34000, bandCap: 4500 };
+  }
+
+  // Conservative default for MFS. The actual IRS result can depend on living-apart status.
+  return { base1: 0, base2: 0, bandCap: 0 };
+}
+
+/**
+ * Estimates the taxable portion of Social Security using the standard provisional-income thresholds.
+ *
+ * Inputs:
+ *  - ssIncome: total Social Security benefits
+ *  - otherIncome: income included in provisional income other than SS and muni interest
+ *  - muniBondIncome: tax-exempt interest, including muni-bond income
+ *  - filingStatus: single, mfj, mfs, hoh
+ *
+ * @customfunction
+ */
+function TAXABLE_SS(ssIncome, otherIncome, muniBondIncome, filingStatus) {
+  var ss = Number(ssIncome) || 0;
+  var other = Number(otherIncome) || 0;
+  var muni = Number(muniBondIncome) || 0;
+  if (ss <= 0) return 0;
+
+  var thresholds = socialSecurityThresholds(filingStatus);
+  var provisionalIncome = other + muni + (0.5 * ss);
+
+  if (provisionalIncome <= thresholds.base1) {
+    return 0;
+  }
+
+  if (provisionalIncome <= thresholds.base2) {
+    return Math.min(0.5 * ss, 0.5 * (provisionalIncome - thresholds.base1));
+  }
+
+  var aboveSecondBand = 0.85 * (provisionalIncome - thresholds.base2);
+  var carryFromFirstBand = Math.min(thresholds.bandCap, 0.5 * ss);
+  return Math.min(0.85 * ss, aboveSecondBand + carryFromFirstBand);
+}
+
+/**
+ * Returns MAGI and net investment income inputs for the NIIT-capable federal tax API.
+ *
+ * Output spills across 3 cells:
+ *  1. MAGI for NIIT purposes
+ *  2. Net investment income
+ *  3. Taxable Social Security used in the MAGI estimate
+ *
+ * Example:
+ * =NIIT_INPUTS_FROM_BUCKETS(2000,120000,40000,3000,22000,15000,"mfj")
+ *
+ * @customfunction
+ */
+function NIIT_INPUTS_FROM_BUCKETS(muniBondIncome, regularIncome, ssIncome, ordinaryDividends, qualifiedDividends, longTermCapitalGains, filingStatus) {
+  var muni = Number(muniBondIncome) || 0;
+  var regular = Number(regularIncome) || 0;
+  var ss = Number(ssIncome) || 0;
+  var ordinaryDiv = Number(ordinaryDividends) || 0;
+  var qualifiedDiv = Number(qualifiedDividends) || 0;
+  var ltcg = Number(longTermCapitalGains) || 0;
+
+  var otherIncomeForSs = regular + ordinaryDiv + qualifiedDiv + ltcg;
+  var taxableSs = TAXABLE_SS(ss, otherIncomeForSs, muni, filingStatus);
+
+  var magi = regular + ordinaryDiv + qualifiedDiv + ltcg + taxableSs;
+  var netInvestmentIncome = ordinaryDiv + qualifiedDiv + ltcg;
+
+  return [[magi, netInvestmentIncome, taxableSs]];
+}
+
+/**
+ * Convenience wrapper that computes MAGI + NII from your raw buckets and calls the combined federal API.
+ *
+ * Example:
+ * =FED_TAX_FROM_BUCKETS(150000,25000,2000,120000,40000,3000,22000,15000,"mfj")
+ *
+ * Arguments:
+ *  - ordinaryTaxable
+ *  - prefTaxable
+ *  - muniBondIncome
+ *  - regularIncome
+ *  - ssIncome
+ *  - ordinaryDividends
+ *  - qualifiedDividends
+ *  - longTermCapitalGains
+ *  - filingStatus
+ *
+ * @customfunction
+ */
+function FED_TAX_FROM_BUCKETS(ordinaryTaxable, prefTaxable, muniBondIncome, regularIncome, ssIncome, ordinaryDividends, qualifiedDividends, longTermCapitalGains, filingStatus) {
+  var inputs = NIIT_INPUTS_FROM_BUCKETS(
+    muniBondIncome,
+    regularIncome,
+    ssIncome,
+    ordinaryDividends,
+    qualifiedDividends,
+    longTermCapitalGains,
+    filingStatus
+  );
+
+  var magi = Number(inputs[0][0]) || 0;
+  var netInvestmentIncome = Number(inputs[0][1]) || 0;
+
+  return FED_TAX_API(
+    'FED_TAX_2025_COMBINED',
+    ordinaryTaxable,
+    prefTaxable,
+    filingStatus,
+    magi,
+    netInvestmentIncome
+  );
+}
+
+/**
+ * Convenience wrapper to return Federal + CA + Total + NIIT in one spill range.
+ *
+ * Returns 1x4 cells in this order:
+ *  1) Federal tax
+ *  2) CA state tax
+ *  3) Combined tax
+ *  4) NIIT component from federal response (if returned)
+ *
+ * Example:
+ * =FED_STATE_TAX_API("mfj", 150000, 25000, 200000, 50000, 120000)
+ *
+ * @customfunction
+ */
+function FED_STATE_TAX_API(filingStatus, ordinaryTaxable, prefTaxable, magi, netInvestmentIncome, caTaxableIncome) {
+  filingStatus = normalizeFilingStatus(filingStatus || 'mfj');
+  ordinaryTaxable = Number(ordinaryTaxable) || 0;
+  prefTaxable = Number(prefTaxable) || 0;
+  magi = Number(magi) || 0;
+  netInvestmentIncome = Number(netInvestmentIncome) || 0;
+  caTaxableIncome = Number(caTaxableIncome) || 0;
+
+  var federal = callTaxApi({
+    calc: 'FED_TAX_2025_COMBINED',
+    ordinaryTaxable: ordinaryTaxable,
+    prefTaxable: prefTaxable,
+    filingStatus: filingStatus,
+    magi: magi,
+    netInvestmentIncome: netInvestmentIncome
+  });
+
+  var state = callTaxApi({
+    calc: 'STATE_TAX_2025_CA_MFJ',
+    taxableIncome: caTaxableIncome
+  });
+
+  var federalTax = Number(federal.tax || 0);
+  var stateTax = Number(state.tax || 0);
+  var niit = Number(federal.niit || 0);
+  return [[federalTax, stateTax, federalTax + stateTax, niit]];
+}
+
+function callWorkbookApi(payload) {
+  return callTaxApi(payload);
+}
+
+function WORKBOOK_GET(workspaceId) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_GET",
+    workspaceId: String(workspaceId || "default")
+  });
+}
+
+function WORKBOOK_GET_TAB(workspaceId, tabName) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_GET_TAB",
+    workspaceId: String(workspaceId || "default"),
+    tabName: String(tabName || "")
+  });
+}
+
+function WORKBOOK_SAVE_TAB(workspaceId, tabName, data) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_SAVE_TAB",
+    workspaceId: String(workspaceId || "default"),
+    tabName: String(tabName || ""),
+    data: data
+  });
+}
+
+function WORKBOOK_SAVE(workspaceId, tabs, settings) {
+  return callWorkbookApi({
+    calc: "WORKBOOK_SAVE",
+    workspaceId: String(workspaceId || "default"),
+    tabs: tabs || {},
+    settings: settings || {}
+  });
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Workbook Sync')
+    .addItem('Export To Data Store', 'EXPORT_WORKBOOK_TO_DATASTORE')
+    .addToUi();
+}
+
+function normalizeExportHeader_(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s-]/g, '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+function sheetToRowObjects_(sheet) {
+  if (!sheet) return [];
+
+  var values = sheet.getDataRange().getDisplayValues();
+  if (!values || values.length < 2) return [];
+
+  var headers = values[0].map(normalizeExportHeader_);
+  var rows = [];
+
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    var hasData = row.some(function(cell) {
+      return String(cell || '').trim() !== '';
+    });
+
+    if (!hasData) continue;
+
+    var record = {};
+    for (var c = 0; c < headers.length; c++) {
+      var key = headers[c] || ('col_' + (c + 1));
+      record[key] = row[c];
+    }
+    rows.push(record);
+  }
+
+  return rows;
+}
+
+function sheetToRowObjectsFromLine8UntilEndDescription_(sheet) {
+  if (!sheet) return [];
+
+  var values = sheet.getDataRange().getDisplayValues();
+  if (!values || values.length < 8) return [];
+
+  var headerRowIndex = 6; // line 7
+  var dataStartIndex = 7; // line 8
+  var headers = values[headerRowIndex].map(normalizeExportHeader_);
+  var descriptionIndex = headers.indexOf('description');
+  var rows = [];
+
+  for (var r = dataStartIndex; r < values.length; r++) {
+    var row = values[r];
+
+    if (descriptionIndex >= 0) {
+      var descriptionValue = String(row[descriptionIndex] || '').trim().toUpperCase();
+      if (descriptionValue === 'END') {
+        break;
+      }
+    }
+
+    var hasData = row.some(function(cell) {
+      return String(cell || '').trim() !== '';
+    });
+
+    if (!hasData) continue;
+
+    var record = {};
+    for (var c = 0; c < headers.length; c++) {
+      var key = headers[c] || ('col_' + (c + 1));
+      record[key] = row[c];
+    }
+    rows.push(record);
+  }
+
+  return rows;
+}
+
+function sheetToMatrix_(sheet) {
+  if (!sheet) return [];
+
+  var values = sheet.getDataRange().getDisplayValues();
+  return values.filter(function(row) {
+    return row.some(function(cell) {
+      return String(cell || '').trim() !== '';
+    });
+  });
+}
+
+function getSheetByNames_(spreadsheet, names) {
+  for (var i = 0; i < names.length; i++) {
+    var sheet = spreadsheet.getSheetByName(names[i]);
+    if (sheet) return sheet;
+  }
+  return null;
+}
+
+function collectWorkbookExportPayload_() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  var investmentsSheet = getSheetByNames_(spreadsheet, ['investments', 'Investments']);
+  var tickersSheet = getSheetByNames_(spreadsheet, ['tickers', 'Tickers']);
+  var taxTreatmentSheet = getSheetByNames_(spreadsheet, ['tax treatment', 'Tax Treatment']);
+  var accountsSheet = getSheetByNames_(spreadsheet, ['accounts', 'Accounts']);
+  var accountTaxTypeSheet = getSheetByNames_(spreadsheet, ['account tax type', 'Account Tax Type']);
+  var investmentTypeSheet = getSheetByNames_(spreadsheet, ['investment type', 'Investment Type']);
+  var federalSheet = getSheetByNames_(spreadsheet, ['Federal Tax', 'federal tax']);
+  var stateSheet = getSheetByNames_(spreadsheet, ['State Tax', 'state tax']);
+  var plannerSheet = getSheetByNames_(spreadsheet, ['tax-calculator', 'Tax Calculator', 'tax calculator']);
+
+  return {
+    tabs: {
+      investments: sheetToRowObjectsFromLine8UntilEndDescription_(investmentsSheet),
+      tickers: sheetToRowObjects_(tickersSheet),
+      taxTreatment: sheetToRowObjects_(taxTreatmentSheet),
+      accounts: sheetToRowObjects_(accountsSheet),
+      accountTaxType: sheetToRowObjects_(accountTaxTypeSheet),
+      investmentType: sheetToRowObjects_(investmentTypeSheet)
+    },
+    settings: {
+      federal: {
+        sheetName: federalSheet ? federalSheet.getName() : null,
+        rows: sheetToMatrix_(federalSheet)
+      },
+      state: {
+        sheetName: stateSheet ? stateSheet.getName() : null,
+        rows: sheetToMatrix_(stateSheet)
+      },
+      planner: {
+        sheetName: plannerSheet ? plannerSheet.getName() : null,
+        rows: sheetToMatrix_(plannerSheet)
+      }
+    }
+  };
+}
+
+function EXPORT_WORKBOOK_TO_DATASTORE() {
+  var workspaceId = 'default';
+  var payload = collectWorkbookExportPayload_();
+  var result = WORKBOOK_SAVE(workspaceId, payload.tabs, payload.settings);
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    'Workbook exported to data store for workspace "' + workspaceId + '".',
+    'Workbook Sync',
+    8
+  );
+
+  return result;
+}
+
