@@ -595,7 +595,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}><input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} /></td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
   const topDescriptions = Object.entries(
     rows.reduce<Record<string, number>>((acc, row) => {
@@ -608,20 +608,21 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, on
     .slice(0, 8);
   const duplicateDescriptionCount = topDescriptions.filter((entry) => entry[1] > 1).length;
 
-  const getRowClassName = (derived?: DerivedInvestmentRow) => {
-    const taxStatus = String(derived?.taxStatus || "").toLowerCase();
-    const accountName = normalizeLookupKey(derived?.account || "");
-    const isDeferredStatus = taxStatus.includes("deferred");
-    const isDeferredAccountName = accountName.includes("deferred") || accountName.includes("deffered");
-    const isExplicitNonTaxableStatus =
+  const getRowClassName = (row: InvestmentRow) => {
+    const accountKey = normalizeLookupKey(row.account);
+    const taxStatus = String(accountTaxStatusByName[accountKey] || "").toLowerCase();
+    const isNonTaxableStatus =
+      taxStatus.includes("deferred") ||
       taxStatus.includes("tax-free") ||
       taxStatus.includes("tax free") ||
       taxStatus.includes("tax_deduction") ||
-      taxStatus.includes("tax-deduction") ||
-      taxStatus.includes("deduction");
-    const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("partially taxable");
+      taxStatus.includes("tax-deduction");
+    const isTaxableStatus =
+      taxStatus === "taxable" ||
+      taxStatus.includes("taxable") ||
+      taxStatus.includes("partially taxable");
 
-    if (isDeferredStatus || isDeferredAccountName || isExplicitNonTaxableStatus) {
+    if (isNonTaxableStatus) {
       return "investment-row investment-row--non-taxable";
     }
     if (isTaxableStatus) {
@@ -662,7 +663,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, on
             {rows.map((row) => {
               const derived = derivedMap[row.id];
               return (
-                <tr key={row.id} className={getRowClassName(derived)}>
+                <tr key={row.id} className={getRowClassName(row)}>
                   <td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td>
                   <td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
                   <td><input value={row.category} onChange={(event) => onChange(row.id, "category", event.target.value)} /></td>
@@ -737,6 +738,15 @@ export default function App() {
     () =>
       Object.fromEntries(
         accounts.map((row) => [normalizeLookupKey(row.account), row]).filter((entry) => entry[0] !== "")
+      ),
+    [accounts]
+  );
+  const accountTaxStatusByName = useMemo(
+    () =>
+      Object.fromEntries(
+        accounts
+          .map((row) => [normalizeLookupKey(row.account), String(row.taxStatus || "")] as const)
+          .filter((entry) => entry[0] !== "")
       ),
     [accounts]
   );
@@ -1044,7 +1054,7 @@ export default function App() {
         </div>
         <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
 
-        {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} derivedRows={derivedRows} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
+        {activeTab === "investments" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment" }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status" }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} />}
