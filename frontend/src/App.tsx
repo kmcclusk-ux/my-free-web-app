@@ -597,7 +597,6 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; derivedRows: DerivedInvestmentRow[]; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
-  const partiallyTaxableTreatments = new Set(["index-60-40", "ss-85-fed", "real estate"]);
   const topDescriptions = Object.entries(
     rows.reduce<Record<string, number>>((acc, row) => {
       const key = String(row.description || "(blank)").trim() || "(blank)";
@@ -611,14 +610,21 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, on
 
   const getRowClassName = (derived?: DerivedInvestmentRow) => {
     const taxStatus = String(derived?.taxStatus || "").toLowerCase();
-    const taxTreatment = String(derived?.taxTreatment || "").toLowerCase();
+    const accountName = normalizeLookupKey(derived?.account || "");
     const isDeferredStatus = taxStatus.includes("deferred");
-    const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
+    const isDeferredAccountName = accountName.includes("deferred") || accountName.includes("deffered");
+    const isExplicitNonTaxableStatus =
+      taxStatus.includes("tax-free") ||
+      taxStatus.includes("tax free") ||
+      taxStatus.includes("tax_deduction") ||
+      taxStatus.includes("tax-deduction") ||
+      taxStatus.includes("deduction");
+    const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("partially taxable");
 
-    if (isDeferredStatus) {
-      return "investment-row investment-row--deferred";
+    if (isDeferredStatus || isDeferredAccountName || isExplicitNonTaxableStatus) {
+      return "investment-row investment-row--non-taxable";
     }
-    if (isTaxableStatus || partiallyTaxableTreatments.has(taxTreatment)) {
+    if (isTaxableStatus) {
       return "investment-row investment-row--taxable";
     }
 
