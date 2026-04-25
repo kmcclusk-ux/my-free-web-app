@@ -612,15 +612,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, derivedRows, on
   const getRowClassName = (derived?: DerivedInvestmentRow) => {
     const taxStatus = String(derived?.taxStatus || "").toLowerCase();
     const taxTreatment = String(derived?.taxTreatment || "").toLowerCase();
-    const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
+    const isDeferredStatus = taxStatus.includes("deferred");
     const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
-    const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
 
-    if (!isTaxableAccount) {
-      return "investment-row investment-row--non-taxable";
+    if (isDeferredStatus) {
+      return "investment-row investment-row--deferred";
     }
-    if (isPartiallyTaxableStatus || partiallyTaxableTreatments.has(taxTreatment)) {
-      return "investment-row investment-row--partial";
+    if (isTaxableStatus || partiallyTaxableTreatments.has(taxTreatment)) {
+      return "investment-row investment-row--taxable";
     }
 
     return "investment-row";

@@ -60,9 +60,11 @@
 .sheet-table--workbook tr.investment-row--deferred td { background: rgba(93, 175, 111, 0.28); }
 .sheet-table--workbook tr.investment-row--non-taxable td { background: rgba(93, 175, 111, 0.28); }
 .sheet-table--workbook tr.investment-row--partial td { background: rgba(212, 86, 86, 0.26); }
+.sheet-table--workbook tr.investment-row--taxable td { background: rgba(212, 86, 86, 0.26); }
 .sheet-table--workbook tr.investment-row--deferred td .readonly-cell { background: rgba(226, 245, 230, 0.94); }
 .sheet-table--workbook tr.investment-row--non-taxable td .readonly-cell { background: rgba(226, 245, 230, 0.94); }
 .sheet-table--workbook tr.investment-row--partial td .readonly-cell { background: rgba(255, 231, 231, 0.95); }
+.sheet-table--workbook tr.investment-row--taxable td .readonly-cell { background: rgba(255, 231, 231, 0.95); }
 
 .calculator-section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .calculator-section { padding: 18px; border-radius: 20px; border: 1px solid rgba(23,49,58,.12); background: rgba(255,255,255,.9); box-shadow: 0 24px 60px rgba(23,49,58,.08); }
