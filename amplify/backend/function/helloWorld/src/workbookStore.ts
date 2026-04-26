@@ -15,7 +15,8 @@ export type WorkbookEntityKey =
   | "tab#investmentType"
   | "settings#federal"
   | "settings#state"
-  | "settings#planner";
+  | "settings#planner"
+  | "settings#ui";
 
 export type WorkbookPayload = {
   tabs?: Partial<Record<string, unknown>>;
@@ -39,6 +40,7 @@ const ENTITY_KEYS: WorkbookEntityKey[] = [
   "settings#federal",
   "settings#state",
   "settings#planner",
+  "settings#ui",
 ];
 
 const TAB_TO_ENTITY: Record<string, WorkbookEntityKey> = {
@@ -51,6 +53,7 @@ const TAB_TO_ENTITY: Record<string, WorkbookEntityKey> = {
   federalSettings: "settings#federal",
   stateSettings: "settings#state",
   plannerSettings: "settings#planner",
+  uiSettings: "settings#ui",
 };
 
 const ENTITY_TO_RESPONSE_KEY: Record<WorkbookEntityKey, { group: "tabs" | "settings"; key: string }> = {
@@ -63,6 +66,7 @@ const ENTITY_TO_RESPONSE_KEY: Record<WorkbookEntityKey, { group: "tabs" | "setti
   "settings#federal": { group: "settings", key: "federal" },
   "settings#state": { group: "settings", key: "state" },
   "settings#planner": { group: "settings", key: "planner" },
+  "settings#ui": { group: "settings", key: "ui" },
 };
 
 function getRequiredEnv(name: string): string {
