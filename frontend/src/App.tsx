@@ -701,6 +701,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [renameValue, setRenameValue] = useState("");
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const dragPointerYRef = useRef<number | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
   const topDescriptions = Object.entries(
     rows.reduce<Record<string, number>>((acc, row) => {
       const key = String(row.description || "(blank)").trim() || "(blank)";
@@ -801,6 +804,47 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     setRenameTarget("");
     setRenameValue("");
   };
+  const stopAutoScroll = () => {
+    if (autoScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+    dragPointerYRef.current = null;
+  };
+  const runAutoScroll = () => {
+    const container = tableScrollRef.current;
+    const pointerY = dragPointerYRef.current;
+    if (!container || pointerY === null) {
+      autoScrollFrameRef.current = null;
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    const threshold = Math.min(96, rect.height / 3);
+    const maxStep = 22;
+    let delta = 0;
+
+    if (pointerY < rect.top + threshold) {
+      delta = -Math.ceil(((rect.top + threshold - pointerY) / threshold) * maxStep);
+    } else if (pointerY > rect.bottom - threshold) {
+      delta = Math.ceil(((pointerY - (rect.bottom - threshold)) / threshold) * maxStep);
+    }
+
+    if (delta !== 0) {
+      container.scrollTop += delta;
+      autoScrollFrameRef.current = window.requestAnimationFrame(runAutoScroll);
+      return;
+    }
+
+    autoScrollFrameRef.current = null;
+  };
+  const queueAutoScroll = (clientY: number) => {
+    dragPointerYRef.current = clientY;
+    if (autoScrollFrameRef.current === null) {
+      autoScrollFrameRef.current = window.requestAnimationFrame(runAutoScroll);
+    }
+  };
+  useEffect(() => () => stopAutoScroll(), []);
   const handleDragStart = (event: DragEvent<HTMLButtonElement>, rowId: number) => {
     setDraggingRowId(rowId);
     event.dataTransfer.effectAllowed = "move";
@@ -810,7 +854,19 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (draggingRowId === null || draggingRowId === rowId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
+    queueAutoScroll(event.clientY);
     setDragOverRowId(rowId);
+  };
+  const handleTableDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (draggingRowId === null) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    queueAutoScroll(event.clientY);
+  };
+  const handleTableDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    stopAutoScroll();
   };
   const handleDrop = (event: DragEvent<HTMLTableRowElement>, targetId: number) => {
     event.preventDefault();
@@ -818,10 +874,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (sourceId && sourceId !== targetId) {
       onReorder(sourceId, targetId);
     }
+    stopAutoScroll();
     setDraggingRowId(null);
     setDragOverRowId(null);
   };
   const handleDragEnd = () => {
+    stopAutoScroll();
     setDraggingRowId(null);
     setDragOverRowId(null);
   };
@@ -918,7 +976,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           {topDescriptions.map((entry) => <span key={entry[0]}>{entry[0]} ({entry[1]})</span>)}
         </div>
       </div>
-      <div className="table-wrap table-wrap--tall">
+      <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--workbook">
           <thead>
             <tr>
