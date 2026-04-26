@@ -7,6 +7,7 @@ type TabKey =
   | "state"
   | "calculator"
   | "tickers"
+  | "categories"
   | "taxTreatment"
   | "accounts"
   | "accountTaxType"
@@ -60,6 +61,7 @@ type DerivedInvestmentRow = InvestmentRow & {
 };
 
 type TickerRow = { id: number; symbol: string; percentReturn: number; category: string; taxTreatment: string; extraData: number; description: string; exDividend: string; divPayout: string };
+type CategoryRow = { id: number; name: string };
 type TaxTreatmentRow = { id: number; label: string };
 type AccountRow = { id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
 type AccountTaxTypeRow = { id: number; taxStatus: string };
@@ -113,6 +115,8 @@ type WorkbookResponse = {
   tabs?: Partial<{
     investments: InvestmentRow[];
     tickers: TickerRow[];
+    categories: CategoryRow[];
+    category: CategoryRow[];
     taxTreatment: TaxTreatmentRow[];
     accounts: AccountRow[];
     accountTaxType: AccountTaxTypeRow[];
@@ -132,11 +136,14 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "state", label: "State Tax", meta: "CA worksheet" },
   { key: "calculator", label: "Tax Calculator", meta: "summary" },
   { key: "tickers", label: "Tickers", meta: "symbol lookups" },
+  { key: "categories", label: "Categories", meta: "ticker categories" },
   { key: "taxTreatment", label: "Tax Treatment", meta: "sheet labels" },
   { key: "accounts", label: "Accounts", meta: "tax status" },
   { key: "accountTaxType", label: "Account Tax Type", meta: "status list" },
   { key: "investmentType", label: "Investment Type", meta: "asset classes" },
 ];
+
+const categoryLabels = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"];
 
 const initialInvestments: InvestmentRow[] = [
   { id: 1, description: "Social Security", account: "Social Security", category: "core", totalInvestment: 0, yearlyIncome: 10000, includeIncome: true, overrideProposal: false, symbol: "SS", newSymbol: "SS", newPercent: 0 },
@@ -169,6 +176,7 @@ const initialTickers: TickerRow[] = [
   { id: 16, symbol: "7068 Sitio", percentReturn: 0, category: "real estate", taxTreatment: "real estate", extraData: 0, description: "rental income", exDividend: "", divPayout: "" },
 ];
 
+const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
 const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label }));
 const initialAccounts: AccountRow[] = [
   { id: 1, account: "Social Security", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
@@ -183,7 +191,7 @@ const initialAccounts: AccountRow[] = [
   { id: 10, account: "rental-Sitio", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
 ];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
-const initialInvestmentTypes: InvestmentTypeRow[] = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"].map((name, index) => ({ id: index + 1, name }));
+const initialInvestmentTypes: InvestmentTypeRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
@@ -648,6 +656,13 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
     divPayout: workbookField(row, "div_payout", "divPayout") ?? base.divPayout,
   };
 }
+function workbookToCategoryRow(row: Record<string, unknown>, index: number, fallback?: CategoryRow): CategoryRow {
+  const base = fallback || initialCategories[index] || initialCategories[0];
+  return {
+    id: Number(workbookField(row, "id")) || base.id,
+    name: workbookField(row, "name", "category", "label") ?? base.name,
+  };
+}
 function workbookToAccountRow(row: Record<string, unknown>, index: number, fallback?: AccountRow): AccountRow {
   const base = fallback || initialAccounts[index] || initialAccounts[0];
   return {
@@ -1042,6 +1057,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [investments, setInvestments] = useState(initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
+  const [categories, setCategories] = useState(initialCategories);
   const [taxTreatments, setTaxTreatments] = useState(initialTaxTreatments);
   const [accounts, setAccounts] = useState(initialAccounts);
   const [accountTaxTypes, setAccountTaxTypes] = useState(initialAccountTaxTypes);
@@ -1085,6 +1101,15 @@ export default function App() {
       .filter(Boolean);
     return ["", ...new Set([...values, ...fromTickers])];
   }, [taxTreatments, tickers]);
+  const categoryOptions = useMemo(() => {
+    const values = categories
+      .map((row) => String(row.name || "").trim())
+      .filter(Boolean);
+    const fromTickers = tickers
+      .map((row) => String(row.category || "").trim())
+      .filter(Boolean);
+    return ["", ...new Set([...values, ...fromTickers])];
+  }, [categories, tickers]);
   const accountOptions = useMemo(() => ["", ...accounts.map((row) => row.account).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [accounts]);
   const symbolOptions = useMemo(() => ["", ...tickers.map((row) => row.symbol).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [tickers]);
 
@@ -1234,6 +1259,9 @@ export default function App() {
       setTickers(
         mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
       );
+      setCategories(
+        mapWorkbookRows(initialCategories, response.tabs?.categories || response.tabs?.category, workbookToCategoryRow)
+      );
       setTaxTreatments(
         mapWorkbookRows(initialTaxTreatments, response.tabs?.taxTreatment, workbookToTaxTreatmentRow)
       );
@@ -1342,7 +1370,7 @@ export default function App() {
     setStorageMessage("Saving workbook...");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }).then((response) => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }).then((response) => {
         if (!cancelled) { setStorageState("saved"); setStorageMessage(response.updatedAt ? `Saved ${new Date(response.updatedAt).toLocaleTimeString()}` : "Saved"); }
       }).catch((error: Error) => {
         if (!cancelled) { setStorageState("error"); setStorageMessage(error.message); }
@@ -1350,7 +1378,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, tickers, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData]);
+  }, [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData]);
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
@@ -1530,7 +1558,8 @@ export default function App() {
           </Section>
         )}
         {activeTab === "investments" && storageState !== "loading" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} favorites={uiSettings.investmentFavorites} onSaveFavorite={saveFavorite} onApplyFavorite={applyFavorite} onDeleteFavorite={deleteFavorite} onRenameFavorite={renameFavorite} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onReorder={reorderInvestments} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
-        {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
+        {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
+        {activeTab === "categories" && <LookupTable title="Categories" subtitle="Reference list used by the Tickers tab category dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Category" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Type" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} />}
