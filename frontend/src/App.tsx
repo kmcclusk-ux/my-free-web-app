@@ -743,6 +743,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     }, 0);
   };
   const selectedFavorite = filteredFavorites.find((favorite) => favorite.name === selectedFavoriteName) || null;
+  const handleSelectFavorite = (name: string) => {
+    setSelectedFavoriteName(name);
+    onApplyFavorite(name);
+  };
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
     if (!name) return;
@@ -806,7 +810,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   key={favorite.name}
                   type="button"
                   className={`favorites-item ${selectedFavoriteName === favorite.name ? "favorites-item--active" : ""}`}
-                  onClick={() => setSelectedFavoriteName(favorite.name)}
+                  onClick={() => handleSelectFavorite(favorite.name)}
                 >
                   <span>{favorite.name}</span>
                   <small>{favoriteMatchCount(favorite)} matched</small>
