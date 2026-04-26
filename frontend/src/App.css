@@ -57,6 +57,11 @@
 .sheet-table--workbook { min-width: 3600px; }
 .sheet-table--workbook th, .sheet-table--workbook td { white-space: nowrap; vertical-align: middle; }
 .sheet-table--workbook select, .sheet-table--workbook input { min-width: 92px; }
+.drag-handle-heading, .drag-handle-cell { width: 36px; min-width: 36px; text-align: center; }
+.drag-handle { width: 28px; height: 24px; border-radius: 8px; border: 1px solid rgba(24,49,58,.18); background: rgba(255,255,255,.82); color: #34565d; cursor: grab; font-weight: 700; line-height: 1; }
+.drag-handle:active { cursor: grabbing; }
+.investment-row--dragging td { opacity: .58; }
+.sheet-table--workbook tr.investment-row--drag-over td { box-shadow: inset 0 2px 0 rgba(29, 93, 108, .85); }
 .sheet-table--workbook tr.investment-row--deferred td { background: rgba(93, 175, 111, 0.28); }
 .sheet-table--workbook tr.investment-row--non-taxable td { background: rgba(93, 175, 111, 0.28); }
 .sheet-table--workbook tr.investment-row--partial td { background: rgba(212, 86, 86, 0.26); }
