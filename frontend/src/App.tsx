@@ -804,14 +804,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic.">
       <div className="actions-row">
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
-        <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Manage Favorites</button>
+        <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Select Rows</button>
         <button className="ghost-button" type="button" onClick={onClear}>Remove all rows</button>
       </div>
       {isFavoritesPanelOpen && (
         <div className="favorites-overlay">
           <div className="favorites-panel">
             <div className="favorites-panel__header">
-              <h3>Favorites</h3>
+              <h3>Select Rows</h3>
               <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsFavoritesPanelOpen(false)}>Close</button>
             </div>
             <div className="favorites-panel__new">
@@ -819,7 +819,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                 type="text"
                 value={newFavoriteName}
                 onChange={(event) => setNewFavoriteName(event.target.value)}
-                placeholder="New favorite name"
+                placeholder="New row selection name"
               />
               <button className="primary-button ghost-button--compact" type="button" onClick={handleSaveFavorite}>Save</button>
             </div>
@@ -851,7 +851,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <small>{favoriteMatchCount(favorite)} matched</small>
                 </button>
               ))}
-              {filteredFavorites.length === 0 && <div className="favorites-empty">No favorites found.</div>}
+              {filteredFavorites.length === 0 && <div className="favorites-empty">No saved row selections.</div>}
             </div>
             <div className="favorites-panel__actions">
               <button className="ghost-button ghost-button--compact" type="button" onClick={handleApplyFavorite} disabled={!selectedFavorite}>Apply</button>
@@ -864,13 +864,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   type="text"
                   value={renameValue}
                   onChange={(event) => setRenameValue(event.target.value)}
-                  placeholder="Rename favorite"
+                  placeholder="Rename row selection"
                 />
                 <button className="ghost-button ghost-button--compact" type="button" onClick={handleRenameFavorite}>Save name</button>
                 <button className="ghost-button ghost-button--compact" type="button" onClick={() => { setRenameTarget(""); setRenameValue(""); }}>Cancel</button>
               </div>
             )}
-            <p className="favorites-panel__note">Favorites use resilient matching and still apply when rows are reordered or removed.</p>
+            <p className="favorites-panel__note">Saved row selections use exact row matching; removed rows are ignored.</p>
           </div>
         </div>
       )}
@@ -1266,7 +1266,7 @@ export default function App() {
     const name = normalizeFavoriteName(favoriteName);
     if (!name) {
       setStorageState("error");
-      setStorageMessage("Favorite name is required.");
+      setStorageMessage("Row selection name is required.");
       return;
     }
     const keySet = new Set<string>();
@@ -1275,7 +1275,7 @@ export default function App() {
     });
     if (keySet.size === 0) {
       setStorageState("error");
-      setStorageMessage("Select at least one included investment before saving a favorite.");
+      setStorageMessage("Select at least one included investment before saving a row selection.");
       return;
     }
     const nameKey = normalizeLookupKey(name);
@@ -1292,7 +1292,7 @@ export default function App() {
       ],
     }));
     setStorageState("ready");
-    setStorageMessage(`Favorite "${name}" saved.`);
+    setStorageMessage(`Row selection "${name}" saved.`);
   };
 
   const applyFavorite = (favoriteName: string) => {
@@ -1302,7 +1302,7 @@ export default function App() {
     );
     if (!favorite) {
       setStorageState("error");
-      setStorageMessage("Select a favorite to apply.");
+      setStorageMessage("Select a row selection to apply.");
       return;
     }
     const favoriteKeys = new Set(favorite.investmentKeys);
@@ -1313,14 +1313,14 @@ export default function App() {
       })
     );
     setStorageState("ready");
-    setStorageMessage(`Favorite "${favorite.name}" applied.`);
+    setStorageMessage(`Row selection "${favorite.name}" applied.`);
   };
 
   const deleteFavorite = (favoriteName: string) => {
     const selectedKey = normalizeLookupKey(favoriteName);
     if (!selectedKey) {
       setStorageState("error");
-      setStorageMessage("Select a favorite to delete.");
+      setStorageMessage("Select a row selection to delete.");
       return;
     }
     const favorite = uiSettings.investmentFavorites.find(
@@ -1328,7 +1328,7 @@ export default function App() {
     );
     if (!favorite) {
       setStorageState("error");
-      setStorageMessage("Favorite not found.");
+      setStorageMessage("Row selection not found.");
       return;
     }
     setUiSettings((current) => ({
@@ -1338,7 +1338,7 @@ export default function App() {
       ),
     }));
     setStorageState("ready");
-    setStorageMessage(`Favorite "${favorite.name}" deleted.`);
+    setStorageMessage(`Row selection "${favorite.name}" deleted.`);
   };
 
   const renameFavorite = (oldFavoriteName: string, newFavoriteName: string) => {
@@ -1347,13 +1347,13 @@ export default function App() {
     const newKey = normalizeLookupKey(nextName);
     if (!oldKey || !newKey) {
       setStorageState("error");
-      setStorageMessage("Favorite rename requires old and new names.");
+      setStorageMessage("Row selection rename requires old and new names.");
       return;
     }
     const existing = uiSettings.investmentFavorites.find((entry) => normalizeLookupKey(entry.name) === oldKey);
     if (!existing) {
       setStorageState("error");
-      setStorageMessage("Favorite not found for rename.");
+      setStorageMessage("Row selection not found for rename.");
       return;
     }
     const conflict = uiSettings.investmentFavorites.some(
@@ -1361,7 +1361,7 @@ export default function App() {
     );
     if (conflict) {
       setStorageState("error");
-      setStorageMessage(`Favorite "${nextName}" already exists.`);
+      setStorageMessage(`Row selection "${nextName}" already exists.`);
       return;
     }
     setUiSettings((current) => ({
@@ -1373,7 +1373,7 @@ export default function App() {
       ),
     }));
     setStorageState("ready");
-    setStorageMessage(`Favorite "${existing.name}" renamed to "${nextName}".`);
+    setStorageMessage(`Row selection "${existing.name}" renamed to "${nextName}".`);
   };
 
   function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = [], booleanFields: Array<keyof T> = []) {
