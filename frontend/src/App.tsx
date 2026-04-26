@@ -760,6 +760,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     setSelectedFavoriteName(name);
     onApplyFavorite(name);
   };
+  const handleSelectAllPreset = () => {
+    setSelectedFavoriteName("__select_all_inc__");
+    onSelectAllInc();
+  };
+  const handleClearAllPreset = () => {
+    setSelectedFavoriteName("__clear_all_inc__");
+    onClearAllInc();
+  };
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
     if (!name) return;
@@ -796,8 +804,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic.">
       <div className="actions-row">
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
-        <button className="ghost-button" type="button" onClick={onSelectAllInc}>Select all Inc</button>
-        <button className="ghost-button" type="button" onClick={onClearAllInc}>Clear all Inc</button>
         <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Manage Favorites</button>
         <button className="ghost-button" type="button" onClick={onClear}>Remove all rows</button>
       </div>
@@ -818,6 +824,22 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               <button className="primary-button ghost-button--compact" type="button" onClick={handleSaveFavorite}>Save</button>
             </div>
             <div className="favorites-panel__list">
+              <button
+                type="button"
+                className={`favorites-item favorites-item--system ${selectedFavoriteName === "__select_all_inc__" ? "favorites-item--active" : ""}`}
+                onClick={handleSelectAllPreset}
+              >
+                <span>Select all Inc</span>
+                <small>Built-in</small>
+              </button>
+              <button
+                type="button"
+                className={`favorites-item favorites-item--system ${selectedFavoriteName === "__clear_all_inc__" ? "favorites-item--active" : ""}`}
+                onClick={handleClearAllPreset}
+              >
+                <span>Clear all Inc</span>
+                <small>Built-in</small>
+              </button>
               {filteredFavorites.map((favorite) => (
                 <button
                   key={favorite.name}
