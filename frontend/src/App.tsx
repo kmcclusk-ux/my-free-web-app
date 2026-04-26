@@ -236,20 +236,33 @@ function buildAccountTaxStatusMap(rows: AccountRow[]) {
 function normalizeFavoriteName(value: unknown) {
   return String(value || "").trim();
 }
-function buildInvestmentFavoriteKeys(row: InvestmentRow) {
+function buildInvestmentFavoriteKey(row: InvestmentRow) {
   const description = normalizeLookupKey(row.description);
   const account = normalizeLookupKey(row.account);
   const symbol = normalizeLookupKey(row.symbol);
   const newSymbol = normalizeLookupKey(row.newSymbol);
   const category = normalizeLookupKey(row.category);
-  const keys = new Set<string>();
-  keys.add(`desc|${description}|acct|${account}|sym|${symbol}|cat|${category}`);
-  keys.add(`desc|${description}|acct|${account}|cat|${category}`);
-  keys.add(`acct|${account}|sym|${symbol}`);
-  if (newSymbol) {
-    keys.add(`acct|${account}|newsym|${newSymbol}`);
-  }
-  return [...keys];
+  const totalInvestment = toNumber(row.totalInvestment);
+  const yearlyIncome = toNumber(row.yearlyIncome);
+  const newPercent = toNumber(row.newPercent);
+
+  return [
+    "row",
+    `id:${row.id}`,
+    `desc:${description}`,
+    `acct:${account}`,
+    `cat:${category}`,
+    `sym:${symbol}`,
+    `new:${newSymbol}`,
+    `total:${totalInvestment}`,
+    `income:${yearlyIncome}`,
+    `override:${row.overrideProposal ? "1" : "0"}`,
+    `newpct:${newPercent}`,
+  ].join("|");
+}
+
+function buildInvestmentFavoriteKeys(row: InvestmentRow) {
+  return [buildInvestmentFavoriteKey(row)];
 }
 function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
   if (!Array.isArray(raw)) return [];
@@ -263,7 +276,7 @@ function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
     const keyCandidates = Array.isArray(obj.investmentKeys) ? obj.investmentKeys : [];
     for (const key of keyCandidates) {
       const normalized = String(key || "").trim();
-      if (normalized) keySet.add(normalized);
+      if (normalized.startsWith("row|")) keySet.add(normalized);
     }
     if (keySet.size === 0) continue;
     favorites.push({
