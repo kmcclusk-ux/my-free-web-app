@@ -679,7 +679,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favoriteNameInput, favoriteOptions, selectedFavoriteName, onFavoriteNameChange, onFavoriteSelect, onSaveFavorite, onApplyFavorite, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favoriteNameInput: string; favoriteOptions: string[]; selectedFavoriteName: string; onFavoriteNameChange: (value: string) => void; onFavoriteSelect: (value: string) => void; onSaveFavorite: () => void; onApplyFavorite: () => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favoriteNameInput, favoriteOptions, selectedFavoriteName, onFavoriteNameChange, onFavoriteSelect, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favoriteNameInput: string; favoriteOptions: string[]; selectedFavoriteName: string; onFavoriteNameChange: (value: string) => void; onFavoriteSelect: (value: string) => void; onSaveFavorite: () => void; onApplyFavorite: () => void; onDeleteFavorite: () => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
   const topDescriptions = Object.entries(
     rows.reduce<Record<string, number>>((acc, row) => {
@@ -734,6 +734,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           {favoriteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
         <button className="ghost-button" type="button" onClick={onApplyFavorite}>Apply favorite</button>
+        <button className="ghost-button" type="button" onClick={onDeleteFavorite}>Delete favorite</button>
         <button className="ghost-button" type="button" onClick={onClear}>Remove all rows</button>
       </div>
       <div className="status-card status-card--note debug-panel">
@@ -1194,6 +1195,35 @@ export default function App() {
     setStorageMessage(`Favorite "${favorite.name}" applied.`);
   };
 
+  const deleteFavorite = () => {
+    const selectedKey = normalizeLookupKey(selectedFavoriteName);
+    if (!selectedKey) {
+      setStorageState("error");
+      setStorageMessage("Select a favorite to delete.");
+      return;
+    }
+    const favorite = uiSettings.investmentFavorites.find(
+      (entry) => normalizeLookupKey(entry.name) === selectedKey
+    );
+    if (!favorite) {
+      setStorageState("error");
+      setStorageMessage("Favorite not found.");
+      return;
+    }
+    setUiSettings((current) => ({
+      ...current,
+      investmentFavorites: current.investmentFavorites.filter(
+        (entry) => normalizeLookupKey(entry.name) !== selectedKey
+      ),
+    }));
+    setFavoriteNameInput((current) =>
+      normalizeLookupKey(current) === selectedKey ? "" : current
+    );
+    setSelectedFavoriteName("");
+    setStorageState("ready");
+    setStorageMessage(`Favorite "${favorite.name}" deleted.`);
+  };
+
   function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = [], booleanFields: Array<keyof T> = []) {
     return (id: number, field: keyof T, value: string | boolean) => {
       setter((current) => current.map((row) => row.id !== id ? row : booleanFields.includes(field) ? { ...row, [field]: Boolean(value) } : numericFields.includes(field) ? { ...row, [field]: toNumber(value) } : { ...row, [field]: value }));
@@ -1224,7 +1254,7 @@ export default function App() {
             <div className="status-card status-card--note">Loading account and tax-status mappings...</div>
           </Section>
         )}
-        {activeTab === "investments" && storageState !== "loading" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} favoriteNameInput={favoriteNameInput} favoriteOptions={favoriteOptions} selectedFavoriteName={selectedFavoriteName} onFavoriteNameChange={setFavoriteNameInput} onFavoriteSelect={setSelectedFavoriteName} onSaveFavorite={saveFavorite} onApplyFavorite={applyFavorite} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
+        {activeTab === "investments" && storageState !== "loading" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} favoriteNameInput={favoriteNameInput} favoriteOptions={favoriteOptions} selectedFavoriteName={selectedFavoriteName} onFavoriteNameChange={setFavoriteNameInput} onFavoriteSelect={setSelectedFavoriteName} onSaveFavorite={saveFavorite} onApplyFavorite={applyFavorite} onDeleteFavorite={deleteFavorite} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment" }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} />}
