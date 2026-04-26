@@ -679,8 +679,14 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favoriteNameInput, favoriteOptions, selectedFavoriteName, onFavoriteNameChange, onFavoriteSelect, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favoriteNameInput: string; favoriteOptions: string[]; selectedFavoriteName: string; onFavoriteNameChange: (value: string) => void; onFavoriteSelect: (value: string) => void; onSaveFavorite: () => void; onApplyFavorite: () => void; onDeleteFavorite: () => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
+  const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
+  const [favoriteQuery, setFavoriteQuery] = useState("");
+  const [newFavoriteName, setNewFavoriteName] = useState("");
+  const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
+  const [renameTarget, setRenameTarget] = useState("");
+  const [renameValue, setRenameValue] = useState("");
   const topDescriptions = Object.entries(
     rows.reduce<Record<string, number>>((acc, row) => {
       const key = String(row.description || "(blank)").trim() || "(blank)";
@@ -715,6 +721,62 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 
     return "investment-row";
   };
+  const filteredFavorites = useMemo(() => {
+    const query = normalizeLookupKey(favoriteQuery);
+    const sorted = [...favorites].sort((a, b) => a.name.localeCompare(b.name));
+    if (!query) return sorted;
+    return sorted.filter((favorite) => normalizeLookupKey(favorite.name).includes(query));
+  }, [favorites, favoriteQuery]);
+  useEffect(() => {
+    if (filteredFavorites.length === 0) {
+      setSelectedFavoriteName("");
+      return;
+    }
+    setSelectedFavoriteName((current) =>
+      filteredFavorites.some((favorite) => favorite.name === current)
+        ? current
+        : filteredFavorites[0].name
+    );
+  }, [filteredFavorites]);
+  const favoriteMatchCount = (favorite: InvestmentFavorite) => {
+    const keys = new Set(favorite.investmentKeys);
+    return rows.reduce((count, row) => {
+      const isMatch = buildInvestmentFavoriteKeys(row).some((key) => keys.has(key));
+      return count + (isMatch ? 1 : 0);
+    }, 0);
+  };
+  const selectedFavorite = filteredFavorites.find((favorite) => favorite.name === selectedFavoriteName) || null;
+  const handleSaveFavorite = () => {
+    const name = normalizeFavoriteName(newFavoriteName);
+    if (!name) return;
+    onSaveFavorite(name);
+    setNewFavoriteName(name);
+    setSelectedFavoriteName(name);
+  };
+  const handleApplyFavorite = () => {
+    if (!selectedFavoriteName) return;
+    onApplyFavorite(selectedFavoriteName);
+  };
+  const handleDeleteFavorite = () => {
+    if (!selectedFavoriteName) return;
+    onDeleteFavorite(selectedFavoriteName);
+    setRenameTarget("");
+    setRenameValue("");
+  };
+  const startRenameFavorite = () => {
+    if (!selectedFavoriteName) return;
+    setRenameTarget(selectedFavoriteName);
+    setRenameValue(selectedFavoriteName);
+  };
+  const handleRenameFavorite = () => {
+    const oldName = normalizeFavoriteName(renameTarget);
+    const nextName = normalizeFavoriteName(renameValue);
+    if (!oldName || !nextName) return;
+    onRenameFavorite(oldName, nextName);
+    setSelectedFavoriteName(nextName);
+    setRenameTarget("");
+    setRenameValue("");
+  };
 
   return (
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic.">
@@ -722,21 +784,68 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
         <button className="ghost-button" type="button" onClick={onSelectAllInc}>Select all Inc</button>
         <button className="ghost-button" type="button" onClick={onClearAllInc}>Clear all Inc</button>
-        <input
-          type="text"
-          value={favoriteNameInput}
-          onChange={(event) => onFavoriteNameChange(event.target.value)}
-          placeholder="Favorite name"
-        />
-        <button className="ghost-button" type="button" onClick={onSaveFavorite}>Save favorite</button>
-        <select value={selectedFavoriteName} onChange={(event) => onFavoriteSelect(event.target.value)}>
-          <option value="">Select favorite</option>
-          {favoriteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
-        <button className="ghost-button" type="button" onClick={onApplyFavorite}>Apply favorite</button>
-        <button className="ghost-button" type="button" onClick={onDeleteFavorite}>Delete favorite</button>
+        <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Manage Favorites</button>
         <button className="ghost-button" type="button" onClick={onClear}>Remove all rows</button>
       </div>
+      {isFavoritesPanelOpen && (
+        <div className="favorites-overlay">
+          <div className="favorites-panel">
+            <div className="favorites-panel__header">
+              <h3>Favorites</h3>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsFavoritesPanelOpen(false)}>Close</button>
+            </div>
+            <div className="favorites-panel__search">
+              <input
+                type="text"
+                value={favoriteQuery}
+                onChange={(event) => setFavoriteQuery(event.target.value)}
+                placeholder="Search favorites"
+              />
+            </div>
+            <div className="favorites-panel__new">
+              <input
+                type="text"
+                value={newFavoriteName}
+                onChange={(event) => setNewFavoriteName(event.target.value)}
+                placeholder="New favorite name"
+              />
+              <button className="primary-button ghost-button--compact" type="button" onClick={handleSaveFavorite}>Save</button>
+            </div>
+            <div className="favorites-panel__list">
+              {filteredFavorites.map((favorite) => (
+                <button
+                  key={favorite.name}
+                  type="button"
+                  className={`favorites-item ${selectedFavoriteName === favorite.name ? "favorites-item--active" : ""}`}
+                  onClick={() => setSelectedFavoriteName(favorite.name)}
+                >
+                  <span>{favorite.name}</span>
+                  <small>{favoriteMatchCount(favorite)} matched</small>
+                </button>
+              ))}
+              {filteredFavorites.length === 0 && <div className="favorites-empty">No favorites found.</div>}
+            </div>
+            <div className="favorites-panel__actions">
+              <button className="ghost-button ghost-button--compact" type="button" onClick={handleApplyFavorite} disabled={!selectedFavorite}>Apply</button>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={startRenameFavorite} disabled={!selectedFavorite}>Rename</button>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={handleDeleteFavorite} disabled={!selectedFavorite}>Delete</button>
+            </div>
+            {renameTarget && (
+              <div className="favorites-panel__rename">
+                <input
+                  type="text"
+                  value={renameValue}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  placeholder="Rename favorite"
+                />
+                <button className="ghost-button ghost-button--compact" type="button" onClick={handleRenameFavorite}>Save name</button>
+                <button className="ghost-button ghost-button--compact" type="button" onClick={() => { setRenameTarget(""); setRenameValue(""); }}>Cancel</button>
+              </div>
+            )}
+            <p className="favorites-panel__note">Favorites use resilient matching and still apply when rows are reordered or removed.</p>
+          </div>
+        </div>
+      )}
       <div className="status-card status-card--note debug-panel">
         <strong>Debug</strong>
         <div className="debug-panel__stats">
@@ -817,8 +926,6 @@ export default function App() {
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
-  const [favoriteNameInput, setFavoriteNameInput] = useState("");
-  const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
   const [taxCalcInputs, setTaxCalcInputs] = useState(initialTaxCalculatorInputs);
   const [taxCalcResult, setTaxCalcResult] = useState<TaxResult | null>(null);
   const [taxCalcError, setTaxCalcError] = useState<string | null>(null);
@@ -847,10 +954,6 @@ export default function App() {
   }, [accountTaxTypes, accounts]);
   const accountOptions = useMemo(() => ["", ...accounts.map((row) => row.account).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [accounts]);
   const symbolOptions = useMemo(() => ["", ...tickers.map((row) => row.symbol).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [tickers]);
-  const favoriteOptions = useMemo(
-    () => uiSettings.investmentFavorites.map((favorite) => favorite.name).sort((a, b) => a.localeCompare(b)),
-    [uiSettings.investmentFavorites]
-  );
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
     const currentTicker = tickerMap[row.symbol];
@@ -1028,14 +1131,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (favoriteOptions.length === 0) {
-      setSelectedFavoriteName("");
-      return;
-    }
-    setSelectedFavoriteName((current) => (favoriteOptions.includes(current) ? current : favoriteOptions[0]));
-  }, [favoriteOptions]);
-
-  useEffect(() => {
     let cancelled = false;
     postTaxCalculation({ calc: "FED_TAX_2025_COMBINED", ordinaryTaxable, prefTaxable, filingStatus: federalSettings.filingStatus, magi, netInvestmentIncome }).then((result) => {
       if (!cancelled) { setFederalResult(result); setFederalError(null); }
@@ -1139,8 +1234,8 @@ export default function App() {
     setTaxCalcInputs((current) => ({ ...current, filingStatus: status }));
   };
 
-  const saveFavorite = () => {
-    const name = normalizeFavoriteName(favoriteNameInput);
+  const saveFavorite = (favoriteName: string) => {
+    const name = normalizeFavoriteName(favoriteName);
     if (!name) {
       setStorageState("error");
       setStorageMessage("Favorite name is required.");
@@ -1168,14 +1263,12 @@ export default function App() {
         nextFavorite,
       ],
     }));
-    setSelectedFavoriteName(name);
-    setFavoriteNameInput(name);
     setStorageState("ready");
     setStorageMessage(`Favorite "${name}" saved.`);
   };
 
-  const applyFavorite = () => {
-    const selectedKey = normalizeLookupKey(selectedFavoriteName);
+  const applyFavorite = (favoriteName: string) => {
+    const selectedKey = normalizeLookupKey(favoriteName);
     const favorite = uiSettings.investmentFavorites.find(
       (entry) => normalizeLookupKey(entry.name) === selectedKey
     );
@@ -1195,8 +1288,8 @@ export default function App() {
     setStorageMessage(`Favorite "${favorite.name}" applied.`);
   };
 
-  const deleteFavorite = () => {
-    const selectedKey = normalizeLookupKey(selectedFavoriteName);
+  const deleteFavorite = (favoriteName: string) => {
+    const selectedKey = normalizeLookupKey(favoriteName);
     if (!selectedKey) {
       setStorageState("error");
       setStorageMessage("Select a favorite to delete.");
@@ -1216,12 +1309,43 @@ export default function App() {
         (entry) => normalizeLookupKey(entry.name) !== selectedKey
       ),
     }));
-    setFavoriteNameInput((current) =>
-      normalizeLookupKey(current) === selectedKey ? "" : current
-    );
-    setSelectedFavoriteName("");
     setStorageState("ready");
     setStorageMessage(`Favorite "${favorite.name}" deleted.`);
+  };
+
+  const renameFavorite = (oldFavoriteName: string, newFavoriteName: string) => {
+    const oldKey = normalizeLookupKey(oldFavoriteName);
+    const nextName = normalizeFavoriteName(newFavoriteName);
+    const newKey = normalizeLookupKey(nextName);
+    if (!oldKey || !newKey) {
+      setStorageState("error");
+      setStorageMessage("Favorite rename requires old and new names.");
+      return;
+    }
+    const existing = uiSettings.investmentFavorites.find((entry) => normalizeLookupKey(entry.name) === oldKey);
+    if (!existing) {
+      setStorageState("error");
+      setStorageMessage("Favorite not found for rename.");
+      return;
+    }
+    const conflict = uiSettings.investmentFavorites.some(
+      (entry) => normalizeLookupKey(entry.name) === newKey && normalizeLookupKey(entry.name) !== oldKey
+    );
+    if (conflict) {
+      setStorageState("error");
+      setStorageMessage(`Favorite "${nextName}" already exists.`);
+      return;
+    }
+    setUiSettings((current) => ({
+      ...current,
+      investmentFavorites: current.investmentFavorites.map((entry) =>
+        normalizeLookupKey(entry.name) === oldKey
+          ? { ...entry, name: nextName }
+          : entry
+      ),
+    }));
+    setStorageState("ready");
+    setStorageMessage(`Favorite "${existing.name}" renamed to "${nextName}".`);
   };
 
   function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = [], booleanFields: Array<keyof T> = []) {
@@ -1254,7 +1378,7 @@ export default function App() {
             <div className="status-card status-card--note">Loading account and tax-status mappings...</div>
           </Section>
         )}
-        {activeTab === "investments" && storageState !== "loading" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} favoriteNameInput={favoriteNameInput} favoriteOptions={favoriteOptions} selectedFavoriteName={selectedFavoriteName} onFavoriteNameChange={setFavoriteNameInput} onFavoriteSelect={setSelectedFavoriteName} onSaveFavorite={saveFavorite} onApplyFavorite={applyFavorite} onDeleteFavorite={deleteFavorite} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
+        {activeTab === "investments" && storageState !== "loading" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} favorites={uiSettings.investmentFavorites} onSaveFavorite={saveFavorite} onApplyFavorite={applyFavorite} onDeleteFavorite={deleteFavorite} onRenameFavorite={renameFavorite} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category" }, { key: "taxTreatment", label: "Tax Treatment" }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} />}

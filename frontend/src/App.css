@@ -79,3 +79,17 @@
 .debug-panel { display: flex; flex-direction: column; gap: 8px; }
 .debug-panel__stats { display: flex; flex-wrap: wrap; gap: 12px; font-size: .82rem; }
 .debug-panel__list { display: flex; flex-wrap: wrap; gap: 10px; font-size: .8rem; color: #285860; }
+
+.favorites-overlay { margin-bottom: 14px; }
+.favorites-panel { padding: 14px; border-radius: 14px; border: 1px solid rgba(24,49,58,.14); background: rgba(248, 252, 252, .98); box-shadow: 0 16px 36px rgba(24,49,58,.12); }
+.favorites-panel h3 { margin: 0; font-size: 1rem; color: #17313a; }
+.favorites-panel__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.favorites-panel__search, .favorites-panel__new, .favorites-panel__rename { display: flex; gap: 8px; margin-bottom: 10px; }
+.favorites-panel__search input, .favorites-panel__new input, .favorites-panel__rename input { width: 100%; }
+.favorites-panel__list { max-height: 180px; overflow: auto; display: grid; gap: 6px; margin-bottom: 10px; }
+.favorites-item { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(24,49,58,.12); background: rgba(255,255,255,.9); color: #21414a; text-align: left; }
+.favorites-item small { color: #5d7479; font-size: .76rem; }
+.favorites-item--active { border-color: rgba(30, 102, 118, .45); background: rgba(226, 243, 246, .95); }
+.favorites-empty { padding: 8px 10px; border-radius: 10px; background: rgba(239, 246, 247, .8); color: #4b666c; font-size: .84rem; }
+.favorites-panel__actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.favorites-panel__note { margin: 0; font-size: .78rem; color: #5f7478; }
