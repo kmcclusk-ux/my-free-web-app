@@ -208,6 +208,28 @@ function normalizeLookupKey(value: unknown) {
     .toLowerCase()
     .replace(/\s+/g, " ");
 }
+function buildAccountLookupMap(rows: AccountRow[]) {
+  const map: Record<string, AccountRow> = {};
+  for (const row of rows) {
+    const key = normalizeLookupKey(row.account);
+    if (!key) continue;
+    if (!map[key]) {
+      map[key] = row;
+    }
+  }
+  return map;
+}
+function buildAccountTaxStatusMap(rows: AccountRow[]) {
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    const key = normalizeLookupKey(row.account);
+    if (!key) continue;
+    if (!map[key]) {
+      map[key] = String(row.taxStatus || "");
+    }
+  }
+  return map;
+}
 function normalizeFilingStatus(value: unknown): FilingStatus {
   return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single";
 }
@@ -556,7 +578,7 @@ function workbookToAccountRow(row: Record<string, unknown>, index: number, fallb
   return {
     id: Number(workbookField(row, "id")) || base.id,
     account: workbookField(row, "account", "account_name", "account_names") ?? base.account,
-    taxStatus: workbookField(row, "tax_status", "taxStatus") ?? base.taxStatus,
+    taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_treatment") ?? base.taxStatus,
     dividendAccrued: workbookField(row, "dividend_accrued", "dividendAccrued") ?? base.dividendAccrued,
     includeInFreeCashflow: normalizeYesNo(workbookField(row, "include_in_free_cashflow", "includeInFreeCashflow", "include_in_free_cash_flow", "include")),
   };
@@ -734,22 +756,8 @@ export default function App() {
   const hasLoadedStorage = useRef(false);
 
   const tickerMap = useMemo(() => Object.fromEntries(tickers.map((row) => [row.symbol, row])), [tickers]);
-  const accountMap = useMemo(
-    () =>
-      Object.fromEntries(
-        accounts.map((row) => [normalizeLookupKey(row.account), row]).filter((entry) => entry[0] !== "")
-      ),
-    [accounts]
-  );
-  const accountTaxStatusByName = useMemo(
-    () =>
-      Object.fromEntries(
-        accounts
-          .map((row) => [normalizeLookupKey(row.account), String(row.taxStatus || "")] as const)
-          .filter((entry) => entry[0] !== "")
-      ),
-    [accounts]
-  );
+  const accountMap = useMemo(() => buildAccountLookupMap(accounts), [accounts]);
+  const accountTaxStatusByName = useMemo(() => buildAccountTaxStatusMap(accounts), [accounts]);
   const accountTaxStatusOptions = useMemo(() => {
     const values = accountTaxTypes
       .map((row) => String(row.taxStatus || "").trim())
