@@ -13,6 +13,7 @@ const ENTITY_KEYS = [
     "settings#federal",
     "settings#state",
     "settings#planner",
+    "settings#ui",
 ];
 const TAB_TO_ENTITY = {
     investments: "tab#investments",
@@ -24,6 +25,7 @@ const TAB_TO_ENTITY = {
     federalSettings: "settings#federal",
     stateSettings: "settings#state",
     plannerSettings: "settings#planner",
+    uiSettings: "settings#ui",
 };
 const ENTITY_TO_RESPONSE_KEY = {
     "tab#investments": { group: "tabs", key: "investments" },
@@ -35,6 +37,7 @@ const ENTITY_TO_RESPONSE_KEY = {
     "settings#federal": { group: "settings", key: "federal" },
     "settings#state": { group: "settings", key: "state" },
     "settings#planner": { group: "settings", key: "planner" },
+    "settings#ui": { group: "settings", key: "ui" },
 };
 function getRequiredEnv(name) {
     const value = process.env[name];
