@@ -682,7 +682,6 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
-  const [favoriteQuery, setFavoriteQuery] = useState("");
   const [newFavoriteName, setNewFavoriteName] = useState("");
   const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
   const [renameTarget, setRenameTarget] = useState("");
@@ -721,12 +720,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 
     return "investment-row";
   };
-  const filteredFavorites = useMemo(() => {
-    const query = normalizeLookupKey(favoriteQuery);
-    const sorted = [...favorites].sort((a, b) => a.name.localeCompare(b.name));
-    if (!query) return sorted;
-    return sorted.filter((favorite) => normalizeLookupKey(favorite.name).includes(query));
-  }, [favorites, favoriteQuery]);
+  const filteredFavorites = useMemo(
+    () => [...favorites].sort((a, b) => a.name.localeCompare(b.name)),
+    [favorites]
+  );
   useEffect(() => {
     if (filteredFavorites.length === 0) {
       setSelectedFavoriteName("");
@@ -793,14 +790,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
             <div className="favorites-panel__header">
               <h3>Favorites</h3>
               <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsFavoritesPanelOpen(false)}>Close</button>
-            </div>
-            <div className="favorites-panel__search">
-              <input
-                type="text"
-                value={favoriteQuery}
-                onChange={(event) => setFavoriteQuery(event.target.value)}
-                placeholder="Search favorites"
-              />
             </div>
             <div className="favorites-panel__new">
               <input
