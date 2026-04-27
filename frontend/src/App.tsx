@@ -130,6 +130,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
+const CHATGPT_URL = "https://chatgpt.com/";
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
@@ -1552,7 +1553,7 @@ export default function App() {
           <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
           <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
         </div>
-        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>{isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}</button><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
+        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>{isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}</button><a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
         {isSheetPanelOpen && (
           <section className="ai-panel" aria-label="Google spreadsheet panel">
             <div className="ai-panel__header">
