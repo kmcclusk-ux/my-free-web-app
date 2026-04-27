@@ -6,6 +6,7 @@ const lib_dynamodb_1 = require("@aws-sdk/lib-dynamodb");
 const ENTITY_KEYS = [
     "tab#investments",
     "tab#tickers",
+    "tab#categories",
     "tab#taxTreatment",
     "tab#accounts",
     "tab#accountTaxType",
@@ -13,11 +14,13 @@ const ENTITY_KEYS = [
     "settings#federal",
     "settings#state",
     "settings#planner",
+    "settings#formulas",
     "settings#ui",
 ];
 const TAB_TO_ENTITY = {
     investments: "tab#investments",
     tickers: "tab#tickers",
+    categories: "tab#categories",
     taxTreatment: "tab#taxTreatment",
     accounts: "tab#accounts",
     accountTaxType: "tab#accountTaxType",
@@ -25,11 +28,13 @@ const TAB_TO_ENTITY = {
     federalSettings: "settings#federal",
     stateSettings: "settings#state",
     plannerSettings: "settings#planner",
+    formulaSettings: "settings#formulas",
     uiSettings: "settings#ui",
 };
 const ENTITY_TO_RESPONSE_KEY = {
     "tab#investments": { group: "tabs", key: "investments" },
     "tab#tickers": { group: "tabs", key: "tickers" },
+    "tab#categories": { group: "tabs", key: "categories" },
     "tab#taxTreatment": { group: "tabs", key: "taxTreatment" },
     "tab#accounts": { group: "tabs", key: "accounts" },
     "tab#accountTaxType": { group: "tabs", key: "accountTaxType" },
@@ -37,6 +42,7 @@ const ENTITY_TO_RESPONSE_KEY = {
     "settings#federal": { group: "settings", key: "federal" },
     "settings#state": { group: "settings", key: "state" },
     "settings#planner": { group: "settings", key: "planner" },
+    "settings#formulas": { group: "settings", key: "formulas" },
     "settings#ui": { group: "settings", key: "ui" },
 };
 function getRequiredEnv(name) {

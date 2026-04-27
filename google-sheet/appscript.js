@@ -693,6 +693,46 @@ function sheetToMatrix_(sheet) {
   });
 }
 
+function sheetToFormulaSnapshot_(sheet) {
+  if (!sheet) {
+    return {
+      sheetName: null,
+      range: null,
+      formulaCount: 0,
+      formulaCells: []
+    };
+  }
+
+  var range = sheet.getDataRange();
+  var formulas = range.getFormulas();
+  var formulasR1C1 = range.getFormulasR1C1();
+  var values = range.getDisplayValues();
+  var formulaCells = [];
+
+  for (var r = 0; r < formulas.length; r++) {
+    for (var c = 0; c < formulas[r].length; c++) {
+      var formula = String(formulas[r][c] || '').trim();
+      if (!formula) continue;
+
+      formulaCells.push({
+        a1: sheet.getRange(r + 1, c + 1).getA1Notation(),
+        row: r + 1,
+        column: c + 1,
+        value: values[r][c],
+        formula: formulas[r][c],
+        formulaR1C1: formulasR1C1[r][c]
+      });
+    }
+  }
+
+  return {
+    sheetName: sheet.getName(),
+    range: range.getA1Notation(),
+    formulaCount: formulaCells.length,
+    formulaCells: formulaCells
+  };
+}
+
 function getSheetByNames_(spreadsheet, names) {
   for (var i = 0; i < names.length; i++) {
     var sheet = spreadsheet.getSheetByName(names[i]);
@@ -735,6 +775,20 @@ function collectWorkbookExportPayload_() {
       planner: {
         sheetName: plannerSheet ? plannerSheet.getName() : null,
         rows: sheetToMatrix_(plannerSheet)
+      },
+      formulas: {
+        exportedAt: new Date().toISOString(),
+        sheets: {
+          investments: sheetToFormulaSnapshot_(investmentsSheet),
+          tickers: sheetToFormulaSnapshot_(tickersSheet),
+          taxTreatment: sheetToFormulaSnapshot_(taxTreatmentSheet),
+          accounts: sheetToFormulaSnapshot_(accountsSheet),
+          accountTaxType: sheetToFormulaSnapshot_(accountTaxTypeSheet),
+          investmentType: sheetToFormulaSnapshot_(investmentTypeSheet),
+          federal: sheetToFormulaSnapshot_(federalSheet),
+          state: sheetToFormulaSnapshot_(stateSheet),
+          planner: sheetToFormulaSnapshot_(plannerSheet)
+        }
       }
     }
   };
