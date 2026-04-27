@@ -129,7 +129,7 @@ type WorkbookResponse = {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
-const CHATGPT_URL = "https://chatgpt.com/";
+const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
@@ -1072,7 +1072,7 @@ export default function App() {
   const [taxCalcError, setTaxCalcError] = useState<string | null>(null);
   const [taxCalcStateResult, setTaxCalcStateResult] = useState<TaxResult | null>(null);
   const [taxCalcStateError, setTaxCalcStateError] = useState<string | null>(null);
-  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [isSheetPanelOpen, setIsSheetPanelOpen] = useState(false);
   const [federalResult, setFederalResult] = useState<TaxResult | null>(null);
   const [stateResult, setStateResult] = useState<TaxResult | null>(null);
   const [federalError, setFederalError] = useState<string | null>(null);
@@ -1552,23 +1552,23 @@ export default function App() {
           <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
           <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
         </div>
-        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsAiPanelOpen((current) => !current)}>{isAiPanelOpen ? "Close AI" : "AI"}</button><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
-        {isAiPanelOpen && (
-          <section className="ai-panel" aria-label="AI assistant panel">
+        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>{isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}</button><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
+        {isSheetPanelOpen && (
+          <section className="ai-panel" aria-label="Google spreadsheet panel">
             <div className="ai-panel__header">
               <div>
-                <p className="eyebrow">AI Workspace</p>
-                <h3>ChatGPT</h3>
+                <p className="eyebrow">Workbook Source</p>
+                <h3>Google Spreadsheet</h3>
               </div>
               <div className="ai-panel__actions">
-                <a className="ghost-button ghost-button--compact" href={CHATGPT_URL} target="_blank" rel="noreferrer">Open ChatGPT</a>
-                <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsAiPanelOpen(false)}>Close</button>
+                <a className="ghost-button ghost-button--compact" href={WORKBOOK_SHEET_URL} target="_blank" rel="noreferrer">Open Sheet</a>
+                <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsSheetPanelOpen(false)}>Close</button>
               </div>
             </div>
             <iframe
               className="ai-panel__frame"
-              src={CHATGPT_URL}
-              title="ChatGPT"
+              src={WORKBOOK_SHEET_URL}
+              title="Google Spreadsheet"
               allow="clipboard-read; clipboard-write; microphone; camera"
             />
           </section>
