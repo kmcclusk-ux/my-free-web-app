@@ -17,6 +17,8 @@ type FilingStatus = "single" | "mfj";
 type TaxResult = { calc: string; tax: number; ordinaryTax?: number; prefTax?: number; niit?: number };
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
+type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
+type ThermometerValue = { amount: number; label: string; value: string; tone: string };
 
 type InvestmentRow = {
   id: number;
@@ -143,6 +145,36 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "accounts", label: "Accounts", meta: "tax status" },
   { key: "accountTaxType", label: "Account Tax Type", meta: "status list" },
   { key: "investmentType", label: "Investment Type", meta: "asset classes" },
+];
+
+const federalOrdinaryRateMarkers: Record<FilingStatus, ThermometerMarker[]> = {
+  mfj: [
+    { amount: 23850, label: "12%", detail: "Federal ordinary 12% bracket starts", tone: "federal" },
+    { amount: 96950, label: "22%", detail: "Federal ordinary 22% bracket starts", tone: "federal" },
+    { amount: 206700, label: "24%", detail: "Federal ordinary 24% bracket starts", tone: "federal" },
+    { amount: 394600, label: "32%", detail: "Federal ordinary 32% bracket starts", tone: "federal" },
+    { amount: 501050, label: "35%", detail: "Federal ordinary 35% bracket starts", tone: "federal" },
+    { amount: 751600, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
+  ],
+  single: [
+    { amount: 11925, label: "12%", detail: "Federal ordinary 12% bracket starts", tone: "federal" },
+    { amount: 48475, label: "22%", detail: "Federal ordinary 22% bracket starts", tone: "federal" },
+    { amount: 103350, label: "24%", detail: "Federal ordinary 24% bracket starts", tone: "federal" },
+    { amount: 197300, label: "32%", detail: "Federal ordinary 32% bracket starts", tone: "federal" },
+    { amount: 250525, label: "35%", detail: "Federal ordinary 35% bracket starts", tone: "federal" },
+    { amount: 626350, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
+  ],
+};
+const caTaxRateMarkers: ThermometerMarker[] = [
+  { amount: 21512, label: "2%", detail: "California 2% bracket starts", tone: "state" },
+  { amount: 50998, label: "4%", detail: "California 4% bracket starts", tone: "state" },
+  { amount: 80490, label: "6%", detail: "California 6% bracket starts", tone: "state" },
+  { amount: 111732, label: "8%", detail: "California 8% bracket starts", tone: "state" },
+  { amount: 141212, label: "9.3%", detail: "California 9.3% bracket starts", tone: "state" },
+  { amount: 721318, label: "10.3%", detail: "California 10.3% bracket starts", tone: "state" },
+  { amount: 865574, label: "11.3%", detail: "California 11.3% bracket starts", tone: "state" },
+  { amount: 1000000, label: "+1%", detail: "California mental health surtax starts", tone: "surtax" },
+  { amount: 1442628, label: "12.3%", detail: "California 12.3% bracket starts", tone: "state" },
 ];
 
 const categoryLabels = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"];
@@ -703,6 +735,87 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
 
 function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return <section className="sheet-section"><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
+}
+
+function TaxThermometer({ title, subtitle, values, markers }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[] }) {
+  const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
+  const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
+  const toPercent = (amount: number) => `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%`;
+
+  return (
+    <div className="tax-thermometer">
+      <div className="tax-thermometer__heading">
+        <div>
+          <strong>{title}</strong>
+          <span>{subtitle}</span>
+        </div>
+        <em>Scale to {formatCurrency(scaleMax)}</em>
+      </div>
+      <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
+        <div className="tax-thermometer__heat" />
+        {markers.map((marker) => (
+          <div
+            key={`${marker.label}-${marker.amount}`}
+            className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
+            style={{ left: toPercent(marker.amount) }}
+            title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
+          >
+            <span>{marker.label}</span>
+          </div>
+        ))}
+        {values.map((value) => (
+          <div
+            key={`${value.label}-${value.tone}`}
+            className={`tax-thermometer__value tax-thermometer__value--${value.tone}`}
+            style={{ left: toPercent(value.amount) }}
+            title={`${value.label}: ${value.value}`}
+          >
+            <span>{value.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="tax-thermometer__legend">
+        {values.map((value) => (
+          <div key={`${value.label}-${value.tone}`}>
+            <span className={`tax-thermometer__dot tax-thermometer__dot--${value.tone}`} />
+            <span>{value.label}</span>
+            <strong>{value.value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, niitThreshold }: { totalIncome: number; federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; niitThreshold: number }) {
+  const totalTax = federalTax + stateTax;
+  const federalMarkers = [
+    ...federalOrdinaryRateMarkers[filingStatus],
+    { amount: niitThreshold, label: "NIIT", detail: "Federal NIIT MAGI threshold", tone: "surtax" },
+  ].sort((a, b) => a.amount - b.amount);
+  const federalValues: ThermometerValue[] = [
+    { amount: totalIncome, label: "Total income", value: formatCurrencyDetailed(totalIncome), tone: "income" },
+    { amount: federalTaxable, label: "Fed taxable", value: formatCurrencyDetailed(federalTaxable), tone: "taxable" },
+    { amount: totalTax, label: "Total tax", value: formatCurrencyDetailed(totalTax), tone: "tax" },
+  ];
+  const stateValues: ThermometerValue[] = [
+    { amount: totalIncome, label: "Total income", value: formatCurrencyDetailed(totalIncome), tone: "income" },
+    { amount: stateTaxable, label: "CA taxable", value: formatCurrencyDetailed(stateTaxable), tone: "taxable" },
+    { amount: totalTax, label: "Total tax", value: formatCurrencyDetailed(totalTax), tone: "tax" },
+  ];
+
+  return (
+    <div className="tax-thermometer-panel">
+      <div className="tax-thermometer-panel__summary">
+        <div><span>Total income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div><span>Federal taxable</span><strong>{formatCurrencyDetailed(federalTaxable)}</strong></div>
+        <div><span>CA taxable</span><strong>{formatCurrencyDetailed(stateTaxable)}</strong></div>
+        <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+      </div>
+      <TaxThermometer title="Federal Tax Thermometer" subtitle={`2025 ordinary brackets, ${filingStatus.toUpperCase()}, plus NIIT`} values={federalValues} markers={federalMarkers} />
+      <TaxThermometer title="California Tax Thermometer" subtitle="2025 CA MFJ brackets plus 1% surtax trigger" values={stateValues} markers={caTaxRateMarkers} />
+    </div>
+  );
 }
 
 function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove }: { title: string; subtitle: string; rows: T[]; columns: Array<{ key: keyof T; label: string; type?: "text" | "number" | "select"; options?: string[] }>; onChange: (id: number, field: keyof T, value: string) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
@@ -1607,6 +1720,15 @@ export default function App() {
           <MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} />
           <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
           <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
+          <TaxThermometerPanel
+            totalIncome={flows.totalIncome}
+            federalTaxable={federalTaxableAfterDeductions}
+            stateTaxable={stateTaxableAfterDeductions}
+            federalTax={federalResult?.tax || 0}
+            stateTax={stateResult?.tax || 0}
+            filingStatus={federalSettings.filingStatus}
+            niitThreshold={niitThreshold}
+          />
         </div>
         <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>{isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}</button><a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
         {isSheetPanelOpen && (

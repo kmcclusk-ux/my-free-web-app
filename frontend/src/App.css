@@ -11,6 +11,34 @@
 .nav-item--active strong,.nav-item--active span { color: #f7faf8; }
 .content-panel { padding: 0 22px 28px; }
 .summary-ribbon { position: sticky; top: 0; z-index: 10; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; padding: 18px 0 14px; background: linear-gradient(180deg, rgba(238,244,240,.96), rgba(238,244,240,.82), transparent); backdrop-filter: blur(8px); }
+.tax-thermometer-panel { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, .8fr) repeat(2, minmax(320px, 1fr)); gap: 12px; align-items: stretch; }
+.tax-thermometer-panel__summary, .tax-thermometer { border: 1px solid rgba(24,49,58,.1); border-radius: 20px; background: rgba(255,255,255,.82); box-shadow: 0 16px 34px rgba(24,49,58,.08); }
+.tax-thermometer-panel__summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 14px; }
+.tax-thermometer-panel__summary div { padding: 10px; border-radius: 14px; background: rgba(238,244,240,.72); }
+.tax-thermometer-panel__summary span, .tax-thermometer__heading span, .tax-thermometer__heading em, .tax-thermometer__legend span { display: block; color: #62767a; font-size: .72rem; }
+.tax-thermometer-panel__summary strong { display: block; margin-top: 4px; color: #17313a; font-size: .98rem; }
+.tax-thermometer { padding: 14px; overflow: hidden; }
+.tax-thermometer__heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.tax-thermometer__heading strong { display: block; color: #17313a; font-size: .95rem; }
+.tax-thermometer__heading em { font-style: normal; white-space: nowrap; }
+.tax-thermometer__track { position: relative; height: 78px; border-radius: 999px; background: linear-gradient(90deg, rgba(61,145,123,.16), rgba(231,188,87,.22), rgba(196,90,62,.26)); border: 1px solid rgba(24,49,58,.1); overflow: visible; }
+.tax-thermometer__heat { position: absolute; inset: 26px 10px; border-radius: 999px; background: linear-gradient(90deg, #5aa77b, #d8ad43, #ba4d3c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); }
+.tax-thermometer__tick { position: absolute; top: 16px; bottom: 12px; width: 1px; background: rgba(24,49,58,.28); transform: translateX(-50%); }
+.tax-thermometer__tick span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); padding: 1px 4px; border-radius: 999px; background: rgba(255,255,255,.88); color: #40595f; font-size: .62rem; white-space: nowrap; }
+.tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
+.tax-thermometer__tick--surtax span { color: #7f4b29; }
+.tax-thermometer__value { position: absolute; top: 38px; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); }
+.tax-thermometer__value span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
+.tax-thermometer__value--income { background: #17313a; }
+.tax-thermometer__value--taxable { background: #2f7480; }
+.tax-thermometer__value--tax { background: #c3732c; }
+.tax-thermometer__legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+.tax-thermometer__legend div { display: flex; align-items: center; gap: 5px; }
+.tax-thermometer__legend strong { color: #17313a; font-size: .78rem; }
+.tax-thermometer__dot { width: 8px; height: 8px; border-radius: 999px; }
+.tax-thermometer__dot--income { background: #17313a; }
+.tax-thermometer__dot--taxable { background: #2f7480; }
+.tax-thermometer__dot--tax { background: #c3732c; }
 .content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
 .content-topbar h2 { margin: 4px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.8rem; color: #18313a; }
 .topbar-chip { padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,.82); border: 1px solid rgba(24,49,58,.1); color: #4f666d; font-size: .88rem; }
@@ -46,7 +74,7 @@
 .status-card { margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; }
 .status-card--error { border: 1px solid rgba(167,63,43,.14); background: rgba(255,236,232,.92); color: #8f3623; }
 .status-card--note { border: 1px solid rgba(35,96,106,.14); background: rgba(235,246,248,.94); color: #285860; }
-@media (max-width: 980px) { .workspace-shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .content-panel { padding: 0 16px 20px; } .content-topbar { flex-direction: column; align-items: flex-start; } }
+@media (max-width: 980px) { .workspace-shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .content-panel { padding: 0 16px 20px; } .content-topbar { flex-direction: column; align-items: flex-start; } .tax-thermometer-panel { grid-template-columns: 1fr; } }
 
 .topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .ai-button { display: inline-flex; align-items: center; border: 1px solid rgba(24,49,58,.12); border-radius: 999px; padding: 8px 14px; background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; font-weight: 700; letter-spacing: .08em; text-decoration: none; }
