@@ -59,11 +59,14 @@
 
 .readonly-cell { min-width: 88px; padding: 7px 8px; border-radius: 10px; background: rgba(231, 238, 239, 0.9); color: #21414a; font-size: .84rem; }
 .readonly-cell--text { min-width: 120px; }
+.readonly-cell--total { background: rgba(255, 248, 219, .96); color: #17313a; font-weight: 800; }
 .checkbox-cell { text-align: center; }
 .checkbox-cell input { width: 16px; height: 16px; }
 .sheet-table--workbook { min-width: 3600px; }
 .sheet-table--workbook th, .sheet-table--workbook td { white-space: nowrap; vertical-align: middle; }
 .sheet-table--workbook select, .sheet-table--workbook input { min-width: 92px; }
+.sheet-table--workbook tfoot th, .sheet-table--workbook tfoot td { position: sticky; bottom: 0; z-index: 2; background: rgba(250, 246, 225, .98); border-top: 2px solid rgba(127, 75, 41, .28); box-shadow: 0 -10px 24px rgba(24,49,58,.08); }
+.sheet-table--workbook tfoot th { color: #17313a; font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }
 .drag-handle-heading, .drag-handle-cell { width: 36px; min-width: 36px; text-align: center; }
 .drag-handle { width: 28px; height: 24px; border-radius: 8px; border: 1px solid rgba(24,49,58,.18); background: rgba(255,255,255,.82); color: #34565d; cursor: grab; font-weight: 700; line-height: 1; }
 .drag-handle:active { cursor: grabbing; }

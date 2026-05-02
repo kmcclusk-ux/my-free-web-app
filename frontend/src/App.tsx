@@ -906,6 +906,31 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (dragOverRowId === row.id && draggingRowId !== row.id) classes.push("investment-row--drag-over");
     return classes.join(" ");
   };
+  const totals = derivedRows.reduce((acc, row) => {
+    acc.totalInvestment += toNumber(row.totalInvestment);
+    acc.yearlyIncome += toNumber(row.yearlyIncome);
+    acc.monthlyIncome += row.monthlyIncome;
+    acc.extraData += row.extraData;
+    acc.filteredIncome += row.filteredIncome;
+    acc.includedTotal += row.includedTotal;
+    acc.ordinary += row.ordinaryMonthly * 12;
+    acc.preferred += row.preferredMonthly * 12;
+    acc.state += row.stateMonthly * 12;
+    acc.nonTaxable += row.nonTaxableMonthly * 12;
+    acc.nonInvestmentIncome += row.nonInvestmentIncome;
+    acc.cash += row.cash;
+    acc.stocks += row.stocks;
+    acc.preferredStock += row.preferredStock;
+    acc.bonds += row.bonds;
+    acc.muniBond += row.muniBond;
+    acc.muniInterest += row.muniInterest;
+    acc.businessDevelopment += row.businessDevelopment;
+    acc.coveredCall += row.coveredCall;
+    acc.realEstate += row.realEstate;
+    acc.bitcoin += row.bitcoin;
+    return acc;
+  }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
+  const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--total">{formatCurrencyDetailed(value)}</div></td>;
 
   return (
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic.">
@@ -1050,6 +1075,36 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="investment-total-row">
+              <td /><th scope="row">Totals</th><td /><td />
+              {renderTotalCell(totals.totalInvestment)}
+              {renderTotalCell(totals.yearlyIncome)}
+              {renderTotalCell(totals.monthlyIncome)}
+              <td /><td /><td /><td /><td /><td /><td /><td />
+              {renderTotalCell(totals.extraData)}
+              {renderTotalCell(totals.filteredIncome)}
+              {renderTotalCell(totals.includedTotal)}
+              <td />
+              {renderTotalCell(totals.ordinary)}
+              {renderTotalCell(totals.preferred)}
+              {renderTotalCell(totals.state)}
+              {renderTotalCell(totals.nonTaxable)}
+              <td />
+              {renderTotalCell(totals.nonInvestmentIncome)}
+              {renderTotalCell(totals.cash)}
+              {renderTotalCell(totals.stocks)}
+              {renderTotalCell(totals.preferredStock)}
+              {renderTotalCell(totals.bonds)}
+              {renderTotalCell(totals.muniBond)}
+              {renderTotalCell(totals.muniInterest)}
+              {renderTotalCell(totals.businessDevelopment)}
+              {renderTotalCell(totals.coveredCall)}
+              {renderTotalCell(totals.realEstate)}
+              {renderTotalCell(totals.bitcoin)}
+              <td />
+            </tr>
+          </tfoot>
         </table>
       </div>
     </Section>
