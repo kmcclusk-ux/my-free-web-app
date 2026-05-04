@@ -740,6 +740,11 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
 function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
   const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
   const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
+  const animationKey = [
+    scaleMax,
+    ...values.map((value) => Math.round(value.amount)),
+    ...markers.map((marker) => Math.round(marker.amount)),
+  ].join("-");
   const toPercent = (amount: number) => `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%`;
 
   return (
@@ -759,12 +764,13 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
       {!collapsed && (
         <>
           <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
-            <div className="tax-thermometer__heat" />
-            {markers.map((marker) => (
+            <div key={`heat-${animationKey}`} className="tax-thermometer__heat" />
+            <div key={`sweep-${animationKey}`} className="tax-thermometer__milestone-sweep" aria-hidden="true" />
+            {markers.map((marker, index) => (
               <div
-                key={`${marker.label}-${marker.amount}`}
+                key={`${animationKey}-${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
-                style={{ left: toPercent(marker.amount) }}
+                style={{ left: toPercent(marker.amount), animationDelay: `${Math.min(index * 34, 320)}ms` }}
                 title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
               >
                 <span>{marker.label}</span>
