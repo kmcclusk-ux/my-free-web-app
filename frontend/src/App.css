@@ -33,8 +33,8 @@
 .tax-thermometer__heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .tax-thermometer__toggle { min-width: 58px; }
 .tax-thermometer__track { position: relative; height: 78px; border-radius: 999px; background: linear-gradient(90deg, rgba(61,145,123,.16), rgba(231,188,87,.22), rgba(196,90,62,.26)); border: 1px solid rgba(24,49,58,.1); overflow: visible; isolation: isolate; }
-.tax-thermometer__heat { position: absolute; inset: 26px 10px; z-index: 0; border-radius: 999px; background: radial-gradient(circle at var(--thermometer-focus-center, 50%) 50%, rgba(255,255,255,.45), rgba(255,255,255,.18) 19%, transparent 36%), linear-gradient(90deg, #5aa77b, #d8ad43, #ba4d3c); background-size: 150% 100%, 145% 100%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); animation: tax-heat-slide 980ms cubic-bezier(.22, 1, .36, 1) both; will-change: background-position; }
-.tax-thermometer__milestone-sweep { position: absolute; inset: 26px 10px; z-index: 1; border-radius: 999px; background: linear-gradient(100deg, transparent 0%, transparent 35%, rgba(255,255,255,.74) 48%, rgba(255,255,255,.3) 56%, transparent 70%, transparent 100%); background-size: 230% 100%; pointer-events: none; animation: tax-milestone-sweep 1040ms cubic-bezier(.22, 1, .36, 1) both; will-change: background-position, opacity; }
+.tax-thermometer__heat { position: absolute; inset: 26px 10px; z-index: 0; border-radius: 999px; background: linear-gradient(90deg, #5aa77b 0%, #d8ad43 50%, #ba4d3c 100%); background-size: 185% 100%; background-position: var(--thermometer-bg-position, 50%) 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); transition: background-position 980ms cubic-bezier(.22, 1, .36, 1); will-change: background-position; }
+.tax-thermometer__milestone-sweep { position: absolute; inset: 26px 10px; z-index: 1; border-radius: 999px; background: linear-gradient(100deg, transparent 0%, transparent 35%, rgba(255,255,255,.74) 48%, rgba(255,255,255,.3) 56%, transparent 70%, transparent 100%); background-size: 230% 100%; background-position: var(--thermometer-bg-position, 50%) 0; pointer-events: none; animation: tax-milestone-sweep 1040ms cubic-bezier(.22, 1, .36, 1) both; will-change: transform, opacity; }
 .tax-thermometer__tick { position: absolute; top: 16px; bottom: 12px; z-index: 2; width: 1px; background: rgba(24,49,58,.28); transform: translateX(-50%); animation: tax-milestone-rise 560ms cubic-bezier(.22, 1, .36, 1) both; transition: left 640ms cubic-bezier(.22, 1, .36, 1); }
 .tax-thermometer__tick span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); padding: 1px 4px; border-radius: 999px; background: rgba(255,255,255,.88); color: #40595f; font-size: .62rem; white-space: nowrap; }
 .tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
@@ -51,8 +51,7 @@
 .tax-thermometer__dot--income { background: #17313a; }
 .tax-thermometer__dot--taxable { background: #2f7480; }
 .tax-thermometer__dot--tax { background: #c3732c; }
-@keyframes tax-heat-slide { from { background-position: var(--thermometer-pan-start, 78%) 0, var(--thermometer-pan-start, 78%) 0; } to { background-position: var(--thermometer-pan-end, 22%) 0, var(--thermometer-pan-end, 22%) 0; } }
-@keyframes tax-milestone-sweep { 0% { background-position: var(--thermometer-pan-start, 78%) 0; opacity: 0; } 18% { opacity: .95; } 100% { background-position: var(--thermometer-pan-end, 22%) 0; opacity: 0; } }
+@keyframes tax-milestone-sweep { 0% { opacity: 0; transform: translateX(22%); } 18% { opacity: .95; } 100% { opacity: 0; transform: translateX(-22%); } }
 @keyframes tax-milestone-rise { from { opacity: 0; transform: translate(-50%, 10px) scaleY(.72); } to { opacity: 1; transform: translateX(-50%) scaleY(1); } }
 @media (prefers-reduced-motion: reduce) { .tax-thermometer__value, .tax-thermometer__tick, .tax-thermometer__heat, .tax-thermometer__milestone-sweep { transition: none; animation: none; will-change: auto; } }
 .content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }

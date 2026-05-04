@@ -738,6 +738,7 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
 }
 
 function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
+  const fixedViewportRef = useRef<{ range: number; center: number } | null>(null);
   const focusAmounts = values
     .filter((value) => value.tone === "income" || value.tone === "taxable")
     .map((value) => Math.max(0, value.amount));
@@ -745,25 +746,31 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
   const focusLow = focusAmounts.length > 0 ? Math.min(...focusAmounts) : 0;
   const focusHigh = focusAmounts.length > 0 ? Math.max(...focusAmounts) : fallbackMax;
   const focusCenter = (focusLow + focusHigh) / 2;
-  const focusPadding = Math.max((focusHigh - focusLow) * 0.3, focusCenter * 0.28, 25000);
+  const focusSpread = Math.max(0, focusHigh - focusLow);
+  const focusPadding = Math.max(focusSpread * 0.3, focusCenter * 0.28, 25000);
   const scaleStep = focusCenter >= 750000 ? 100000 : focusCenter >= 250000 ? 50000 : 25000;
-  const scaleMin = Math.max(0, Math.floor(Math.max(0, focusLow - focusPadding) / scaleStep) * scaleStep);
-  const scaleMax = Math.max(scaleMin + scaleStep, Math.ceil((focusHigh + focusPadding) / scaleStep) * scaleStep);
-  const scaleRange = Math.max(1, scaleMax - scaleMin);
-  const focusCenterPercent = Math.max(0, Math.min(100, ((focusCenter - scaleMin) / scaleRange) * 100));
-  const panDistance = Math.max(20, Math.min(30, ((focusHigh - focusLow) / scaleRange) * 50 + 20));
+  const measuredRange = Math.max(scaleStep * 2, Math.ceil((focusSpread + focusPadding * 2) / scaleStep) * scaleStep);
+
+  if (!fixedViewportRef.current && focusHigh > 0) {
+    fixedViewportRef.current = { range: measuredRange, center: focusCenter };
+  }
+
+  const fixedViewport = fixedViewportRef.current || { range: measuredRange, center: focusCenter };
+  const scaleRange = Math.max(1, fixedViewport.range);
+  const scaleMin = Math.max(0, focusCenter - scaleRange / 2);
+  const scaleMax = scaleMin + scaleRange;
+  const initialCenter = fixedViewport.center;
+  const backgroundShift = Math.max(12, Math.min(88, 50 - ((focusCenter - initialCenter) / scaleRange) * 70));
   const visibleMarkers = markers.filter((marker) => marker.amount >= scaleMin && marker.amount <= scaleMax);
   const animationKey = [
-    scaleMin,
-    scaleMax,
+    Math.round(scaleMin),
+    Math.round(scaleMax),
     ...values.map((value) => Math.round(value.amount)),
     ...markers.map((marker) => Math.round(marker.amount)),
   ].join("-");
   const toPercent = (amount: number) => `${Math.max(0, Math.min(100, ((amount - scaleMin) / scaleRange) * 100))}%`;
   const trackStyle = {
-    "--thermometer-pan-start": `${Math.max(0, Math.min(100, focusCenterPercent + panDistance))}%`,
-    "--thermometer-pan-end": `${Math.max(0, Math.min(100, focusCenterPercent - panDistance))}%`,
-    "--thermometer-focus-center": `${focusCenterPercent}%`,
+    "--thermometer-bg-position": `${backgroundShift}%`,
   } as CSSProperties;
 
   return (
@@ -783,11 +790,11 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
       {!collapsed && (
         <>
           <div className="tax-thermometer__track" style={trackStyle} aria-label={`${title} tax threshold thermometer`}>
-            <div key={`heat-${animationKey}`} className="tax-thermometer__heat" />
+            <div className="tax-thermometer__heat" />
             <div key={`sweep-${animationKey}`} className="tax-thermometer__milestone-sweep" aria-hidden="true" />
             {visibleMarkers.map((marker, index) => (
               <div
-                key={`${animationKey}-${marker.label}-${marker.amount}`}
+                key={`${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
                 style={{ left: toPercent(marker.amount), animationDelay: `${Math.min(index * 34, 320)}ms` }}
                 title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
