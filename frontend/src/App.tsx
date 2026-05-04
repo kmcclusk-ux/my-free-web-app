@@ -737,57 +737,67 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
   return <section className="sheet-section"><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
 }
 
-function TaxThermometer({ title, subtitle, values, markers }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[] }) {
+function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
   const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
   const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
   const toPercent = (amount: number) => `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%`;
 
   return (
-    <div className="tax-thermometer">
+    <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
       <div className="tax-thermometer__heading">
         <div>
           <strong>{title}</strong>
           <span>{subtitle}</span>
         </div>
-        <em>Scale to {formatCurrency(scaleMax)}</em>
+        <div className="tax-thermometer__heading-actions">
+          <em>Scale to {formatCurrency(scaleMax)}</em>
+          <button className="ghost-button ghost-button--compact tax-thermometer__toggle" type="button" onClick={onToggle} aria-expanded={!collapsed}>
+            {collapsed ? "Show" : "Hide"}
+          </button>
+        </div>
       </div>
-      <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
-        <div className="tax-thermometer__heat" />
-        {markers.map((marker) => (
-          <div
-            key={`${marker.label}-${marker.amount}`}
-            className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
-            style={{ left: toPercent(marker.amount) }}
-            title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
-          >
-            <span>{marker.label}</span>
+      {!collapsed && (
+        <>
+          <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
+            <div className="tax-thermometer__heat" />
+            {markers.map((marker) => (
+              <div
+                key={`${marker.label}-${marker.amount}`}
+                className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
+                style={{ left: toPercent(marker.amount) }}
+                title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
+              >
+                <span>{marker.label}</span>
+              </div>
+            ))}
+            {values.map((value) => (
+              <div
+                key={`${value.label}-${value.tone}`}
+                className={`tax-thermometer__value tax-thermometer__value--${value.tone}`}
+                style={{ left: toPercent(value.amount) }}
+                title={`${value.label}: ${value.value}`}
+              >
+                <span>{value.label}</span>
+              </div>
+            ))}
           </div>
-        ))}
-        {values.map((value) => (
-          <div
-            key={`${value.label}-${value.tone}`}
-            className={`tax-thermometer__value tax-thermometer__value--${value.tone}`}
-            style={{ left: toPercent(value.amount) }}
-            title={`${value.label}: ${value.value}`}
-          >
-            <span>{value.label}</span>
+          <div className="tax-thermometer__legend">
+            {values.map((value) => (
+              <div key={`${value.label}-${value.tone}`}>
+                <span className={`tax-thermometer__dot tax-thermometer__dot--${value.tone}`} />
+                <span>{value.label}</span>
+                <strong>{value.value}</strong>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="tax-thermometer__legend">
-        {values.map((value) => (
-          <div key={`${value.label}-${value.tone}`}>
-            <span className={`tax-thermometer__dot tax-thermometer__dot--${value.tone}`} />
-            <span>{value.label}</span>
-            <strong>{value.value}</strong>
-          </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }
 
 function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, niitThreshold }: { totalIncome: number; federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; niitThreshold: number }) {
+  const [collapsedSections, setCollapsedSections] = useState({ federal: false, state: false });
   const totalTax = federalTax + stateTax;
   const federalMarkers = [
     ...federalOrdinaryRateMarkers[filingStatus],
@@ -812,8 +822,8 @@ function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federa
         <div><span>CA taxable</span><strong>{formatCurrencyDetailed(stateTaxable)}</strong></div>
         <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
       </div>
-      <TaxThermometer title="Federal Tax Thermometer" subtitle={`2025 ordinary brackets, ${filingStatus.toUpperCase()}, plus NIIT`} values={federalValues} markers={federalMarkers} />
-      <TaxThermometer title="California Tax Thermometer" subtitle="2025 CA MFJ brackets plus 1% surtax trigger" values={stateValues} markers={caTaxRateMarkers} />
+      <TaxThermometer title="Federal Tax Thermometer" subtitle={`2025 ordinary brackets, ${filingStatus.toUpperCase()}, plus NIIT`} values={federalValues} markers={federalMarkers} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
+      <TaxThermometer title="California Tax Thermometer" subtitle="2025 CA MFJ brackets plus 1% surtax trigger" values={stateValues} markers={caTaxRateMarkers} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
     </div>
   );
 }
