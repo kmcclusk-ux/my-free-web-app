@@ -38,7 +38,7 @@
 .tax-thermometer__tick span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); padding: 1px 4px; border-radius: 999px; background: rgba(255,255,255,.88); color: #40595f; font-size: .62rem; white-space: nowrap; }
 .tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
 .tax-thermometer__tick--surtax span { color: #7f4b29; }
-.tax-thermometer__value { position: absolute; top: 38px; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); }
+.tax-thermometer__value { position: absolute; top: 38px; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); transition: left 640ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms ease; will-change: left; }
 .tax-thermometer__value span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
 .tax-thermometer__value--income { background: #17313a; }
 .tax-thermometer__value--taxable { background: #2f7480; }
@@ -50,6 +50,7 @@
 .tax-thermometer__dot--income { background: #17313a; }
 .tax-thermometer__dot--taxable { background: #2f7480; }
 .tax-thermometer__dot--tax { background: #c3732c; }
+@media (prefers-reduced-motion: reduce) { .tax-thermometer__value { transition: none; will-change: auto; } }
 .content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
 .content-topbar h2 { margin: 4px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.8rem; color: #18313a; }
 .topbar-chip { padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,.82); border: 1px solid rgba(24,49,58,.1); color: #4f666d; font-size: .88rem; }
