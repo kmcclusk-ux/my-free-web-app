@@ -797,7 +797,7 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
 }
 
 function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, niitThreshold }: { totalIncome: number; federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; niitThreshold: number }) {
-  const [collapsedSections, setCollapsedSections] = useState({ federal: false, state: false });
+  const [collapsedSections, setCollapsedSections] = useState({ summary: false, federal: false, state: false });
   const totalTax = federalTax + stateTax;
   const federalMarkers = [
     ...federalOrdinaryRateMarkers[filingStatus],
@@ -816,11 +816,24 @@ function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federa
 
   return (
     <div className="tax-thermometer-panel">
-      <div className="tax-thermometer-panel__summary">
-        <div><span>Total income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
-        <div><span>Federal taxable</span><strong>{formatCurrencyDetailed(federalTaxable)}</strong></div>
-        <div><span>CA taxable</span><strong>{formatCurrencyDetailed(stateTaxable)}</strong></div>
-        <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+      <div className={`tax-thermometer-panel__summary ${collapsedSections.summary ? "tax-thermometer-panel__summary--collapsed" : ""}`}>
+        <div className="tax-thermometer-panel__summary-heading">
+          <div>
+            <strong>Tax Output Summary</strong>
+            <span>Live taxable income and tax totals</span>
+          </div>
+          <button className="ghost-button ghost-button--compact" type="button" onClick={() => setCollapsedSections((current) => ({ ...current, summary: !current.summary }))} aria-expanded={!collapsedSections.summary}>
+            {collapsedSections.summary ? "Show" : "Hide"}
+          </button>
+        </div>
+        {!collapsedSections.summary && (
+          <div className="tax-thermometer-panel__summary-grid">
+            <div><span>Total income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+            <div><span>Federal taxable</span><strong>{formatCurrencyDetailed(federalTaxable)}</strong></div>
+            <div><span>CA taxable</span><strong>{formatCurrencyDetailed(stateTaxable)}</strong></div>
+            <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+          </div>
+        )}
       </div>
       <TaxThermometer title="Federal Tax Thermometer" subtitle={`2025 ordinary brackets, ${filingStatus.toUpperCase()}, plus NIIT`} values={federalValues} markers={federalMarkers} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
       <TaxThermometer title="California Tax Thermometer" subtitle="2025 CA MFJ brackets plus 1% surtax trigger" values={stateValues} markers={caTaxRateMarkers} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
@@ -1235,6 +1248,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 }
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
+  const [topOutputsCollapsed, setTopOutputsCollapsed] = useState(false);
   const [investments, setInvestments] = useState(initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
   const [categories, setCategories] = useState(initialCategories);
@@ -1723,13 +1737,28 @@ export default function App() {
       </aside>
       <main className="content-panel">
         <div className="summary-ribbon">
-          <MetricCard label="Total investment amount" value={formatCurrency(flows.totalInvestmentAmount)} tone="accent" />
-          <MetricCard label="Annual income" value={formatCurrency(flows.totalIncome)} />
-          <MetricCard label="Portfolio yield" value={formatPercent(flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0)} />
-          <MetricCard label="After-tax income" value={formatCurrency(afterTaxIncome)} tone="warning" />
-          <MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} />
-          <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
-          <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
+          <div className={`summary-ribbon__group ${topOutputsCollapsed ? "summary-ribbon__group--collapsed" : ""}`}>
+            <div className="summary-ribbon__group-heading">
+              <div>
+                <strong>Portfolio Outputs</strong>
+                <span>Investment totals, income, taxes, and sync status</span>
+              </div>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={() => setTopOutputsCollapsed((current) => !current)} aria-expanded={!topOutputsCollapsed}>
+                {topOutputsCollapsed ? "Show" : "Hide"}
+              </button>
+            </div>
+            {!topOutputsCollapsed && (
+              <div className="summary-ribbon__metrics">
+                <MetricCard label="Total investment amount" value={formatCurrency(flows.totalInvestmentAmount)} tone="accent" />
+                <MetricCard label="Annual income" value={formatCurrency(flows.totalIncome)} />
+                <MetricCard label="Portfolio yield" value={formatPercent(flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0)} />
+                <MetricCard label="After-tax income" value={formatCurrency(afterTaxIncome)} tone="warning" />
+                <MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} />
+                <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
+                <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
+              </div>
+            )}
+          </div>
           <TaxThermometerPanel
             totalIncome={flows.totalIncome}
             federalTaxable={federalTaxableAfterDeductions}
