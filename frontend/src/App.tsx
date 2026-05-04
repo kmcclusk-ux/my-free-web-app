@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import "./App.css";
 
 type TabKey =
@@ -738,14 +738,33 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
 }
 
 function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
-  const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
-  const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
+  const focusAmounts = values
+    .filter((value) => value.tone === "income" || value.tone === "taxable")
+    .map((value) => Math.max(0, value.amount));
+  const fallbackMax = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
+  const focusLow = focusAmounts.length > 0 ? Math.min(...focusAmounts) : 0;
+  const focusHigh = focusAmounts.length > 0 ? Math.max(...focusAmounts) : fallbackMax;
+  const focusCenter = (focusLow + focusHigh) / 2;
+  const focusPadding = Math.max((focusHigh - focusLow) * 0.3, focusCenter * 0.28, 25000);
+  const scaleStep = focusCenter >= 750000 ? 100000 : focusCenter >= 250000 ? 50000 : 25000;
+  const scaleMin = Math.max(0, Math.floor(Math.max(0, focusLow - focusPadding) / scaleStep) * scaleStep);
+  const scaleMax = Math.max(scaleMin + scaleStep, Math.ceil((focusHigh + focusPadding) / scaleStep) * scaleStep);
+  const scaleRange = Math.max(1, scaleMax - scaleMin);
+  const focusCenterPercent = Math.max(0, Math.min(100, ((focusCenter - scaleMin) / scaleRange) * 100));
+  const panDistance = Math.max(20, Math.min(30, ((focusHigh - focusLow) / scaleRange) * 50 + 20));
+  const visibleMarkers = markers.filter((marker) => marker.amount >= scaleMin && marker.amount <= scaleMax);
   const animationKey = [
+    scaleMin,
     scaleMax,
     ...values.map((value) => Math.round(value.amount)),
     ...markers.map((marker) => Math.round(marker.amount)),
   ].join("-");
-  const toPercent = (amount: number) => `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%`;
+  const toPercent = (amount: number) => `${Math.max(0, Math.min(100, ((amount - scaleMin) / scaleRange) * 100))}%`;
+  const trackStyle = {
+    "--thermometer-pan-start": `${Math.max(0, Math.min(100, focusCenterPercent + panDistance))}%`,
+    "--thermometer-pan-end": `${Math.max(0, Math.min(100, focusCenterPercent - panDistance))}%`,
+    "--thermometer-focus-center": `${focusCenterPercent}%`,
+  } as CSSProperties;
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
@@ -755,7 +774,7 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
           <span>{subtitle}</span>
         </div>
         <div className="tax-thermometer__heading-actions">
-          <em>Scale to {formatCurrency(scaleMax)}</em>
+          <em>View {formatCurrency(scaleMin)} to {formatCurrency(scaleMax)}</em>
           <button className="ghost-button ghost-button--compact tax-thermometer__toggle" type="button" onClick={onToggle} aria-expanded={!collapsed}>
             {collapsed ? "Show" : "Hide"}
           </button>
@@ -763,10 +782,10 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
       </div>
       {!collapsed && (
         <>
-          <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
+          <div className="tax-thermometer__track" style={trackStyle} aria-label={`${title} tax threshold thermometer`}>
             <div key={`heat-${animationKey}`} className="tax-thermometer__heat" />
             <div key={`sweep-${animationKey}`} className="tax-thermometer__milestone-sweep" aria-hidden="true" />
-            {markers.map((marker, index) => (
+            {visibleMarkers.map((marker, index) => (
               <div
                 key={`${animationKey}-${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
