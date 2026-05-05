@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import "./App.css";
 
 type TabKey =
@@ -738,40 +738,9 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
 }
 
 function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
-  const fixedViewportRef = useRef<{ range: number; center: number } | null>(null);
-  const focusAmounts = values
-    .filter((value) => value.tone === "income" || value.tone === "taxable")
-    .map((value) => Math.max(0, value.amount));
-  const fallbackMax = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
-  const focusLow = focusAmounts.length > 0 ? Math.min(...focusAmounts) : 0;
-  const focusHigh = focusAmounts.length > 0 ? Math.max(...focusAmounts) : fallbackMax;
-  const focusCenter = (focusLow + focusHigh) / 2;
-  const focusSpread = Math.max(0, focusHigh - focusLow);
-  const focusPadding = Math.max(focusSpread * 0.3, focusCenter * 0.28, 25000);
-  const scaleStep = focusCenter >= 750000 ? 100000 : focusCenter >= 250000 ? 50000 : 25000;
-  const measuredRange = Math.max(scaleStep * 2, Math.ceil((focusSpread + focusPadding * 2) / scaleStep) * scaleStep);
-
-  if (!fixedViewportRef.current && focusHigh > 0) {
-    fixedViewportRef.current = { range: measuredRange, center: focusCenter };
-  }
-
-  const fixedViewport = fixedViewportRef.current || { range: measuredRange, center: focusCenter };
-  const scaleRange = Math.max(1, fixedViewport.range);
-  const scaleMin = Math.max(0, focusCenter - scaleRange / 2);
-  const scaleMax = scaleMin + scaleRange;
-  const initialCenter = fixedViewport.center;
-  const backgroundShift = Math.max(12, Math.min(88, 50 - ((focusCenter - initialCenter) / scaleRange) * 70));
-  const visibleMarkers = markers.filter((marker) => marker.amount >= scaleMin && marker.amount <= scaleMax);
-  const animationKey = [
-    Math.round(scaleMin),
-    Math.round(scaleMax),
-    ...values.map((value) => Math.round(value.amount)),
-    ...markers.map((marker) => Math.round(marker.amount)),
-  ].join("-");
-  const toPercent = (amount: number) => `${Math.max(0, Math.min(100, ((amount - scaleMin) / scaleRange) * 100))}%`;
-  const trackStyle = {
-    "--thermometer-bg-position": `${backgroundShift}%`,
-  } as CSSProperties;
+  const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
+  const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
+  const toPercent = (amount: number) => `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%`;
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
@@ -781,7 +750,7 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
           <span>{subtitle}</span>
         </div>
         <div className="tax-thermometer__heading-actions">
-          <em>View {formatCurrency(scaleMin)} to {formatCurrency(scaleMax)}</em>
+          <em>Scale to {formatCurrency(scaleMax)}</em>
           <button className="ghost-button ghost-button--compact tax-thermometer__toggle" type="button" onClick={onToggle} aria-expanded={!collapsed}>
             {collapsed ? "Show" : "Hide"}
           </button>
@@ -789,14 +758,13 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
       </div>
       {!collapsed && (
         <>
-          <div className="tax-thermometer__track" style={trackStyle} aria-label={`${title} tax threshold thermometer`}>
+          <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
             <div className="tax-thermometer__heat" />
-            <div key={`sweep-${animationKey}`} className="tax-thermometer__milestone-sweep" aria-hidden="true" />
-            {visibleMarkers.map((marker, index) => (
+            {markers.map((marker) => (
               <div
                 key={`${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
-                style={{ left: toPercent(marker.amount), animationDelay: `${Math.min(index * 34, 320)}ms` }}
+                style={{ left: toPercent(marker.amount) }}
                 title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
               >
                 <span>{marker.label}</span>
