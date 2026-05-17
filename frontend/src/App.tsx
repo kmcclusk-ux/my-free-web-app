@@ -733,8 +733,63 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return <section className="sheet-section"><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
+type KpiMetricConfig = {
+  label: string;
+  value: string;
+  numericValue?: number;
+  deltaKind?: "currency" | "percent";
+  tone?: "default" | "accent" | "warning" | "sync";
+};
+
+function KpiPill({ label, value, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
+  const previousValue = useRef<number | null>(null);
+  const [delta, setDelta] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof numericValue !== "number" || !Number.isFinite(numericValue)) return;
+    const previous = previousValue.current;
+    if (previous !== null && Math.abs(numericValue - previous) > 0.005) {
+      setDelta(numericValue - previous);
+    }
+    previousValue.current = numericValue;
+  }, [numericValue]);
+
+  const deltaValue = delta;
+  const formattedDelta =
+    deltaValue === null
+      ? null
+      : deltaKind === "percent"
+        ? formatPercent(Math.abs(deltaValue))
+        : formatCurrency(Math.abs(deltaValue));
+
+  return (
+    <div className={`kpi-pill kpi-pill--${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {formattedDelta && deltaValue !== null && (
+        <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
+          {deltaValue >= 0 ? "↑" : "↓"} {deltaValue >= 0 ? "+" : "-"}{formattedDelta}
+        </em>
+      )}
+    </div>
+  );
+}
+
+function CompactKpiHeader({ metrics, focusGrid, onToggleFocus }: { metrics: KpiMetricConfig[]; focusGrid: boolean; onToggleFocus: () => void }) {
+  return (
+    <div className="kpi-header">
+      <div className="kpi-header__metrics">
+        {metrics.map((metric) => <KpiPill key={metric.label} {...metric} />)}
+      </div>
+      <button className="ghost-button ghost-button--compact kpi-header__toggle" type="button" onClick={onToggleFocus}>
+        {focusGrid ? "Show Analytics" : "Focus Grid"}
+      </button>
+    </div>
+  );
+}
+
+function Section({ title, subtitle, children, className = "" }: { title: string; subtitle: string; children: React.ReactNode; className?: string }) {
+  return <section className={`sheet-section ${className}`.trim()}><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
 }
 
 function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
@@ -1069,7 +1124,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--total">{formatCurrencyDetailed(value)}</div></td>;
 
   return (
-    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic.">
+    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic." className="investments-workspace">
       <div className="actions-row">
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
         <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Select Rows</button>
@@ -1142,8 +1197,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </div>
         </div>
       )}
-      <div className="status-card status-card--note debug-panel">
-        <strong>Debug</strong>
+      <details className="status-card status-card--note debug-panel">
+        <summary>Debug</summary>
         <div className="debug-panel__stats">
           <span>Loaded rows: {rows.length}</span>
           <span>Derived rows: {derivedRows.length}</span>
@@ -1153,7 +1208,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <div className="debug-panel__list">
           {topDescriptions.map((entry) => <span key={entry[0]}>{entry[0]} ({entry[1]})</span>)}
         </div>
-      </div>
+      </details>
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--workbook">
           <thead>
@@ -1248,7 +1303,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 }
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
-  const [topOutputsCollapsed, setTopOutputsCollapsed] = useState(false);
+  const [focusGrid, setFocusGrid] = useState(false);
   const [investments, setInvestments] = useState(initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
   const [categories, setCategories] = useState(initialCategories);
@@ -1488,19 +1543,21 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    postTaxCalculation({ calc: "FED_TAX_2025_COMBINED", ordinaryTaxable, prefTaxable, filingStatus: federalSettings.filingStatus, magi, netInvestmentIncome }).then((result) => {
-      if (!cancelled) { setFederalResult(result); setFederalError(null); }
-    }).catch((error: Error) => {
-      if (!cancelled) { setFederalResult(null); setFederalError(error.message); }
-    });
+    const timeoutId = window.setTimeout(() => {
+      postTaxCalculation({ calc: "FED_TAX_2025_COMBINED", ordinaryTaxable, prefTaxable, filingStatus: federalSettings.filingStatus, magi, netInvestmentIncome }).then((result) => {
+        if (!cancelled) { setFederalResult(result); setFederalError(null); }
+      }).catch((error: Error) => {
+        if (!cancelled) { setFederalResult(null); setFederalError(error.message); }
+      });
 
-    postTaxCalculation({ calc: "STATE_TAX_2025_CA_MFJ", taxableIncome: stateTaxableAfterDeductions }).then((result) => {
-      if (!cancelled) { setStateResult(result); setStateError(null); }
-    }).catch((error: Error) => {
-      if (!cancelled) { setStateResult(null); setStateError(error.message); }
-    });
+      postTaxCalculation({ calc: "STATE_TAX_2025_CA_MFJ", taxableIncome: stateTaxableAfterDeductions }).then((result) => {
+        if (!cancelled) { setStateResult(result); setStateError(null); }
+      }).catch((error: Error) => {
+        if (!cancelled) { setStateResult(null); setStateError(error.message); }
+      });
+    }, 220);
 
-    return () => { cancelled = true; };
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
     }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions]);
 
   useEffect(() => {
@@ -1577,6 +1634,16 @@ export default function App() {
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
+  const portfolioYield = flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0;
+  const kpiMetrics: KpiMetricConfig[] = [
+    { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
+    { label: "Annual income", value: formatCurrency(flows.totalIncome), numericValue: flows.totalIncome },
+    { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
+    { label: "After-tax income", value: formatCurrency(afterTaxIncome), numericValue: afterTaxIncome, tone: "warning" },
+    { label: "Federal tax", value: formatCurrencyDetailed(federalResult?.tax || 0), numericValue: federalResult?.tax || 0 },
+    { label: "State tax", value: formatCurrencyDetailed(stateResult?.tax || 0), numericValue: stateResult?.tax || 0 },
+    { label: "Workbook sync", value: storageMessage, tone: storageState === "error" ? "warning" : "sync" },
+  ];
 
   const updateTaxCalculatorNumber = (field: Exclude<keyof TaxCalculatorInputs, "filingStatus">, value: string | number) => {
     const numeric = toNumber(value);
@@ -1730,44 +1797,27 @@ export default function App() {
   function addRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, row: T) { setter((current) => [...current, row]); }
   function removeRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) { return (id: number) => setter((current) => current.filter((row) => row.id !== id)); }
   return (
-    <div className="workspace-shell">
+    <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar__brand"><p>Portfolio Planner</p><h1>Workbook Frontend</h1><span>Git-backed Amplify app using the same tax backend and workbook storage as the sheet.</span></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
       <main className="content-panel">
-        <div className="summary-ribbon">
-          <div className={`summary-ribbon__group ${topOutputsCollapsed ? "summary-ribbon__group--collapsed" : ""}`}>
-            <div className="summary-ribbon__group-heading">
-              <div>
-                <strong>Portfolio Outputs</strong>
-                <span>Investment totals, income, taxes, and sync status</span>
-              </div>
-              <button className="ghost-button ghost-button--compact" type="button" onClick={() => setTopOutputsCollapsed((current) => !current)} aria-expanded={!topOutputsCollapsed}>
-                {topOutputsCollapsed ? "Show" : "Hide"}
-              </button>
+        <div className="portfolio-workstation__sticky">
+          <CompactKpiHeader metrics={kpiMetrics} focusGrid={focusGrid} onToggleFocus={() => setFocusGrid((current) => !current)} />
+          {!focusGrid && (
+            <div className="impact-strip">
+              <TaxThermometerPanel
+                totalIncome={flows.totalIncome}
+                federalTaxable={federalTaxableAfterDeductions}
+                stateTaxable={stateTaxableAfterDeductions}
+                federalTax={federalResult?.tax || 0}
+                stateTax={stateResult?.tax || 0}
+                filingStatus={federalSettings.filingStatus}
+                niitThreshold={niitThreshold}
+              />
             </div>
-            {!topOutputsCollapsed && (
-              <div className="summary-ribbon__metrics">
-                <MetricCard label="Total investment amount" value={formatCurrency(flows.totalInvestmentAmount)} tone="accent" />
-                <MetricCard label="Annual income" value={formatCurrency(flows.totalIncome)} />
-                <MetricCard label="Portfolio yield" value={formatPercent(flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0)} />
-                <MetricCard label="After-tax income" value={formatCurrency(afterTaxIncome)} tone="warning" />
-                <MetricCard label="Federal tax" value={formatCurrencyDetailed(federalResult?.tax || 0)} />
-                <MetricCard label="State tax" value={formatCurrencyDetailed(stateResult?.tax || 0)} />
-                <MetricCard label="Workbook sync" value={storageMessage} tone={storageState === "error" ? "warning" : "default"} />
-              </div>
-            )}
-          </div>
-          <TaxThermometerPanel
-            totalIncome={flows.totalIncome}
-            federalTaxable={federalTaxableAfterDeductions}
-            stateTaxable={stateTaxableAfterDeductions}
-            federalTax={federalResult?.tax || 0}
-            stateTax={stateResult?.tax || 0}
-            filingStatus={federalSettings.filingStatus}
-            niitThreshold={niitThreshold}
-          />
+          )}
         </div>
         <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>{isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}</button><a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
         {isSheetPanelOpen && (
