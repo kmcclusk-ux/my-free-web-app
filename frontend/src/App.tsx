@@ -984,6 +984,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     onClearAllInc();
     setIsFavoritesPanelOpen(false);
   };
+  const handleRemoveAllRows = () => {
+    if (window.confirm("Remove all investment rows? This cannot be undone unless the workbook is restored from a previous save.")) {
+      onClear();
+    }
+  };
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
     if (!name) return;
@@ -1131,7 +1136,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
       <div className="actions-row">
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
         <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Select Rows</button>
-        <button className="ghost-button" type="button" onClick={onClear}>Remove all rows</button>
+        <button className="ghost-button" type="button" onClick={handleRemoveAllRows}>Remove all rows</button>
       </div>
       {isFavoritesPanelOpen && (
         <div className="favorites-overlay">
