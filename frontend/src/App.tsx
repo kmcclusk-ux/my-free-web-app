@@ -972,14 +972,17 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const handleSelectFavorite = (name: string) => {
     setSelectedFavoriteName(name);
     onApplyFavorite(name);
+    setIsFavoritesPanelOpen(false);
   };
   const handleSelectAllPreset = () => {
     setSelectedFavoriteName("__select_all_inc__");
     onSelectAllInc();
+    setIsFavoritesPanelOpen(false);
   };
   const handleClearAllPreset = () => {
     setSelectedFavoriteName("__clear_all_inc__");
     onClearAllInc();
+    setIsFavoritesPanelOpen(false);
   };
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
