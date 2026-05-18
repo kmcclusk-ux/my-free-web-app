@@ -907,6 +907,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
   const [renameTarget, setRenameTarget] = useState("");
   const [renameValue, setRenameValue] = useState("");
+  const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
@@ -985,9 +986,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     setIsFavoritesPanelOpen(false);
   };
   const handleRemoveAllRows = () => {
-    if (window.confirm("Remove all investment rows? This cannot be undone unless the workbook is restored from a previous save.")) {
-      onClear();
-    }
+    setIsRemoveConfirmOpen(true);
+  };
+  const confirmRemoveAllRows = () => {
+    onClear();
+    setIsRemoveConfirmOpen(false);
   };
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
@@ -1138,6 +1141,18 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Select Rows</button>
         <button className="ghost-button" type="button" onClick={handleRemoveAllRows}>Remove all rows</button>
       </div>
+      {isRemoveConfirmOpen && (
+        <div className="confirm-panel" role="alertdialog" aria-modal="true" aria-labelledby="remove-all-confirm-title">
+          <div>
+            <h3 id="remove-all-confirm-title">Confirm</h3>
+            <p>This can't be undone.</p>
+          </div>
+          <div className="confirm-panel__actions">
+            <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsRemoveConfirmOpen(false)}>Cancel</button>
+            <button className="primary-button ghost-button--compact" type="button" onClick={confirmRemoveAllRows}>Remove all rows</button>
+          </div>
+        </div>
+      )}
       {isFavoritesPanelOpen && (
         <div className="favorites-overlay">
           <div className="favorites-panel">

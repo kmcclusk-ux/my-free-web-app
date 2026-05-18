@@ -207,3 +207,7 @@
 .favorites-empty { padding: 8px 10px; border-radius: 10px; background: rgba(239, 246, 247, .8); color: #4b666c; font-size: .84rem; }
 .favorites-panel__actions { display: flex; gap: 8px; margin-bottom: 10px; }
 .favorites-panel__note { margin: 0; font-size: .78rem; color: #5f7478; }
+.confirm-panel { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; padding: 10px 12px; border: 1px solid rgba(167,63,43,.2); border-radius: 14px; background: rgba(255, 244, 238, .98); box-shadow: 0 14px 32px rgba(127,75,41,.12); }
+.confirm-panel h3 { margin: 0; color: #7f4b29; font-size: .95rem; }
+.confirm-panel p { margin: 3px 0 0; color: #8f3623; font-size: .82rem; }
+.confirm-panel__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
