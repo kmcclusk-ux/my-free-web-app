@@ -126,11 +126,29 @@
 .topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .ai-button { display: inline-flex; align-items: center; border: 1px solid rgba(24,49,58,.12); border-radius: 999px; padding: 8px 14px; background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; font-weight: 700; letter-spacing: .08em; text-decoration: none; }
 .ai-button--link { background: linear-gradient(135deg, #7f4b29, #c3732c); }
+.ai-button--assistant { background: linear-gradient(135deg, #244d42, #63823d); }
 .ai-panel { margin: 0 0 16px; overflow: hidden; border-radius: 24px; border: 1px solid rgba(24,49,58,.12); background: rgba(255,255,255,.9); box-shadow: 0 22px 54px rgba(24,49,58,.12); }
 .ai-panel__header { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid rgba(24,49,58,.08); background: linear-gradient(135deg, rgba(245,248,244,.96), rgba(226,239,241,.94)); }
 .ai-panel__header h3 { margin: 4px 0 0; font-family: Georgia, "Times New Roman", serif; color: #17313a; }
 .ai-panel__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .ai-panel__frame { display: block; width: 100%; height: min(72vh, 760px); border: 0; background: #fff; }
+.assistant-panel { margin: 0 0 12px; overflow: hidden; border: 1px solid rgba(24,49,58,.12); border-radius: 20px; background: linear-gradient(145deg, rgba(255,255,255,.94), rgba(235,244,238,.94)); box-shadow: 0 18px 44px rgba(24,49,58,.1); }
+.assistant-panel__header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px 8px; }
+.assistant-panel__header h3 { margin: 2px 0 0; color: #17313a; font-size: 1rem; }
+.assistant-panel__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.assistant-panel__context { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 10px; }
+.assistant-panel__context span { padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(24,49,58,.1); background: rgba(255,255,255,.72); color: #4f666d; font-size: .72rem; }
+.assistant-panel__messages { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding: 10px 14px; border-top: 1px solid rgba(24,49,58,.08); background: rgba(250,249,245,.58); }
+.assistant-panel__empty { padding: 10px 12px; border: 1px dashed rgba(24,49,58,.18); border-radius: 14px; color: #5b6f72; font-size: .84rem; }
+.assistant-message { max-width: 84%; padding: 8px 10px; border-radius: 14px; white-space: pre-wrap; color: #17313a; font-size: .84rem; line-height: 1.35; }
+.assistant-message--user { justify-self: end; background: #17313a; color: #f8faf7; border-bottom-right-radius: 5px; }
+.assistant-message--assistant { justify-self: start; background: rgba(255,255,255,.96); border: 1px solid rgba(24,49,58,.08); border-bottom-left-radius: 5px; }
+.assistant-message--error { border-color: rgba(167,63,43,.24); background: rgba(255,236,232,.96); color: #8f3623; }
+.assistant-message--loading { color: #5c6f73; font-style: italic; }
+.assistant-panel__error { margin: 0 14px 10px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(167,63,43,.2); background: rgba(255,236,232,.9); color: #8f3623; font-size: .82rem; }
+.assistant-panel__composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 14px 14px; border-top: 1px solid rgba(24,49,58,.08); }
+.assistant-panel__composer textarea { width: 100%; min-height: 46px; max-height: 150px; padding: 9px 11px; border: 1px solid rgba(24,49,58,.14); border-radius: 13px; background: rgba(255,255,255,.94); color: #17313a; resize: vertical; }
+.assistant-panel__composer button { align-self: end; }
 
 .readonly-cell { min-width: 88px; padding: 7px 8px; border-radius: 10px; background: rgba(231, 238, 239, 0.9); color: #21414a; font-size: .84rem; }
 .readonly-cell--text { min-width: 120px; }
@@ -147,6 +165,7 @@
 .drag-handle:active { cursor: grabbing; }
 .investment-row--dragging td { opacity: .58; }
 .sheet-table--workbook tr.investment-row--drag-over td { box-shadow: inset 0 2px 0 rgba(29, 93, 108, .85); }
+.sheet-table--workbook tr.investment-row--selected td { outline: 2px solid rgba(44, 100, 112, .74); outline-offset: -2px; }
 .sheet-table--workbook tr.investment-row--deferred td { background: rgba(93, 175, 111, 0.28); }
 .sheet-table--workbook tr.investment-row--non-taxable td { background: rgba(93, 175, 111, 0.28); }
 .sheet-table--workbook tr.investment-row--partial td { background: rgba(212, 86, 86, 0.26); }

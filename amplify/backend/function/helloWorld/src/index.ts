@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { request as httpsRequest } from "https";
 import {
   fedTax2025Mfj,
   fedTax2025Ordinary,
@@ -72,7 +73,36 @@ type RequestBody =
   | { calc: "WORKBOOK_GET"; workspaceId?: string }
   | { calc: "WORKBOOK_GET_TAB"; workspaceId?: string; tabName: string }
   | { calc: "WORKBOOK_SAVE"; workspaceId?: string; tabs?: Record<string, unknown>; settings?: Record<string, unknown> }
-  | { calc: "WORKBOOK_SAVE_TAB"; workspaceId?: string; tabName: string; data: unknown };
+  | { calc: "WORKBOOK_SAVE_TAB"; workspaceId?: string; tabName: string; data: unknown }
+  | { calc: "PORTFOLIO_CHAT"; messages?: PortfolioChatMessage[]; portfolioSnapshot?: unknown };
+
+type PortfolioChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+type AssistantAction = {
+  type: string;
+  payload?: Record<string, unknown>;
+  requiresConfirmation?: boolean;
+};
+
+type PortfolioChatResponse = {
+  message: string;
+  actions: AssistantAction[];
+  model: string;
+  usage?: unknown;
+};
+
+const PORTFOLIO_ASSISTANT_SYSTEM_PROMPT = `You are a portfolio assistant embedded in this investment portfolio app.
+Use only the provided portfolio state and calculations. If data is missing, say what is missing.
+Do not invent balances, prices, returns, allocations, gains, losses, or tax figures.
+Explain financial information neutrally. Do not provide personalized investment, tax, legal, trading, transfer, or irreversible-action advice.
+You may help analyze diversification, concentration, allocation, fees, income, and performance using supplied data.
+When the user asks you to change the UI, return JSON only in this shape:
+{"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
+Allowed action types are setCheckbox, selectAsset, selectAccount, setFilter, clearFilters, sortTable, and setView.
+Do not request placing trades, transferring money, deleting data, or irreversible changes.`;
 
 function isFilingStatus(x: string): x is FilingStatus {
   return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
@@ -123,6 +153,181 @@ function parseJsonBody<T>(event: APIGatewayProxyEvent): T | null {
   const raw = decodeBody(event);
   if (!raw) return null;
   return JSON.parse(raw.trim()) as T;
+}
+
+function postJsonToOpenRouter(
+  payload: unknown,
+  apiKey: string
+): Promise<{ statusCode: number; body: string }> {
+  const body = JSON.stringify(payload);
+
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+          "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://portfolio-workbook.local",
+          "X-Title": "Portfolio Workbook Assistant",
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        res.on("end", () => {
+          resolve({
+            statusCode: res.statusCode || 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      }
+    );
+
+    req.on("error", reject);
+    req.setTimeout(30000, () => {
+      req.destroy(new Error("OpenRouter request timed out."));
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
+function sanitizeChatMessages(messages: unknown): PortfolioChatMessage[] {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter((message): message is PortfolioChatMessage => {
+      if (!message || typeof message !== "object") return false;
+      const role = (message as any).role;
+      const content = (message as any).content;
+      return (role === "user" || role === "assistant") && typeof content === "string" && content.trim().length > 0;
+    })
+    .slice(-16)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.slice(0, 4000),
+    }));
+}
+
+function parseAssistantChatContent(content: string): { message: string; actions: AssistantAction[] } {
+  const trimmed = content.trim();
+  const jsonCandidate = trimmed.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+
+  try {
+    const parsed = JSON.parse(jsonCandidate);
+    const message = typeof parsed?.message === "string" ? parsed.message : trimmed;
+    const actions = Array.isArray(parsed?.actions)
+      ? parsed.actions
+          .filter((action: unknown): action is AssistantAction => !!action && typeof action === "object" && typeof (action as any).type === "string")
+          .map((action: AssistantAction) => ({
+            type: action.type,
+            payload: action.payload && typeof action.payload === "object" ? action.payload : {},
+            requiresConfirmation: Boolean(action.requiresConfirmation),
+          }))
+      : [];
+    return { message, actions };
+  } catch {
+    return { message: trimmed, actions: [] };
+  }
+}
+
+function openRouterErrorMessage(statusCode: number, body: string) {
+  let detail = body;
+  try {
+    const parsed = JSON.parse(body);
+    detail = parsed?.error?.message || parsed?.message || body;
+  } catch {
+    detail = body;
+  }
+
+  if (statusCode === 401 || statusCode === 403) return `OpenRouter authentication failed: ${detail}`;
+  if (statusCode === 404 || statusCode === 422) return `OpenRouter model/request was invalid: ${detail}`;
+  if (statusCode === 429) return `OpenRouter rate limit reached: ${detail}`;
+  if (statusCode >= 500) return `OpenRouter service error: ${detail}`;
+  return `OpenRouter request failed (${statusCode}): ${detail}`;
+}
+
+async function handlePortfolioChatRoute(
+  event: APIGatewayProxyEvent,
+  origin: string
+): Promise<APIGatewayProxyResult> {
+  if (event.httpMethod !== "POST") {
+    return jsonResponse(405, { error: "Portfolio chat route supports POST only." }, origin);
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return jsonResponse(500, { error: "Missing OPENROUTER_API_KEY on the backend." }, origin);
+  }
+
+  let body: { messages?: unknown; portfolioSnapshot?: unknown } | null = null;
+  try {
+    body = parseJsonBody<{ messages?: unknown; portfolioSnapshot?: unknown }>(event);
+  } catch {
+    return jsonResponse(400, { error: "Invalid JSON body." }, origin);
+  }
+
+  if (!body || typeof body !== "object") {
+    return jsonResponse(400, { error: "Missing portfolio chat request body." }, origin);
+  }
+
+  const messages = sanitizeChatMessages(body.messages);
+  if (messages.length === 0) {
+    return jsonResponse(400, { error: "Portfolio chat requires at least one user message." }, origin);
+  }
+
+  const model = process.env.OPENROUTER_MODEL || "openrouter/free";
+  const portfolioContext = JSON.stringify(body.portfolioSnapshot || {});
+  const requestPayload = {
+    model,
+    temperature: 0.2,
+    max_tokens: 900,
+    messages: [
+      { role: "system", content: PORTFOLIO_ASSISTANT_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `Current portfolio state JSON. Treat this as the only source of truth and do not expose raw private data unless needed to answer the user's question:\n${portfolioContext}`,
+      },
+      ...messages,
+    ],
+  };
+
+  let openRouterResult: { statusCode: number; body: string };
+  try {
+    openRouterResult = await postJsonToOpenRouter(requestPayload, apiKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "OpenRouter network error.";
+    return jsonResponse(502, { error: message }, origin);
+  }
+
+  if (openRouterResult.statusCode < 200 || openRouterResult.statusCode >= 300) {
+    return jsonResponse(
+      openRouterResult.statusCode === 429 ? 429 : 502,
+      { error: openRouterErrorMessage(openRouterResult.statusCode, openRouterResult.body) },
+      origin
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(openRouterResult.body);
+    const content = parsed?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      return jsonResponse(502, { error: "OpenRouter returned malformed model output." }, origin);
+    }
+
+    const normalized = parseAssistantChatContent(content);
+    const response: PortfolioChatResponse = {
+      message: normalized.message,
+      actions: normalized.actions,
+      model: String(parsed?.model || model),
+      usage: parsed?.usage,
+    };
+    return jsonResponse(200, response, origin);
+  } catch {
+    return jsonResponse(502, { error: "OpenRouter returned invalid JSON." }, origin);
+  }
 }
 
 async function handleWorkbookRoute(
@@ -215,6 +420,10 @@ export const handler = async (
     return handleWorkbookRoute(event, origin);
   }
 
+  if (segments[0] === "api" && segments[1] === "portfolio-chat") {
+    return handlePortfolioChatRoute(event, origin);
+  }
+
   if (event.httpMethod !== "POST") {
     return jsonResponse(405, { error: "Method not allowed. Use POST." }, origin);
   }
@@ -238,6 +447,20 @@ export const handler = async (
   const calc = (body as any)?.calc;
   if (typeof calc !== "string") {
     return jsonResponse(400, { error: "Missing field: calc" }, origin);
+  }
+
+  if (calc === "PORTFOLIO_CHAT") {
+    return handlePortfolioChatRoute(
+      {
+        ...event,
+        body: JSON.stringify({
+          messages: (body as any).messages,
+          portfolioSnapshot: (body as any).portfolioSnapshot,
+        }),
+        isBase64Encoded: false,
+      },
+      origin
+    );
   }
 
   if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
@@ -442,6 +665,7 @@ export const handler = async (
         "FED_TAX_2025_COMBINED",
         "CA_TAX_2025_MFJ",
         "STATE_TAX_2025_CA_MFJ",
+        "PORTFOLIO_CHAT",
       ],
     },
     origin

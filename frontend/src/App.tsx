@@ -74,6 +74,61 @@ type StateSettings = { extraStateIncome: number; mortgageInterest: number; prope
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
 type UiSettings = { investmentFavorites: InvestmentFavorite[] };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
+type PortfolioSnapshot = {
+  generatedAt: string;
+  view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetId: number | null };
+  holdings: Array<{
+    id: number;
+    description: string;
+    account: string;
+    category: string;
+    symbol: string;
+    effectiveSymbol: string;
+    totalInvestment: number;
+    yearlyIncome: number;
+    includedTotal: number;
+    filteredIncome: number;
+    includeIncome: boolean;
+    overrideProposal: boolean;
+    taxStatus: string;
+    investmentType: string;
+    allocationPercent: number;
+  }>;
+  accounts: Array<{ id: number; account: string; taxStatus: string; includeInFreeCashflow: string }>;
+  assetClasses: Record<string, number>;
+  metrics: {
+    totalInvestmentAmount: number;
+    totalIncome: number;
+    portfolioYield: number;
+    afterTaxIncome: number;
+    federalTax: number;
+    stateTax: number;
+    totalTax: number;
+    federalTaxable: number;
+    stateTaxable: number;
+    magi: number;
+    netInvestmentIncome: number;
+  };
+  concentration: {
+    topHolding?: { id: number; description: string; allocationPercent: number };
+    topAccount?: { account: string; allocationPercent: number };
+    topAssetClass?: { assetClass: string; allocationPercent: number };
+  };
+};
+type AssistantAction =
+  | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
+  | { type: "selectAsset"; payload: { assetId: number | string }; requiresConfirmation?: boolean }
+  | { type: "selectAccount"; payload: { accountId: number | string }; requiresConfirmation?: boolean }
+  | { type: "setFilter"; payload: { filterName: keyof InvestmentFilters; value: string }; requiresConfirmation?: boolean }
+  | { type: "clearFilters"; payload?: Record<string, never>; requiresConfirmation?: boolean }
+  | { type: "sortTable"; payload: { tableId: "investments"; column: InvestmentSortColumn; direction: "asc" | "desc" }; requiresConfirmation?: boolean }
+  | { type: "setView"; payload: { viewName: string }; requiresConfirmation?: boolean };
+type ChatResponse = { message: string; actions?: AssistantAction[]; model?: string; usage?: unknown; error?: string };
+type InvestmentFilters = { account: string; category: string; asset: string };
+type InvestmentSortColumn = "description" | "account" | "category" | "totalInvestment" | "yearlyIncome" | "symbol" | "includedTotal" | "filteredIncome";
+type InvestmentSort = { tableId: "investments"; column: InvestmentSortColumn | ""; direction: "asc" | "desc" };
+type AssistantActionResult = { ok: boolean; message: string; requiresConfirmation?: boolean };
 type TaxCalculatorInputs = {
   filingStatus: FilingStatus;
   federalStandardDeduction: number;
@@ -588,6 +643,18 @@ async function saveWorkbook(workspaceId: string, payload: WorkbookResponse) {
   return json;
 }
 
+async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "content">>, portfolioSnapshot: PortfolioSnapshot) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello/api/portfolio-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, portfolioSnapshot }),
+  });
+  const json = (await response.json()) as ChatResponse | ApiError;
+  if (!response.ok) throw new Error((json as ApiError).error || "Portfolio chat failed");
+  return json as ChatResponse;
+}
+
 function workbookField(row: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
     if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
@@ -729,6 +796,79 @@ function workbookToInvestmentTypeRow(row: Record<string, unknown>, index: number
   };
 }
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
+function buildPortfolioSnapshot({
+  activeTab,
+  focusGrid,
+  filters,
+  sort,
+  selectedAssetId,
+  derivedRows,
+  accounts,
+  flows,
+  metrics,
+}: {
+  activeTab: TabKey;
+  focusGrid: boolean;
+  filters: InvestmentFilters;
+  sort: InvestmentSort;
+  selectedAssetId: number | null;
+  derivedRows: DerivedInvestmentRow[];
+  accounts: AccountRow[];
+  flows: { totalInvestmentAmount: number; totalIncome: number; cash: number; stocks: number; preferredStock: number; bonds: number; muniBond: number; businessDevelopment: number; coveredCall: number; realEstate: number; bitcoin: number };
+  metrics: PortfolioSnapshot["metrics"];
+}): PortfolioSnapshot {
+  const total = Math.max(flows.totalInvestmentAmount, 1);
+  const holdings = derivedRows.map((row) => ({
+    id: row.id,
+    description: row.description,
+    account: row.account,
+    category: row.category,
+    symbol: row.symbol,
+    effectiveSymbol: row.effectiveSymbol,
+    totalInvestment: row.totalInvestment,
+    yearlyIncome: row.yearlyIncome,
+    includedTotal: row.includedTotal,
+    filteredIncome: row.filteredIncome,
+    includeIncome: row.includeIncome,
+    overrideProposal: row.overrideProposal,
+    taxStatus: row.taxStatus,
+    investmentType: row.investmentType,
+    allocationPercent: row.includedTotal / total,
+  }));
+  const assetClasses = {
+    cash: flows.cash,
+    stocks: flows.stocks,
+    preferredStock: flows.preferredStock,
+    bonds: flows.bonds,
+    muniBond: flows.muniBond,
+    businessDevelopment: flows.businessDevelopment,
+    coveredCall: flows.coveredCall,
+    realEstate: flows.realEstate,
+    bitcoin: flows.bitcoin,
+  };
+  const accountTotals = holdings.reduce<Record<string, number>>((acc, row) => {
+    acc[row.account || "(blank)"] = (acc[row.account || "(blank)"] || 0) + row.includedTotal;
+    return acc;
+  }, {});
+  const topHolding = [...holdings].sort((a, b) => b.includedTotal - a.includedTotal)[0];
+  const topAccountEntry = Object.entries(accountTotals).sort((a, b) => b[1] - a[1])[0];
+  const topAssetClassEntry = Object.entries(assetClasses).sort((a, b) => b[1] - a[1])[0];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    view: { activeTab, focusGrid, filters, sort, selectedAssetId },
+    holdings,
+    accounts: accounts.map((row) => ({ id: row.id, account: row.account, taxStatus: row.taxStatus, includeInFreeCashflow: row.includeInFreeCashflow })),
+    assetClasses,
+    metrics,
+    concentration: {
+      topHolding: topHolding ? { id: topHolding.id, description: topHolding.description, allocationPercent: topHolding.allocationPercent } : undefined,
+      topAccount: topAccountEntry ? { account: topAccountEntry[0], allocationPercent: topAccountEntry[1] / total } : undefined,
+      topAssetClass: topAssetClassEntry ? { assetClass: topAssetClassEntry[0], allocationPercent: topAssetClassEntry[1] / total } : undefined,
+      // Plug in realized/unrealized gain/loss, volatility, fee, or risk metrics here when those fields exist in workbook data.
+    },
+  };
+}
 function MetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "accent" | "warning" }) {
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -896,12 +1036,182 @@ function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federa
   );
 }
 
+function AssistantPanel({
+  portfolioSnapshot,
+  onExecuteAction,
+  onClose,
+}: {
+  portfolioSnapshot: PortfolioSnapshot;
+  onExecuteAction: (action: AssistantAction) => AssistantActionResult;
+  onClose: () => void;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const visibleMetrics = portfolioSnapshot.metrics;
+  const submitPrompt = async () => {
+    const content = draft.trim();
+    if (!content || isLoading) return;
+
+    const now = new Date().toISOString();
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content,
+      createdAt: now,
+    };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setDraft("");
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await postPortfolioChat(
+        nextMessages.map((message) => ({ role: message.role, content: message.content })),
+        portfolioSnapshot
+      );
+      const actionResults = (response.actions || []).map((action) => {
+        if (action.requiresConfirmation && !window.confirm("Apply this assistant-requested UI change?")) {
+          return { ok: false, message: `Skipped ${action.type}: user cancelled confirmation.` };
+        }
+        return onExecuteAction(action);
+      });
+      const actionSummary = actionResults.length
+        ? `\n\nActions:\n${actionResults.map((result) => `${result.ok ? "Applied" : "Rejected"}: ${result.message}`).join("\n")}`
+        : "";
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: `${response.message || "Done."}${actionSummary}`,
+        actions: response.actions || [],
+        createdAt: new Date().toISOString(),
+      };
+      setMessages([...nextMessages, assistantMessage]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Portfolio assistant failed.";
+      setError(message);
+      setMessages([
+        ...nextMessages,
+        {
+          id: `assistant-error-${Date.now()}`,
+          role: "assistant",
+          content: message,
+          createdAt: new Date().toISOString(),
+          error: true,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <section className="assistant-panel" aria-label="Portfolio assistant">
+      <div className="assistant-panel__header">
+        <div>
+          <p className="eyebrow">Portfolio Assistant</p>
+          <h3>Ask about holdings, filters, and live metrics</h3>
+        </div>
+        <div className="assistant-panel__actions">
+          <button className="ghost-button ghost-button--compact" type="button" onClick={() => { setMessages([]); setError(null); }}>
+            Reset
+          </button>
+          <button className="ghost-button ghost-button--compact" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+      <div className="assistant-panel__context" aria-label="Assistant context summary">
+        <span>{portfolioSnapshot.holdings.length} holdings</span>
+        <span>{formatCurrency(visibleMetrics.totalInvestmentAmount)} invested</span>
+        <span>{formatCurrency(visibleMetrics.totalIncome)} income</span>
+        <span>{formatCurrency(visibleMetrics.afterTaxIncome)} after tax</span>
+      </div>
+      <div className="assistant-panel__messages" aria-live="polite">
+        {messages.length === 0 && (
+          <div className="assistant-panel__empty">
+            Try “show only taxable accounts”, “sort investments by income”, or “what is my largest concentration?”
+          </div>
+        )}
+        {messages.map((message) => (
+          <div key={message.id} className={`assistant-message assistant-message--${message.role} ${message.error ? "assistant-message--error" : ""}`}>
+            {message.content}
+          </div>
+        ))}
+        {isLoading && <div className="assistant-message assistant-message--assistant assistant-message--loading">Thinking with the current portfolio snapshot...</div>}
+      </div>
+      {error && <div className="assistant-panel__error">{error}</div>}
+      <form
+        className="assistant-panel__composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submitPrompt();
+        }}
+      >
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submitPrompt();
+            }
+          }}
+          placeholder="Ask the assistant to analyze or change the current view..."
+          rows={2}
+        />
+        <button className="primary-button" type="submit" disabled={isLoading || !draft.trim()}>
+          {isLoading ? "Sending" : "Ask"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
 function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove }: { title: string; subtitle: string; rows: T[]; columns: Array<{ key: keyof T; label: string; type?: "text" | "number" | "select"; options?: string[] }>; onChange: (id: number, field: keyof T, value: string) => void; onAdd: () => void; onRemove: (id: number) => void; }) {
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
-  const derivedMap = Object.fromEntries(derivedRows.map((row) => [row.id, row]));
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetId, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetId: number | null; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+  const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
+  const displayedRows = useMemo(() => {
+    const accountFilter = normalizeLookupKey(filters.account);
+    const categoryFilter = normalizeLookupKey(filters.category);
+    const assetFilter = normalizeLookupKey(filters.asset);
+    const filtered = rows.filter((row) => {
+      const derived = derivedMap[row.id];
+      if (accountFilter && normalizeLookupKey(row.account) !== accountFilter) return false;
+      if (categoryFilter && normalizeLookupKey(row.category) !== categoryFilter) return false;
+      if (assetFilter && normalizeLookupKey(row.symbol) !== assetFilter && normalizeLookupKey(derived?.effectiveSymbol) !== assetFilter && normalizeLookupKey(String(row.id)) !== assetFilter) return false;
+      return true;
+    });
+
+    if (sort.tableId !== "investments" || !sort.column) return filtered;
+    const sortColumn = sort.column;
+    const direction = sort.direction === "desc" ? -1 : 1;
+    return [...filtered].sort((a, b) => {
+      const aDerived = derivedMap[a.id];
+      const bDerived = derivedMap[b.id];
+      const readValue = (row: InvestmentRow, derived?: DerivedInvestmentRow): string | number => {
+        switch (sortColumn) {
+          case "includedTotal": return derived?.includedTotal || 0;
+          case "filteredIncome": return derived?.filteredIncome || 0;
+          case "symbol": return row.symbol;
+          default: return row[sortColumn] as string | number;
+        }
+      };
+      const aValue = readValue(a, aDerived);
+      const bValue = readValue(b, bDerived);
+      if (typeof aValue === "number" && typeof bValue === "number") return (aValue - bValue) * direction;
+      return String(aValue).localeCompare(String(bValue)) * direction;
+    });
+  }, [rows, derivedMap, filters, sort]);
+  const displayedDerivedRows = displayedRows
+    .map((row) => derivedMap[row.id])
+    .filter((row): row is DerivedInvestmentRow => Boolean(row));
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
   const [newFavoriteName, setNewFavoriteName] = useState("");
   const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
@@ -1108,7 +1418,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (dragOverRowId === row.id && draggingRowId !== row.id) classes.push("investment-row--drag-over");
     return classes.join(" ");
   };
-  const totals = derivedRows.reduce((acc, row) => {
+  const totals = displayedDerivedRows.reduce((acc, row) => {
     acc.totalInvestment += toNumber(row.totalInvestment);
     acc.yearlyIncome += toNumber(row.yearlyIncome);
     acc.monthlyIncome += row.monthlyIncome;
@@ -1224,6 +1534,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <summary>Debug</summary>
         <div className="debug-panel__stats">
           <span>Loaded rows: {rows.length}</span>
+          <span>Displayed rows: {displayedRows.length}</span>
           <span>Derived rows: {derivedRows.length}</span>
           <span>Unique descriptions: {topDescriptions.length}</span>
           <span>Descriptions with duplicates: {duplicateDescriptionCount}</span>
@@ -1240,12 +1551,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {displayedRows.map((row) => {
               const derived = derivedMap[row.id];
               return (
                 <tr
                   key={row.id}
-                  className={getDragRowClassName(row)}
+                  className={`${getDragRowClassName(row)} ${selectedAssetId === row.id ? "investment-row--selected" : ""}`}
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
                 >
@@ -1327,6 +1638,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [focusGrid, setFocusGrid] = useState(false);
+  const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
+  const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState<number | null>(null);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState(initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
   const [categories, setCategories] = useState(initialCategories);
@@ -1667,6 +1982,29 @@ export default function App() {
     { label: "State tax", value: formatCurrencyDetailed(stateResult?.tax || 0), numericValue: stateResult?.tax || 0 },
     { label: "Workbook sync", value: storageMessage, tone: storageState === "error" ? "warning" : "sync" },
   ];
+  const portfolioSnapshot = buildPortfolioSnapshot({
+    activeTab,
+    focusGrid,
+    filters: investmentFilters,
+    sort: investmentSort,
+    selectedAssetId: selectedInvestmentId,
+    derivedRows,
+    accounts,
+    flows,
+    metrics: {
+      totalInvestmentAmount: flows.totalInvestmentAmount,
+      totalIncome: flows.totalIncome,
+      portfolioYield,
+      afterTaxIncome,
+      federalTax: federalResult?.tax || 0,
+      stateTax: stateResult?.tax || 0,
+      totalTax,
+      federalTaxable: federalTaxableAfterDeductions,
+      stateTaxable: stateTaxableAfterDeductions,
+      magi,
+      netInvestmentIncome,
+    },
+  });
 
   const updateTaxCalculatorNumber = (field: Exclude<keyof TaxCalculatorInputs, "filingStatus">, value: string | number) => {
     const numeric = toNumber(value);
@@ -1819,6 +2157,92 @@ export default function App() {
   }
   function addRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, row: T) { setter((current) => [...current, row]); }
   function removeRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) { return (id: number) => setter((current) => current.filter((row) => row.id !== id)); }
+  function executeAssistantAction(action: AssistantAction): AssistantActionResult {
+    const actionType = String((action as any)?.type || "");
+
+    if (actionType === "setCheckbox") {
+      const id = Number((action as any).payload?.id);
+      const checked = (action as any).payload?.checked;
+      const field = ((action as any).payload?.field || "includeIncome") as "includeIncome" | "overrideProposal";
+      if (!Number.isFinite(id) || typeof checked !== "boolean" || (field !== "includeIncome" && field !== "overrideProposal")) {
+        return { ok: false, message: "Rejected setCheckbox: invalid id, checked value, or checkbox field." };
+      }
+      if (!investments.some((row) => row.id === id)) return { ok: false, message: `Rejected setCheckbox: investment ${id} was not found.` };
+      setInvestments((current) => current.map((row) => row.id === id ? { ...row, [field]: checked } : row));
+      return { ok: true, message: `Updated ${field} for investment ${id}.` };
+    }
+
+    if (actionType === "selectAsset") {
+      const assetId = String((action as any).payload?.assetId || "");
+      const assetKey = normalizeLookupKey(assetId);
+      const row = derivedRows.find((item) => normalizeLookupKey(String(item.id)) === assetKey || normalizeLookupKey(item.symbol) === assetKey || normalizeLookupKey(item.effectiveSymbol) === assetKey || normalizeLookupKey(item.description) === assetKey);
+      if (!row) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
+      setSelectedInvestmentId(row.id);
+      setInvestmentFilters((current) => ({ ...current, asset: row.effectiveSymbol || row.symbol || String(row.id) }));
+      setActiveTab("investments");
+      return { ok: true, message: `Selected asset ${row.description || row.effectiveSymbol}.` };
+    }
+
+    if (actionType === "selectAccount") {
+      const accountId = String((action as any).payload?.accountId || "");
+      const account = accounts.find((row) => normalizeLookupKey(String(row.id)) === normalizeLookupKey(accountId) || normalizeLookupKey(row.account) === normalizeLookupKey(accountId));
+      if (!account) return { ok: false, message: `Rejected selectAccount: account ${accountId || "(blank)"} was not found.` };
+      setInvestmentFilters((current) => ({ ...current, account: account.account }));
+      setActiveTab("investments");
+      return { ok: true, message: `Filtered investments to account ${account.account}.` };
+    }
+
+    if (actionType === "setFilter") {
+      const filterName = String((action as any).payload?.filterName || "") as keyof InvestmentFilters;
+      const value = String((action as any).payload?.value || "");
+      if (!["account", "category", "asset"].includes(filterName)) return { ok: false, message: `Rejected setFilter: ${filterName || "(blank)"} is not an allowed filter.` };
+      if (filterName === "account" && value && !accounts.some((row) => normalizeLookupKey(row.account) === normalizeLookupKey(value))) return { ok: false, message: `Rejected setFilter: account ${value} was not found.` };
+      if (filterName === "category" && value && !categories.some((row) => normalizeLookupKey(row.name) === normalizeLookupKey(value)) && !derivedRows.some((row) => normalizeLookupKey(row.category) === normalizeLookupKey(value))) return { ok: false, message: `Rejected setFilter: category ${value} was not found.` };
+      if (filterName === "asset" && value && !derivedRows.some((row) => normalizeLookupKey(String(row.id)) === normalizeLookupKey(value) || normalizeLookupKey(row.symbol) === normalizeLookupKey(value) || normalizeLookupKey(row.effectiveSymbol) === normalizeLookupKey(value))) return { ok: false, message: `Rejected setFilter: asset ${value} was not found.` };
+      setInvestmentFilters((current) => ({ ...current, [filterName]: value }));
+      setActiveTab("investments");
+      return { ok: true, message: `Set ${filterName} filter to ${value || "(blank)"}.` };
+    }
+
+    if (actionType === "clearFilters") {
+      setInvestmentFilters({ account: "", category: "", asset: "" });
+      setInvestmentSort({ tableId: "investments", column: "", direction: "asc" });
+      setSelectedInvestmentId(null);
+      return { ok: true, message: "Cleared investment filters and sorting." };
+    }
+
+    if (actionType === "sortTable") {
+      const tableId = (action as any).payload?.tableId;
+      const column = (action as any).payload?.column as InvestmentSortColumn;
+      const direction = (action as any).payload?.direction;
+      const allowedColumns: InvestmentSortColumn[] = ["description", "account", "category", "totalInvestment", "yearlyIncome", "symbol", "includedTotal", "filteredIncome"];
+      if (tableId !== "investments" || !allowedColumns.includes(column) || (direction !== "asc" && direction !== "desc")) {
+        return { ok: false, message: "Rejected sortTable: only investments table with approved columns and asc/desc direction is allowed." };
+      }
+      setInvestmentSort({ tableId, column, direction });
+      setActiveTab("investments");
+      return { ok: true, message: `Sorted investments by ${column} ${direction}.` };
+    }
+
+    if (actionType === "setView") {
+      const viewName = normalizeLookupKey((action as any).payload?.viewName);
+      const navItem = navItems.find((item) => normalizeLookupKey(item.key) === viewName || normalizeLookupKey(item.label) === viewName);
+      if (viewName === "focus_grid" || viewName === "focusgrid") {
+        setFocusGrid(true);
+        setActiveTab("investments");
+        return { ok: true, message: "Enabled Focus Grid view." };
+      }
+      if (viewName === "analytics" || viewName === "show_analytics") {
+        setFocusGrid(false);
+        return { ok: true, message: "Showing analytics." };
+      }
+      if (!navItem) return { ok: false, message: `Rejected setView: ${viewName || "(blank)"} is not a known app view.` };
+      setActiveTab(navItem.key);
+      return { ok: true, message: `Switched to ${navItem.label}.` };
+    }
+
+    return { ok: false, message: `Rejected action: ${actionType || "(missing)"} is not allowed.` };
+  }
   return (
     <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : ""}`}>
       <aside className="sidebar">
@@ -1842,7 +2266,31 @@ export default function App() {
             </div>
           )}
         </div>
-        <div className="content-topbar"><div><p className="eyebrow">Live Model</p><h2>{navItems.find((item) => item.key === activeTab)?.label}</h2></div><div className="topbar-stack"><button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>{isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}</button><a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a><div className="topbar-chip">Workspace: {WORKSPACE_ID}</div><div className="topbar-chip">Storage: {storageState}</div><div className="topbar-chip">Version: {APP_VERSION}</div></div></div>
+        <div className="content-topbar">
+          <div>
+            <p className="eyebrow">Live Model</p>
+            <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
+          </div>
+          <div className="topbar-stack">
+            <button className="ai-button ai-button--assistant" type="button" onClick={() => setIsAssistantOpen((current) => !current)}>
+              {isAssistantOpen ? "Close Assistant" : "AI Assistant"}
+            </button>
+            <button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>
+              {isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}
+            </button>
+            <a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a>
+            <div className="topbar-chip">Workspace: {WORKSPACE_ID}</div>
+            <div className="topbar-chip">Storage: {storageState}</div>
+            <div className="topbar-chip">Version: {APP_VERSION}</div>
+          </div>
+        </div>
+        {isAssistantOpen && (
+          <AssistantPanel
+            portfolioSnapshot={portfolioSnapshot}
+            onExecuteAction={executeAssistantAction}
+            onClose={() => setIsAssistantOpen(false)}
+          />
+        )}
         {isSheetPanelOpen && (
           <section className="ai-panel" aria-label="Google spreadsheet panel">
             <div className="ai-panel__header">
@@ -1869,7 +2317,30 @@ export default function App() {
             <div className="status-card status-card--note">Loading account and tax-status mappings...</div>
           </Section>
         )}
-        {activeTab === "investments" && storageState !== "loading" && <InvestmentsTable rows={investments} accountOptions={accountOptions} symbolOptions={symbolOptions} accountTaxStatusByName={accountTaxStatusByName} derivedRows={derivedRows} favorites={uiSettings.investmentFavorites} onSaveFavorite={saveFavorite} onApplyFavorite={applyFavorite} onDeleteFavorite={deleteFavorite} onRenameFavorite={renameFavorite} onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])} onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })} onRemove={removeRow(setInvestments)} onReorder={reorderInvestments} onClear={() => setInvestments([])} onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))} onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))} />}
+        {activeTab === "investments" && storageState !== "loading" && (
+          <InvestmentsTable
+            rows={investments}
+            accountOptions={accountOptions}
+            symbolOptions={symbolOptions}
+            accountTaxStatusByName={accountTaxStatusByName}
+            derivedRows={derivedRows}
+            favorites={uiSettings.investmentFavorites}
+            filters={investmentFilters}
+            sort={investmentSort}
+            selectedAssetId={selectedInvestmentId}
+            onSaveFavorite={saveFavorite}
+            onApplyFavorite={applyFavorite}
+            onDeleteFavorite={deleteFavorite}
+            onRenameFavorite={renameFavorite}
+            onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])}
+            onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })}
+            onRemove={removeRow(setInvestments)}
+            onReorder={reorderInvestments}
+            onClear={() => setInvestments([])}
+            onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))}
+            onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
+          />
+        )}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} />}
         {activeTab === "categories" && <LookupTable title="Categories" subtitle="Reference list used by the Tickers tab category dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Category" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} />}
