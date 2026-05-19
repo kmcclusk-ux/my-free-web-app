@@ -75,6 +75,7 @@ type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
 type UiSettings = { investmentFavorites: InvestmentFavorite[] };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
+type WorkbookTableId = "investments" | "tickers" | "accounts" | "categories" | "taxTreatment" | "accountTaxType" | "investmentType";
 type PortfolioSnapshot = {
   generatedAt: string;
   view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[] };
@@ -84,18 +85,37 @@ type PortfolioSnapshot = {
     account: string;
     category: string;
     symbol: string;
+    newSymbol: string;
     effectiveSymbol: string;
     totalInvestment: number;
     yearlyIncome: number;
+    monthlyIncome: number;
     includedTotal: number;
     filteredIncome: number;
     includeIncome: boolean;
     overrideProposal: boolean;
     taxStatus: string;
+    taxTreatment: string;
     investmentType: string;
+    currentPercent: number;
+    effectivePercent: number;
+    newPercent: number;
     allocationPercent: number;
   }>;
-  accounts: Array<{ id: number; account: string; taxStatus: string; includeInFreeCashflow: string }>;
+  accounts: Array<{ id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string }>;
+  referenceTables: {
+    tickers: TickerRow[];
+    categories: CategoryRow[];
+    taxTreatment: TaxTreatmentRow[];
+    accountTaxType: AccountTaxTypeRow[];
+    investmentType: InvestmentTypeRow[];
+  };
+  editableTables: {
+    tableIds: WorkbookTableId[];
+    investmentFields: Array<keyof InvestmentRow>;
+    tickerFields: Array<keyof TickerRow>;
+    accountFields: Array<keyof AccountRow>;
+  };
   assetClasses: Record<string, number>;
   metrics: {
     totalInvestmentAmount: number;
@@ -125,12 +145,27 @@ type AssistantAction =
   | { type: "setFilter"; payload: { filterName: keyof InvestmentFilters; value: string }; requiresConfirmation?: boolean }
   | { type: "clearFilters"; payload?: Record<string, never>; requiresConfirmation?: boolean }
   | { type: "sortTable"; payload: { tableId: "investments"; column: InvestmentSortColumn; direction: "asc" | "desc" }; requiresConfirmation?: boolean }
-  | { type: "setView"; payload: { viewName: string }; requiresConfirmation?: boolean };
+  | { type: "setView"; payload: { viewName: string }; requiresConfirmation?: boolean }
+  | { type: "addRow"; payload: { tableId: WorkbookTableId; row?: Record<string, unknown>; values?: Record<string, unknown> }; requiresConfirmation?: boolean }
+  | { type: "updateRow"; payload: { tableId: WorkbookTableId; id?: number | string; selector?: string; values: Record<string, unknown> }; requiresConfirmation?: boolean }
+  | { type: "deleteRows"; payload: { tableId: WorkbookTableId; id?: number | string; ids?: Array<number | string>; selector?: string }; requiresConfirmation?: boolean };
 type ChatResponse = { message: string; actions?: AssistantAction[]; model?: string; usage?: unknown; error?: string };
 type InvestmentFilters = { account: string; category: string; asset: string };
 type InvestmentSortColumn = "description" | "account" | "category" | "totalInvestment" | "yearlyIncome" | "symbol" | "includedTotal" | "filteredIncome";
 type InvestmentSort = { tableId: "investments"; column: InvestmentSortColumn | ""; direction: "asc" | "desc" };
 type AssistantActionResult = { ok: boolean; message: string; requiresConfirmation?: boolean };
+type AssistantEditableRow = Record<string, unknown> & { id: number };
+type AssistantTableConfig = {
+  tableId: WorkbookTableId;
+  label: string;
+  tab: TabKey;
+  rows: AssistantEditableRow[];
+  setRows: (updater: (current: AssistantEditableRow[]) => AssistantEditableRow[]) => void;
+  allowedFields: string[];
+  numericFields: string[];
+  booleanFields: string[];
+  defaultRow: (id: number) => AssistantEditableRow;
+};
 type TaxCalculatorInputs = {
   filingStatus: FilingStatus;
   federalStandardDeduction: number;
@@ -838,6 +873,11 @@ function buildPortfolioSnapshot({
   selectedAssetIds,
   derivedRows,
   accounts,
+  tickers,
+  categories,
+  taxTreatments,
+  accountTaxTypes,
+  investmentTypes,
   flows,
   metrics,
 }: {
@@ -848,6 +888,11 @@ function buildPortfolioSnapshot({
   selectedAssetIds: number[];
   derivedRows: DerivedInvestmentRow[];
   accounts: AccountRow[];
+  tickers: TickerRow[];
+  categories: CategoryRow[];
+  taxTreatments: TaxTreatmentRow[];
+  accountTaxTypes: AccountTaxTypeRow[];
+  investmentTypes: InvestmentTypeRow[];
   flows: { totalInvestmentAmount: number; totalIncome: number; cash: number; stocks: number; preferredStock: number; bonds: number; muniBond: number; businessDevelopment: number; coveredCall: number; realEstate: number; bitcoin: number };
   metrics: PortfolioSnapshot["metrics"];
 }): PortfolioSnapshot {
@@ -858,15 +903,21 @@ function buildPortfolioSnapshot({
     account: row.account,
     category: row.category,
     symbol: row.symbol,
+    newSymbol: row.newSymbol,
     effectiveSymbol: row.effectiveSymbol,
     totalInvestment: row.totalInvestment,
     yearlyIncome: row.yearlyIncome,
+    monthlyIncome: row.monthlyIncome,
     includedTotal: row.includedTotal,
     filteredIncome: row.filteredIncome,
     includeIncome: row.includeIncome,
     overrideProposal: row.overrideProposal,
     taxStatus: row.taxStatus,
+    taxTreatment: row.taxTreatment,
     investmentType: row.investmentType,
+    currentPercent: row.currentPercent,
+    effectivePercent: row.effectivePercent,
+    newPercent: row.newPercent,
     allocationPercent: row.includedTotal / total,
   }));
   const assetClasses = {
@@ -892,7 +943,20 @@ function buildPortfolioSnapshot({
     generatedAt: new Date().toISOString(),
     view: { activeTab, focusGrid, filters, sort, selectedAssetIds },
     holdings,
-    accounts: accounts.map((row) => ({ id: row.id, account: row.account, taxStatus: row.taxStatus, includeInFreeCashflow: row.includeInFreeCashflow })),
+    accounts: accounts.map((row) => ({ id: row.id, account: row.account, taxStatus: row.taxStatus, dividendAccrued: row.dividendAccrued, includeInFreeCashflow: row.includeInFreeCashflow })),
+    referenceTables: {
+      tickers,
+      categories,
+      taxTreatment: taxTreatments,
+      accountTaxType: accountTaxTypes,
+      investmentType: investmentTypes,
+    },
+    editableTables: {
+      tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType", "investmentType"],
+      investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+      tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "extraData", "description", "exDividend", "divPayout"],
+      accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
+    },
     assetClasses,
     metrics,
     concentration: {
@@ -1113,8 +1177,11 @@ function AssistantPanel({
           action.type === "setFilter" ||
           action.type === "setAllCheckboxes" ||
           action.type === "selectAccount" ||
-          action.type === "setView";
-        if (needsConfirmation && !window.confirm("Apply this assistant-requested checkbox/filter/view change?")) {
+          action.type === "setView" ||
+          action.type === "addRow" ||
+          action.type === "updateRow" ||
+          action.type === "deleteRows";
+        if (needsConfirmation && !window.confirm("Apply this assistant-requested workbook/UI change?")) {
           return { ok: false, message: `Skipped ${action.type}: user cancelled confirmation.` };
         }
         return onExecuteAction(action);
@@ -2044,6 +2111,11 @@ export default function App() {
     selectedAssetIds: selectedInvestmentIds,
     derivedRows,
     accounts,
+    tickers,
+    categories,
+    taxTreatments,
+    accountTaxTypes,
+    investmentTypes,
     flows,
     metrics: {
       totalInvestmentAmount: flows.totalInvestmentAmount,
@@ -2211,6 +2283,138 @@ export default function App() {
   }
   function addRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, row: T) { setter((current) => [...current, row]); }
   function removeRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) { return (id: number) => setter((current) => current.filter((row) => row.id !== id)); }
+  function nextAssistantRowId(rows: AssistantEditableRow[]) {
+    return Math.max(0, ...rows.map((row) => Number(row.id) || 0)) + 1;
+  }
+  function coerceAssistantFieldValue(config: AssistantTableConfig, field: string, value: unknown) {
+    if (config.booleanFields.includes(field)) return normalizeBoolean(value);
+    if (config.numericFields.includes(field)) return toNumber(value as string | number | boolean | null | undefined);
+    return String(value ?? "");
+  }
+  function sanitizeAssistantValues(config: AssistantTableConfig, rawValues: unknown) {
+    const source = rawValues && typeof rawValues === "object" ? rawValues as Record<string, unknown> : {};
+    const values: Record<string, unknown> = {};
+    const rejected: string[] = [];
+    Object.entries(source).forEach(([field, value]) => {
+      if (field === "id") return;
+      if (!config.allowedFields.includes(field)) {
+        rejected.push(field);
+        return;
+      }
+      values[field] = coerceAssistantFieldValue(config, field, value);
+    });
+    return { values, rejected };
+  }
+  function rowMatchesAssistantSelector(row: AssistantEditableRow, selector: unknown) {
+    const selectorKey = normalizeAssetMatchKey(selector);
+    if (!selectorKey) return false;
+    if (normalizeLookupKey(String(row.id)) === selectorKey) return true;
+    return Object.entries(row).some(([field, value]) => field !== "id" && valueMatchesAssetSelector(value, selectorKey));
+  }
+  function getAssistantTableConfig(tableId: unknown): AssistantTableConfig | null {
+    const id = String(tableId || "") as WorkbookTableId;
+    const asEditable = <T extends { id: number }>(rows: T[]) => rows as unknown as AssistantEditableRow[];
+    const wrapSetter = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) =>
+      (updater: (current: AssistantEditableRow[]) => AssistantEditableRow[]) => setter((current) => updater(asEditable(current)) as unknown as T[]);
+
+    switch (id) {
+      case "investments":
+        return {
+          tableId: id,
+          label: "investments",
+          tab: "investments",
+          rows: asEditable(investments),
+          setRows: wrapSetter(setInvestments),
+          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+          numericFields: ["totalInvestment", "yearlyIncome", "newPercent"],
+          booleanFields: ["includeIncome", "overrideProposal"],
+          defaultRow: (id) => ({ id, description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 }),
+        };
+      case "tickers":
+        return {
+          tableId: id,
+          label: "tickers",
+          tab: "tickers",
+          rows: asEditable(tickers),
+          setRows: wrapSetter(setTickers),
+          allowedFields: ["symbol", "percentReturn", "category", "taxTreatment", "extraData", "description", "exDividend", "divPayout"],
+          numericFields: ["percentReturn", "extraData"],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" }),
+        };
+      case "accounts":
+        return {
+          tableId: id,
+          label: "accounts",
+          tab: "accounts",
+          rows: asEditable(accounts),
+          setRows: wrapSetter(setAccounts),
+          allowedFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
+          numericFields: [],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }),
+        };
+      case "categories":
+        return {
+          tableId: id,
+          label: "categories",
+          tab: "categories",
+          rows: asEditable(categories),
+          setRows: wrapSetter(setCategories),
+          allowedFields: ["name"],
+          numericFields: [],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, name: "" }),
+        };
+      case "taxTreatment":
+        return {
+          tableId: id,
+          label: "tax treatment",
+          tab: "taxTreatment",
+          rows: asEditable(taxTreatments),
+          setRows: wrapSetter(setTaxTreatments),
+          allowedFields: ["label"],
+          numericFields: [],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, label: "" }),
+        };
+      case "accountTaxType":
+        return {
+          tableId: id,
+          label: "account tax type",
+          tab: "accountTaxType",
+          rows: asEditable(accountTaxTypes),
+          setRows: wrapSetter(setAccountTaxTypes),
+          allowedFields: ["taxStatus"],
+          numericFields: [],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, taxStatus: "" }),
+        };
+      case "investmentType":
+        return {
+          tableId: id,
+          label: "investment type",
+          tab: "investmentType",
+          rows: asEditable(investmentTypes),
+          setRows: wrapSetter(setInvestmentTypes),
+          allowedFields: ["name"],
+          numericFields: [],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, name: "" }),
+        };
+      default:
+        return null;
+    }
+  }
+  function resolveAssistantRows(config: AssistantTableConfig, payload: Record<string, unknown>) {
+    const ids = new Set<string>();
+    if (payload.id !== undefined) ids.add(normalizeLookupKey(String(payload.id)));
+    if (Array.isArray(payload.ids)) {
+      payload.ids.forEach((id) => ids.add(normalizeLookupKey(String(id))));
+    }
+    const selector = payload.selector;
+    return config.rows.filter((row) => ids.has(normalizeLookupKey(String(row.id))) || (selector !== undefined && rowMatchesAssistantSelector(row, selector)));
+  }
   function executeAssistantAction(action: AssistantAction): AssistantActionResult {
     const actionType = String((action as any)?.type || "");
 
@@ -2329,6 +2533,49 @@ export default function App() {
       if (!navItem) return { ok: false, message: `Rejected setView: ${viewName || "(blank)"} is not a known app view.` };
       setActiveTab(navItem.key);
       return { ok: true, message: `Switched to ${navItem.label}.` };
+    }
+
+    if (actionType === "addRow") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      const config = getAssistantTableConfig(payload.tableId);
+      if (!config) return { ok: false, message: `Rejected addRow: ${String(payload.tableId || "(blank)")} is not an editable table.` };
+      const rawValues = payload.row || payload.values || {};
+      const { values, rejected } = sanitizeAssistantValues(config, rawValues);
+      if (rejected.length) return { ok: false, message: `Rejected addRow: unsupported field(s) ${rejected.join(", ")} for ${config.tableId}.` };
+      const id = nextAssistantRowId(config.rows);
+      config.setRows((current) => [...current, { ...config.defaultRow(id), ...values, id }]);
+      setActiveTab(config.tab);
+      return { ok: true, message: `Added row ${id} to ${config.label}.` };
+    }
+
+    if (actionType === "updateRow") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      const config = getAssistantTableConfig(payload.tableId);
+      if (!config) return { ok: false, message: `Rejected updateRow: ${String(payload.tableId || "(blank)")} is not an editable table.` };
+      const { values, rejected } = sanitizeAssistantValues(config, payload.values);
+      if (rejected.length) return { ok: false, message: `Rejected updateRow: unsupported field(s) ${rejected.join(", ")} for ${config.tableId}.` };
+      if (Object.keys(values).length === 0) return { ok: false, message: "Rejected updateRow: no valid fields were supplied." };
+      const matches = resolveAssistantRows(config, payload);
+      if (matches.length === 0) return { ok: false, message: "Rejected updateRow: no matching rows were found." };
+      const matchIds = new Set(matches.map((row) => row.id));
+      config.setRows((current) => current.map((row) => matchIds.has(row.id) ? { ...row, ...values } : row));
+      setActiveTab(config.tab);
+      return { ok: true, message: `Updated ${matches.length} row${matches.length === 1 ? "" : "s"} in ${config.label}.` };
+    }
+
+    if (actionType === "deleteRows") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      const config = getAssistantTableConfig(payload.tableId);
+      if (!config) return { ok: false, message: `Rejected deleteRows: ${String(payload.tableId || "(blank)")} is not an editable table.` };
+      const matches = resolveAssistantRows(config, payload);
+      if (matches.length === 0) return { ok: false, message: "Rejected deleteRows: no matching rows were found." };
+      const matchIds = new Set(matches.map((row) => row.id));
+      config.setRows((current) => current.filter((row) => !matchIds.has(row.id)));
+      if (config.tableId === "investments") {
+        setSelectedInvestmentIds((current) => current.filter((id) => !matchIds.has(id)));
+      }
+      setActiveTab(config.tab);
+      return { ok: true, message: `Deleted ${matches.length} row${matches.length === 1 ? "" : "s"} from ${config.label}.` };
     }
 
     return { ok: false, message: `Rejected action: ${actionType || "(missing)"} is not allowed.` };
