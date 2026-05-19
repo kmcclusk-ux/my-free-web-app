@@ -310,6 +310,30 @@ function normalizeLookupKey(value: unknown) {
     .toLowerCase()
     .replace(/\s+/g, " ");
 }
+function lookupKeyTokens(value: unknown) {
+  const normalized = normalizeLookupKey(value);
+  if (!normalized) return [];
+  return [
+    normalized,
+    ...normalized.split(/[^a-z0-9]+/).filter(Boolean),
+  ];
+}
+function valueMatchesAssetSelector(value: unknown, selectorKey: string) {
+  const normalized = normalizeLookupKey(value);
+  if (!normalized || !selectorKey) return false;
+  if (normalized === selectorKey) return true;
+  if (lookupKeyTokens(value).includes(selectorKey)) return true;
+  if (selectorKey === "ss" && normalized.includes("social security")) return true;
+  return selectorKey.length >= 3 && normalized.includes(selectorKey);
+}
+function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unknown) {
+  const selectorKey = normalizeLookupKey(selector);
+  if (!selectorKey) return false;
+  if (normalizeLookupKey(String(row.id)) === selectorKey) return true;
+  return [row.symbol, row.effectiveSymbol, row.newSymbol, row.description, row.account].some((value) =>
+    valueMatchesAssetSelector(value, selectorKey)
+  );
+}
 function buildAccountLookupMap(rows: AccountRow[]) {
   const map: Record<string, AccountRow> = {};
   for (const row of rows) {
@@ -2213,8 +2237,7 @@ export default function App() {
 
     if (actionType === "selectAsset") {
       const assetId = String((action as any).payload?.assetId || "");
-      const assetKey = normalizeLookupKey(assetId);
-      const matches = derivedRows.filter((item) => normalizeLookupKey(String(item.id)) === assetKey || normalizeLookupKey(item.symbol) === assetKey || normalizeLookupKey(item.effectiveSymbol) === assetKey || normalizeLookupKey(item.description) === assetKey);
+      const matches = derivedRows.filter((item) => investmentMatchesAssetSelector(item, assetId));
       if (matches.length === 0) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
       setSelectedInvestmentIds([...new Set(matches.map((row) => row.id))]);
       setActiveTab("investments");
@@ -2223,10 +2246,9 @@ export default function App() {
 
     if (actionType === "selectAssets") {
       const payload = (action as any).payload || {};
-      const symbolKey = normalizeLookupKey(payload.symbol);
       const requestedIds = Array.isArray(payload.assetIds) ? payload.assetIds.map((id: unknown) => normalizeLookupKey(String(id))) : [];
       const matches = derivedRows.filter((item) =>
-        (symbolKey && (normalizeLookupKey(item.symbol) === symbolKey || normalizeLookupKey(item.effectiveSymbol) === symbolKey)) ||
+        (payload.symbol && investmentMatchesAssetSelector(item, payload.symbol)) ||
         requestedIds.includes(normalizeLookupKey(String(item.id)))
       );
       if (matches.length === 0) return { ok: false, message: "Rejected selectAssets: no matching investments were found." };

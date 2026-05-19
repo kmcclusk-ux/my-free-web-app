@@ -278,9 +278,45 @@ function escapeMarkdownCell(value) {
 function getRecentUserContent(messages) {
     return [...messages].reverse().find((message) => message.role === "user")?.content || "";
 }
+function normalizePortfolioMatchValue(value) {
+    return String(value || "").trim().toUpperCase();
+}
+function portfolioMatchTokens(value) {
+    const normalized = normalizePortfolioMatchValue(value);
+    if (!normalized)
+        return [];
+    return [
+        normalized,
+        ...normalized.split(/[^A-Z0-9]+/).filter(Boolean),
+    ];
+}
+function portfolioValueMatchesSelector(value, selector) {
+    const normalized = normalizePortfolioMatchValue(value);
+    if (!normalized || !selector)
+        return false;
+    if (normalized === selector)
+        return true;
+    if (portfolioMatchTokens(value).includes(selector))
+        return true;
+    if (selector === "SS" && normalized.includes("SOCIAL SECURITY"))
+        return true;
+    return selector.length >= 3 && normalized.includes(selector);
+}
+function holdingMatchesSelector(holding, selector) {
+    return [
+        holding?.symbol,
+        holding?.effectiveSymbol,
+        holding?.newSymbol,
+        holding?.description,
+        holding?.account,
+    ].some((value) => portfolioValueMatchesSelector(value, selector));
+}
 function getTickerTotalQuestion(matchesText) {
+    const socialSecurityMatch = /\bsocial security\b/i.test(matchesText);
     const symbolMatch = matchesText.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
     const asksTotal = /\b(total|sum|amount|value)\b/i.test(matchesText);
+    if (socialSecurityMatch && asksTotal)
+        return "SS";
     return symbolMatch && asksTotal ? symbolMatch[1].toUpperCase() : null;
 }
 function answerSymbolDividendTableQuestion(messages, snapshot) {
@@ -348,17 +384,24 @@ function answerSimplePortfolioQuestion(messages, snapshot) {
     if (!symbol || !snapshot || typeof snapshot !== "object")
         return null;
     const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
-    const matches = holdings.filter((holding) => {
-        const symbols = [holding?.symbol, holding?.effectiveSymbol].map((value) => String(value || "").toUpperCase());
-        return symbols.includes(symbol);
-    });
+    const selector = normalizePortfolioMatchValue(symbol);
+    const matches = holdings.filter((holding) => holdingMatchesSelector(holding, selector));
     if (matches.length === 0)
         return null;
     const totalInvestment = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.totalInvestment), 0);
     const includedTotal = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.includedTotal), 0);
     const annualIncome = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.yearlyIncome), 0);
+    const includedAnnualIncome = matches.reduce((sum, holding) => {
+        if (Object.prototype.hasOwnProperty.call(holding || {}, "filteredIncome")) {
+            return sum + toSnapshotNumber(holding?.filteredIncome);
+        }
+        return sum + (holding?.includeIncome ? toSnapshotNumber(holding?.yearlyIncome) : 0);
+    }, 0);
+    const investmentPhrase = totalInvestment === 0 && annualIncome > 0
+        ? "Total investment is $0 because these appear to be income-only rows."
+        : `Total investment is ${formatSnapshotCurrency(totalInvestment)}. Included investment total is ${formatSnapshotCurrency(includedTotal)}.`;
     return {
-        message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. Total investment is $${totalInvestment.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Included total is $${includedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Annual income is $${annualIncome.toLocaleString("en-US", { maximumFractionDigits: 2 })}. I highlighted the matching rows.`,
+        message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. ${investmentPhrase} Annual income is ${formatSnapshotCurrency(annualIncome)}. Included annual income is ${formatSnapshotCurrency(includedAnnualIncome)}. I highlighted the matching rows.`,
         actions: [{ type: "selectAsset", payload: { assetId: symbol }, requiresConfirmation: false }],
         model: "local-portfolio-calculation",
     };
