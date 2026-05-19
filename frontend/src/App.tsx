@@ -77,7 +77,7 @@ type UiSettings = { investmentFavorites: InvestmentFavorite[] };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type PortfolioSnapshot = {
   generatedAt: string;
-  view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetId: number | null };
+  view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[] };
   holdings: Array<{
     id: number;
     description: string;
@@ -120,6 +120,7 @@ type AssistantAction =
   | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "setAllCheckboxes"; payload: { checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "selectAsset"; payload: { assetId: number | string }; requiresConfirmation?: boolean }
+  | { type: "selectAssets"; payload: { assetIds?: Array<number | string>; symbol?: string }; requiresConfirmation?: boolean }
   | { type: "selectAccount"; payload: { accountId: number | string }; requiresConfirmation?: boolean }
   | { type: "setFilter"; payload: { filterName: keyof InvestmentFilters; value: string }; requiresConfirmation?: boolean }
   | { type: "clearFilters"; payload?: Record<string, never>; requiresConfirmation?: boolean }
@@ -802,7 +803,7 @@ function buildPortfolioSnapshot({
   focusGrid,
   filters,
   sort,
-  selectedAssetId,
+  selectedAssetIds,
   derivedRows,
   accounts,
   flows,
@@ -812,7 +813,7 @@ function buildPortfolioSnapshot({
   focusGrid: boolean;
   filters: InvestmentFilters;
   sort: InvestmentSort;
-  selectedAssetId: number | null;
+  selectedAssetIds: number[];
   derivedRows: DerivedInvestmentRow[];
   accounts: AccountRow[];
   flows: { totalInvestmentAmount: number; totalIncome: number; cash: number; stocks: number; preferredStock: number; bonds: number; muniBond: number; businessDevelopment: number; coveredCall: number; realEstate: number; bitcoin: number };
@@ -857,7 +858,7 @@ function buildPortfolioSnapshot({
 
   return {
     generatedAt: new Date().toISOString(),
-    view: { activeTab, focusGrid, filters, sort, selectedAssetId },
+    view: { activeTab, focusGrid, filters, sort, selectedAssetIds },
     holdings,
     accounts: accounts.map((row) => ({ id: row.id, account: row.account, taxStatus: row.taxStatus, includeInFreeCashflow: row.includeInFreeCashflow })),
     assetClasses,
@@ -1182,7 +1183,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetId, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetId: number | null; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -1219,8 +1220,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const displayedDerivedRows = displayedRows
     .map((row) => derivedMap[row.id])
     .filter((row): row is DerivedInvestmentRow => Boolean(row));
-  const selectedRow = selectedAssetId ? rows.find((row) => row.id === selectedAssetId) : null;
-  const hasViewState = Boolean(filters.account || filters.category || filters.asset || sort.column || selectedRow);
+  const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
+  const selectedRows = selectedAssetIds.map((id) => rows.find((row) => row.id === id)).filter((row): row is InvestmentRow => Boolean(row));
+  const hasViewState = Boolean(filters.account || filters.category || filters.asset || sort.column || selectedRows.length > 0);
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
   const [newFavoriteName, setNewFavoriteName] = useState("");
   const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
@@ -1463,7 +1465,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
       {hasViewState && (
         <div className="view-state-strip" role="status">
           <strong>Showing {displayedRows.length} of {rows.length} rows</strong>
-          {selectedRow && <span>Selected: {selectedRow.description || selectedRow.symbol || selectedRow.id}</span>}
+          {selectedRows.length > 0 && <span>Selected: {selectedRows.length} row{selectedRows.length === 1 ? "" : "s"}</span>}
           {filters.account && <span>Account: {filters.account}</span>}
           {filters.category && <span>Category: {filters.category}</span>}
           {filters.asset && <span>Asset: {filters.asset}</span>}
@@ -1576,7 +1578,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               return (
                 <tr
                   key={row.id}
-                  className={`${getDragRowClassName(row)} ${selectedAssetId === row.id ? "investment-row--selected" : ""}`}
+                  className={`${getDragRowClassName(row)} ${selectedIdSet.has(row.id) ? "investment-row--selected" : ""}`}
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
                 >
@@ -1660,7 +1662,7 @@ export default function App() {
   const [focusGrid, setFocusGrid] = useState(false);
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
-  const [selectedInvestmentId, setSelectedInvestmentId] = useState<number | null>(null);
+  const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState(initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
@@ -2007,7 +2009,7 @@ export default function App() {
     focusGrid,
     filters: investmentFilters,
     sort: investmentSort,
-    selectedAssetId: selectedInvestmentId,
+    selectedAssetIds: selectedInvestmentIds,
     derivedRows,
     accounts,
     flows,
@@ -2212,11 +2214,25 @@ export default function App() {
     if (actionType === "selectAsset") {
       const assetId = String((action as any).payload?.assetId || "");
       const assetKey = normalizeLookupKey(assetId);
-      const row = derivedRows.find((item) => normalizeLookupKey(String(item.id)) === assetKey || normalizeLookupKey(item.symbol) === assetKey || normalizeLookupKey(item.effectiveSymbol) === assetKey || normalizeLookupKey(item.description) === assetKey);
-      if (!row) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
-      setSelectedInvestmentId(row.id);
+      const matches = derivedRows.filter((item) => normalizeLookupKey(String(item.id)) === assetKey || normalizeLookupKey(item.symbol) === assetKey || normalizeLookupKey(item.effectiveSymbol) === assetKey || normalizeLookupKey(item.description) === assetKey);
+      if (matches.length === 0) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
+      setSelectedInvestmentIds([...new Set(matches.map((row) => row.id))]);
       setActiveTab("investments");
-      return { ok: true, message: `Selected asset ${row.description || row.effectiveSymbol}; no rows were hidden.` };
+      return { ok: true, message: `Highlighted ${matches.length} matching investment row${matches.length === 1 ? "" : "s"} for ${assetId}; no rows were hidden.` };
+    }
+
+    if (actionType === "selectAssets") {
+      const payload = (action as any).payload || {};
+      const symbolKey = normalizeLookupKey(payload.symbol);
+      const requestedIds = Array.isArray(payload.assetIds) ? payload.assetIds.map((id: unknown) => normalizeLookupKey(String(id))) : [];
+      const matches = derivedRows.filter((item) =>
+        (symbolKey && (normalizeLookupKey(item.symbol) === symbolKey || normalizeLookupKey(item.effectiveSymbol) === symbolKey)) ||
+        requestedIds.includes(normalizeLookupKey(String(item.id)))
+      );
+      if (matches.length === 0) return { ok: false, message: "Rejected selectAssets: no matching investments were found." };
+      setSelectedInvestmentIds([...new Set(matches.map((row) => row.id))]);
+      setActiveTab("investments");
+      return { ok: true, message: `Highlighted ${matches.length} matching investment rows.` };
     }
 
     if (actionType === "selectAccount") {
@@ -2251,7 +2267,7 @@ export default function App() {
     if (actionType === "clearFilters") {
       setInvestmentFilters({ account: "", category: "", asset: "" });
       setInvestmentSort({ tableId: "investments", column: "", direction: "asc" });
-      setSelectedInvestmentId(null);
+      setSelectedInvestmentIds([]);
       return { ok: true, message: "Cleared investment filters and sorting." };
     }
 
@@ -2371,7 +2387,7 @@ export default function App() {
             favorites={uiSettings.investmentFavorites}
             filters={investmentFilters}
             sort={investmentSort}
-            selectedAssetId={selectedInvestmentId}
+            selectedAssetIds={selectedInvestmentIds}
             onSaveFavorite={saveFavorite}
             onApplyFavorite={applyFavorite}
             onDeleteFavorite={deleteFavorite}
@@ -2384,7 +2400,7 @@ export default function App() {
             onClearViewState={() => {
               setInvestmentFilters({ account: "", category: "", asset: "" });
               setInvestmentSort({ tableId: "investments", column: "", direction: "asc" });
-              setSelectedInvestmentId(null);
+              setSelectedInvestmentIds([]);
             }}
             onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))}
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}

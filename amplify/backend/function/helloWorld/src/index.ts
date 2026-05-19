@@ -101,7 +101,8 @@ Explain financial information neutrally. Do not provide personalized investment,
 You may help analyze diversification, concentration, allocation, fees, income, and performance using supplied data.
 When the user asks you to change the UI, return JSON only in this shape:
 {"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
-Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAccount, setFilter, clearFilters, sortTable, and setView.
+Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAssets, selectAccount, setFilter, clearFilters, sortTable, and setView.
+To highlight all rows for a ticker symbol, use {"message":"Highlighting matching rows.","actions":[{"type":"selectAssets","payload":{"symbol":"BSJQ"}}]}.
 For "clear all Inc checkboxes", return {"message":"Clearing all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":false},"requiresConfirmation":true}]}.
 For "select all Inc checkboxes", return {"message":"Selecting all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":true},"requiresConfirmation":true}]}.
 Do not use setFilter for Inc. Inc is a checkbox field, not a filter.
@@ -339,13 +340,17 @@ function toSnapshotNumber(value: unknown) {
   return Number.isFinite(numberValue) ? numberValue : 0;
 }
 
+function getTickerTotalQuestion(matchesText: string) {
+  const symbolMatch = matchesText.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
+  const asksTotal = /\b(total|sum|amount|value)\b/i.test(matchesText);
+  return symbolMatch && asksTotal ? symbolMatch[1].toUpperCase() : null;
+}
+
 function answerSimplePortfolioQuestion(messages: PortfolioChatMessage[], snapshot: unknown): PortfolioChatResponse | null {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
-  const symbolMatch = lastUserMessage.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
-  const asksTotal = /\b(total|sum|amount|value)\b/i.test(lastUserMessage);
-  if (!symbolMatch || !asksTotal || !snapshot || typeof snapshot !== "object") return null;
+  const symbol = getTickerTotalQuestion(lastUserMessage);
+  if (!symbol || !snapshot || typeof snapshot !== "object") return null;
 
-  const symbol = symbolMatch[1].toUpperCase();
   const holdings = Array.isArray((snapshot as any).holdings) ? (snapshot as any).holdings : [];
   const matches = holdings.filter((holding: any) => {
     const symbols = [holding?.symbol, holding?.effectiveSymbol].map((value) => String(value || "").toUpperCase());
@@ -359,8 +364,8 @@ function answerSimplePortfolioQuestion(messages: PortfolioChatMessage[], snapsho
   const annualIncome = matches.reduce((sum: number, holding: any) => sum + toSnapshotNumber(holding?.yearlyIncome), 0);
 
   return {
-    message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. Total investment is $${totalInvestment.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Included total is $${includedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Annual income is $${annualIncome.toLocaleString("en-US", { maximumFractionDigits: 2 })}.`,
-    actions: [],
+    message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. Total investment is $${totalInvestment.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Included total is $${includedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Annual income is $${annualIncome.toLocaleString("en-US", { maximumFractionDigits: 2 })}. I highlighted the matching rows.`,
+    actions: [{ type: "selectAssets", payload: { symbol }, requiresConfirmation: false }],
     model: "local-portfolio-calculation",
   };
 }
