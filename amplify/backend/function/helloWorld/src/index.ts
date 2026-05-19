@@ -372,7 +372,12 @@ function getRecentUserContent(messages: PortfolioChatMessage[]) {
 }
 
 function normalizePortfolioMatchValue(value: unknown) {
-  return String(value || "").trim().toUpperCase();
+  return String(value || "")
+    .replace(/[';]s\b/gi, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
 }
 
 function portfolioMatchTokens(value: unknown) {
@@ -401,6 +406,59 @@ function holdingMatchesSelector(holding: any, selector: string) {
     holding?.description,
     holding?.account,
   ].some((value) => portfolioValueMatchesSelector(value, selector));
+}
+
+function cleanPortfolioSelectorPhrase(value: unknown) {
+  return String(value || "")
+    .replace(/^[\s"'`]+|[\s"'`.?!]+$/g, "")
+    .replace(/[';]s\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getSelectRowsSelector(matchesText: string) {
+  const text = matchesText.trim();
+  const asksToSelectRows =
+    /\b(select|highlight|find)\b/i.test(text) &&
+    /\b(rows?|holdings?|investments?)\b/i.test(text);
+  if (!asksToSelectRows) return null;
+
+  const selectorMatch =
+    text.match(/\b(?:contain(?:s|ing)?|with|matching|for|called|named)\s+(.+)$/i) ||
+    text.match(/\b(?:select|highlight|find)\s+(?:the\s+)?(?:rows?|holdings?|investments?)\s+(.+)$/i);
+  const selector = cleanPortfolioSelectorPhrase(selectorMatch?.[1] || "");
+  return selector ? selector : null;
+}
+
+function answerSelectRowsQuestion(messages: PortfolioChatMessage[], snapshot: unknown): PortfolioChatResponse | null {
+  const lastUserMessage = getRecentUserContent(messages);
+  const selector = getSelectRowsSelector(lastUserMessage);
+  if (!selector) return null;
+
+  if (snapshot && typeof snapshot === "object") {
+    const holdings = Array.isArray((snapshot as any).holdings) ? (snapshot as any).holdings : [];
+    const selectorKey = normalizePortfolioMatchValue(selector);
+    const matches = holdings.filter((holding: any) => holdingMatchesSelector(holding, selectorKey));
+    if (holdings.length > 0 && matches.length === 0) {
+      return {
+        message: `I could not find any rows containing "${selector}".`,
+        actions: [],
+        model: "local-portfolio-calculation",
+      };
+    }
+
+    return {
+      message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} containing "${selector}".`,
+      actions: [{ type: "selectAsset", payload: { assetId: selector }, requiresConfirmation: false }],
+      model: "local-portfolio-calculation",
+    };
+  }
+
+  return {
+    message: `Highlighting rows containing "${selector}".`,
+    actions: [{ type: "selectAsset", payload: { assetId: selector }, requiresConfirmation: false }],
+    model: "local-portfolio-calculation",
+  };
 }
 
 function getTickerTotalQuestion(matchesText: string) {
@@ -565,6 +623,7 @@ async function handlePortfolioChatRoute(
   }
 
   const localAnswer =
+    answerSelectRowsQuestion(messages, body.portfolioSnapshot) ||
     answerSymbolDividendTableQuestion(messages, body.portfolioSnapshot) ||
     answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
   if (localAnswer) {

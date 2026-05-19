@@ -311,15 +311,23 @@ function normalizeLookupKey(value: unknown) {
     .replace(/\s+/g, " ");
 }
 function lookupKeyTokens(value: unknown) {
-  const normalized = normalizeLookupKey(value);
+  const normalized = normalizeAssetMatchKey(value);
   if (!normalized) return [];
   return [
     normalized,
     ...normalized.split(/[^a-z0-9]+/).filter(Boolean),
   ];
 }
+function normalizeAssetMatchKey(value: unknown) {
+  return String(value || "")
+    .replace(/[';]s\b/gi, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
 function valueMatchesAssetSelector(value: unknown, selectorKey: string) {
-  const normalized = normalizeLookupKey(value);
+  const normalized = normalizeAssetMatchKey(value);
   if (!normalized || !selectorKey) return false;
   if (normalized === selectorKey) return true;
   if (lookupKeyTokens(value).includes(selectorKey)) return true;
@@ -327,7 +335,7 @@ function valueMatchesAssetSelector(value: unknown, selectorKey: string) {
   return selectorKey.length >= 3 && normalized.includes(selectorKey);
 }
 function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unknown) {
-  const selectorKey = normalizeLookupKey(selector);
+  const selectorKey = normalizeAssetMatchKey(selector);
   if (!selectorKey) return false;
   if (normalizeLookupKey(String(row.id)) === selectorKey) return true;
   return [row.symbol, row.effectiveSymbol, row.newSymbol, row.description, row.account].some((value) =>
