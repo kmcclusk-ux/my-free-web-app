@@ -311,7 +311,8 @@ function normalizeAssistantActions(actions: AssistantAction[], userContent: stri
 }
 
 function extractAssistantText(parsed: any): string | null {
-  const content = parsed?.choices?.[0]?.message?.content;
+  const message = parsed?.choices?.[0]?.message;
+  const content = message?.content;
   if (typeof content === "string" && content.trim()) return content;
 
   if (Array.isArray(content)) {
@@ -327,7 +328,18 @@ function extractAssistantText(parsed: any): string | null {
     if (text) return text;
   }
 
+  if (content && typeof content === "object") {
+    const text = [
+      (content as any).text,
+      (content as any).content,
+      (content as any).message,
+      (content as any).output_text,
+    ].find((value) => typeof value === "string" && value.trim());
+    if (typeof text === "string") return text;
+  }
+
   const fallback =
+    message?.text ||
     parsed?.choices?.[0]?.text ||
     parsed?.message ||
     parsed?.output_text ||
@@ -340,14 +352,110 @@ function toSnapshotNumber(value: unknown) {
   return Number.isFinite(numberValue) ? numberValue : 0;
 }
 
+function formatSnapshotCurrency(value: number) {
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+
+function formatSnapshotPercent(value: number) {
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function escapeMarkdownCell(value: unknown) {
+  return String(value ?? "")
+    .replace(/\|/g, "\\|")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getRecentUserContent(messages: PortfolioChatMessage[]) {
+  return [...messages].reverse().find((message) => message.role === "user")?.content || "";
+}
+
 function getTickerTotalQuestion(matchesText: string) {
   const symbolMatch = matchesText.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
   const asksTotal = /\b(total|sum|amount|value)\b/i.test(matchesText);
   return symbolMatch && asksTotal ? symbolMatch[1].toUpperCase() : null;
 }
 
+function answerSymbolDividendTableQuestion(messages: PortfolioChatMessage[], snapshot: unknown): PortfolioChatResponse | null {
+  const lastUserMessage = getRecentUserContent(messages);
+  const lastLower = lastUserMessage.toLowerCase();
+  const recentText = messages.slice(-6).map((message) => message.content).join("\n").toLowerCase();
+  const mentionsSymbols = /\b(symbols?|tickers?)\b/.test(recentText);
+  const asksForTable = /\b(table|list|show|include|included|all|continue)\b/.test(lastLower);
+  const asksForDividendData = /\b(dividends?|income|yield|payout)\b/.test(recentText);
+
+  if (!snapshot || typeof snapshot !== "object" || !mentionsSymbols || !asksForTable || !asksForDividendData) {
+    return null;
+  }
+
+  const holdings = Array.isArray((snapshot as any).holdings) ? (snapshot as any).holdings : [];
+  if (holdings.length === 0) return null;
+
+  const grouped = new Map<string, {
+    symbol: string;
+    holdings: number;
+    accounts: Set<string>;
+    totalInvestment: number;
+    includedTotal: number;
+    annualIncome: number;
+    includedIncome: number;
+  }>();
+
+  holdings.forEach((holding: any) => {
+    const symbol = String(holding?.effectiveSymbol || holding?.symbol || "(blank)").trim() || "(blank)";
+    const existing = grouped.get(symbol) || {
+      symbol,
+      holdings: 0,
+      accounts: new Set<string>(),
+      totalInvestment: 0,
+      includedTotal: 0,
+      annualIncome: 0,
+      includedIncome: 0,
+    };
+
+    existing.holdings += 1;
+    if (holding?.account) existing.accounts.add(String(holding.account));
+    existing.totalInvestment += toSnapshotNumber(holding?.totalInvestment);
+    existing.includedTotal += toSnapshotNumber(holding?.includedTotal);
+    existing.annualIncome += toSnapshotNumber(holding?.yearlyIncome);
+    existing.includedIncome += toSnapshotNumber(holding?.filteredIncome);
+    grouped.set(symbol, existing);
+  });
+
+  const rows = [...grouped.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.totalInvestment += row.totalInvestment;
+      acc.includedTotal += row.includedTotal;
+      acc.annualIncome += row.annualIncome;
+      acc.includedIncome += row.includedIncome;
+      return acc;
+    },
+    { totalInvestment: 0, includedTotal: 0, annualIncome: 0, includedIncome: 0 }
+  );
+
+  const tableLines = [
+    "| Symbol | Holdings | Accounts | Total investment | Included total | Annual dividends/income | Included income | Yield |",
+    "|---|---:|---|---:|---:|---:|---:|---:|",
+    ...rows.map((row) => {
+      const accounts = [...row.accounts].slice(0, 3).join(", ");
+      const accountLabel = row.accounts.size > 3 ? `${accounts}, +${row.accounts.size - 3}` : accounts;
+      const yieldValue = row.totalInvestment > 0 ? row.annualIncome / row.totalInvestment : 0;
+      return `| ${escapeMarkdownCell(row.symbol)} | ${row.holdings} | ${escapeMarkdownCell(accountLabel || "-")} | ${formatSnapshotCurrency(row.totalInvestment)} | ${formatSnapshotCurrency(row.includedTotal)} | ${formatSnapshotCurrency(row.annualIncome)} | ${formatSnapshotCurrency(row.includedIncome)} | ${formatSnapshotPercent(yieldValue)} |`;
+    }),
+    `| Total | ${holdings.length} | - | ${formatSnapshotCurrency(totals.totalInvestment)} | ${formatSnapshotCurrency(totals.includedTotal)} | ${formatSnapshotCurrency(totals.annualIncome)} | ${formatSnapshotCurrency(totals.includedIncome)} | ${formatSnapshotPercent(totals.totalInvestment > 0 ? totals.annualIncome / totals.totalInvestment : 0)} |`,
+  ];
+
+  return {
+    message: `Here is the symbol table using the app snapshot. I am treating yearly income as dividends/income because detailed ex-dividend and payout schedule fields are not included in the chat snapshot.\n\n${tableLines.join("\n")}`,
+    actions: [],
+    model: "local-portfolio-calculation",
+  };
+}
+
 function answerSimplePortfolioQuestion(messages: PortfolioChatMessage[], snapshot: unknown): PortfolioChatResponse | null {
-  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
+  const lastUserMessage = getRecentUserContent(messages);
   const symbol = getTickerTotalQuestion(lastUserMessage);
   if (!symbol || !snapshot || typeof snapshot !== "object") return null;
 
@@ -415,7 +523,9 @@ async function handlePortfolioChatRoute(
     return jsonResponse(400, { error: "Portfolio chat requires at least one user message." }, origin);
   }
 
-  const localAnswer = answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
+  const localAnswer =
+    answerSymbolDividendTableQuestion(messages, body.portfolioSnapshot) ||
+    answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
   if (localAnswer) {
     return jsonResponse(200, localAnswer, origin);
   }
@@ -456,7 +566,16 @@ async function handlePortfolioChatRoute(
     const parsed = JSON.parse(openRouterResult.body);
     const content = extractAssistantText(parsed);
     if (!content) {
-      return jsonResponse(502, { error: "OpenRouter returned malformed model output." }, origin);
+      const finishReason = parsed?.choices?.[0]?.finish_reason;
+      const fallbackMessage = finishReason === "length"
+        ? "OpenRouter stopped before producing a complete answer. Try asking for fewer rows or fewer columns."
+        : "OpenRouter returned an empty answer. Try rephrasing the question or asking for a smaller table.";
+      return jsonResponse(200, {
+        message: fallbackMessage,
+        actions: [],
+        model: String(parsed?.model || model),
+        usage: parsed?.usage,
+      }, origin);
     }
 
     const normalized = parseAssistantChatContent(content);
