@@ -309,6 +309,62 @@ function normalizeAssistantActions(actions: AssistantAction[], userContent: stri
   });
 }
 
+function extractAssistantText(parsed: any): string | null {
+  const content = parsed?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim()) return content;
+
+  if (Array.isArray(content)) {
+    const text = content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (typeof part?.text === "string") return part.text;
+        if (typeof part?.content === "string") return part.content;
+        return "";
+      })
+      .join("")
+      .trim();
+    if (text) return text;
+  }
+
+  const fallback =
+    parsed?.choices?.[0]?.text ||
+    parsed?.message ||
+    parsed?.output_text ||
+    parsed?.output?.[0]?.content?.[0]?.text;
+  return typeof fallback === "string" && fallback.trim() ? fallback : null;
+}
+
+function toSnapshotNumber(value: unknown) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function answerSimplePortfolioQuestion(messages: PortfolioChatMessage[], snapshot: unknown): PortfolioChatResponse | null {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
+  const symbolMatch = lastUserMessage.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
+  const asksTotal = /\b(total|sum|amount|value)\b/i.test(lastUserMessage);
+  if (!symbolMatch || !asksTotal || !snapshot || typeof snapshot !== "object") return null;
+
+  const symbol = symbolMatch[1].toUpperCase();
+  const holdings = Array.isArray((snapshot as any).holdings) ? (snapshot as any).holdings : [];
+  const matches = holdings.filter((holding: any) => {
+    const symbols = [holding?.symbol, holding?.effectiveSymbol].map((value) => String(value || "").toUpperCase());
+    return symbols.includes(symbol);
+  });
+
+  if (matches.length === 0) return null;
+
+  const totalInvestment = matches.reduce((sum: number, holding: any) => sum + toSnapshotNumber(holding?.totalInvestment), 0);
+  const includedTotal = matches.reduce((sum: number, holding: any) => sum + toSnapshotNumber(holding?.includedTotal), 0);
+  const annualIncome = matches.reduce((sum: number, holding: any) => sum + toSnapshotNumber(holding?.yearlyIncome), 0);
+
+  return {
+    message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. Total investment is $${totalInvestment.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Included total is $${includedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Annual income is $${annualIncome.toLocaleString("en-US", { maximumFractionDigits: 2 })}.`,
+    actions: [],
+    model: "local-portfolio-calculation",
+  };
+}
+
 function openRouterErrorMessage(statusCode: number, body: string) {
   let detail = body;
   try {
@@ -354,6 +410,11 @@ async function handlePortfolioChatRoute(
     return jsonResponse(400, { error: "Portfolio chat requires at least one user message." }, origin);
   }
 
+  const localAnswer = answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
+  if (localAnswer) {
+    return jsonResponse(200, localAnswer, origin);
+  }
+
   const model = process.env.OPENROUTER_MODEL || "openrouter/free";
   const portfolioContext = JSON.stringify(body.portfolioSnapshot || {});
   const requestPayload = {
@@ -388,8 +449,8 @@ async function handlePortfolioChatRoute(
 
   try {
     const parsed = JSON.parse(openRouterResult.body);
-    const content = parsed?.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || !content.trim()) {
+    const content = extractAssistantText(parsed);
+    if (!content) {
       return jsonResponse(502, { error: "OpenRouter returned malformed model output." }, origin);
     }
 
