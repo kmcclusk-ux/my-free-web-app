@@ -43,7 +43,7 @@ You may help analyze diversification, concentration, allocation, fees, income, a
 When the user asks you to change the UI, return JSON only in this shape:
 {"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
 Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAssets, selectAccount, setFilter, clearFilters, sortTable, and setView.
-To highlight all rows for a ticker symbol, use {"message":"Highlighting matching rows.","actions":[{"type":"selectAssets","payload":{"symbol":"BSJQ"}}]}.
+To highlight rows for a ticker symbol, use {"message":"Highlighting matching rows.","actions":[{"type":"selectAsset","payload":{"assetId":"BSJQ"}}]}. The app will highlight all matching rows for that ticker.
 For "clear all Inc checkboxes", return {"message":"Clearing all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":false},"requiresConfirmation":true}]}.
 For "select all Inc checkboxes", return {"message":"Selecting all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":true},"requiresConfirmation":true}]}.
 Do not use setFilter for Inc. Inc is a checkbox field, not a filter.
@@ -273,7 +273,7 @@ function answerSimplePortfolioQuestion(messages, snapshot) {
     const annualIncome = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.yearlyIncome), 0);
     return {
         message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. Total investment is $${totalInvestment.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Included total is $${includedTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}. Annual income is $${annualIncome.toLocaleString("en-US", { maximumFractionDigits: 2 })}. I highlighted the matching rows.`,
-        actions: [{ type: "selectAssets", payload: { symbol }, requiresConfirmation: false }],
+        actions: [{ type: "selectAsset", payload: { assetId: symbol }, requiresConfirmation: false }],
         model: "local-portfolio-calculation",
     };
 }
