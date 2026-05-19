@@ -160,6 +160,66 @@ function parseAssistantChatContent(content) {
         return { message: trimmed, actions: [] };
     }
 }
+function inferBulkIncCheckboxAction(userContent, assistantContent) {
+    const text = `${userContent}\n${assistantContent}`.toLowerCase();
+    const mentionsIncCheckboxes = /\binc\b/.test(text) &&
+        (text.includes("checkbox") ||
+            text.includes("check box") ||
+            text.includes("checked") ||
+            text.includes("unchecked") ||
+            text.includes("clear") ||
+            text.includes("uncheck") ||
+            text.includes("deselect") ||
+            text.includes("select all"));
+    const mentionsBulk = text.includes("all") || text.includes("every");
+    if (!mentionsIncCheckboxes || !mentionsBulk)
+        return null;
+    if (text.includes("clear") || text.includes("uncheck") || text.includes("unchecked") || text.includes("deselect")) {
+        return {
+            type: "setAllCheckboxes",
+            payload: { field: "includeIncome", checked: false },
+            requiresConfirmation: true,
+        };
+    }
+    if (text.includes("select") || text.includes("check") || text.includes("checked")) {
+        return {
+            type: "setAllCheckboxes",
+            payload: { field: "includeIncome", checked: true },
+            requiresConfirmation: true,
+        };
+    }
+    return null;
+}
+function normalizeAssistantActions(actions, userContent, assistantContent) {
+    const inferredBulkAction = inferBulkIncCheckboxAction(userContent, assistantContent);
+    if (actions.length === 0) {
+        return inferredBulkAction ? [inferredBulkAction] : [];
+    }
+    return actions.map((action) => {
+        if (action.type === "setFilter") {
+            const filterName = String(action.payload?.filterName || "").trim().toLowerCase();
+            if (["inc", "include", "includeincome", "inc checkbox", "inc checkboxes"].includes(filterName)) {
+                return inferredBulkAction || action;
+            }
+        }
+        if (action.type === "setAllCheckboxes") {
+            const checked = typeof action.payload?.checked === "boolean"
+                ? action.payload.checked
+                : inferredBulkAction?.payload?.checked;
+            if (typeof checked === "boolean") {
+                return {
+                    type: "setAllCheckboxes",
+                    payload: {
+                        field: action.payload?.field === "overrideProposal" ? "overrideProposal" : "includeIncome",
+                        checked,
+                    },
+                    requiresConfirmation: true,
+                };
+            }
+        }
+        return action;
+    });
+}
 function openRouterErrorMessage(statusCode, body) {
     let detail = body;
     try {
@@ -234,9 +294,17 @@ async function handlePortfolioChatRoute(event, origin) {
             return jsonResponse(502, { error: "OpenRouter returned malformed model output." }, origin);
         }
         const normalized = parseAssistantChatContent(content);
+        const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
+        const actions = normalizeAssistantActions(normalized.actions, lastUserMessage, content);
+        const inferredBulkAction = actions.find((action) => action.type === "setAllCheckboxes");
+        const message = normalized.actions.length === 0 && inferredBulkAction
+            ? Boolean(inferredBulkAction.payload?.checked)
+                ? "Selecting all Inc checkboxes."
+                : "Clearing all Inc checkboxes."
+            : normalized.message;
         const response = {
-            message: normalized.message,
-            actions: normalized.actions,
+            message,
+            actions,
             model: String(parsed?.model || model),
             usage: parsed?.usage,
         };

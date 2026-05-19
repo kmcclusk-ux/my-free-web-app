@@ -2193,8 +2193,15 @@ export default function App() {
     }
 
     if (actionType === "setAllCheckboxes") {
-      const checked = (action as any).payload?.checked;
-      const field = ((action as any).payload?.field || "includeIncome") as "includeIncome" | "overrideProposal";
+      const payload = (action as any).payload || {};
+      const field = (payload.field || "includeIncome") as "includeIncome" | "overrideProposal";
+      const checked = typeof payload.checked === "boolean"
+        ? payload.checked
+        : typeof payload[field] === "boolean"
+          ? payload[field]
+          : typeof payload.value === "boolean"
+            ? payload.value
+            : undefined;
       if (typeof checked !== "boolean" || (field !== "includeIncome" && field !== "overrideProposal")) {
         return { ok: false, message: "Rejected setAllCheckboxes: invalid checked value or checkbox field." };
       }
