@@ -645,10 +645,10 @@ async function saveWorkbook(workspaceId: string, payload: WorkbookResponse) {
 
 async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "content">>, portfolioSnapshot: PortfolioSnapshot) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello/api/portfolio-chat`, {
+  const response = await fetch(`${API_BASE_URL}/hello`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, portfolioSnapshot }),
+    body: JSON.stringify({ calc: "PORTFOLIO_CHAT", messages, portfolioSnapshot }),
   });
   const json = (await response.json()) as ChatResponse | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "Portfolio chat failed");
