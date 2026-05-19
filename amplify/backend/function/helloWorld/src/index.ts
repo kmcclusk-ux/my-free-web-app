@@ -102,6 +102,8 @@ You may help analyze diversification, concentration, allocation, fees, income, a
 When the user asks you to change the UI, return JSON only in this shape:
 {"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
 Allowed action types are setCheckbox, selectAsset, selectAccount, setFilter, clearFilters, sortTable, and setView.
+For checkbox requests, return only setCheckbox actions unless the user explicitly asks to filter, sort, select, or switch views.
+For actions that hide or change the visible rows, set requiresConfirmation to true.
 Do not request placing trades, transferring money, deleting data, or irreversible changes.`;
 
 function isFilingStatus(x: string): x is FilingStatus {

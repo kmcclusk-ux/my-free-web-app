@@ -1074,7 +1074,12 @@ function AssistantPanel({
         portfolioSnapshot
       );
       const actionResults = (response.actions || []).map((action) => {
-        if (action.requiresConfirmation && !window.confirm("Apply this assistant-requested UI change?")) {
+        const needsConfirmation =
+          action.requiresConfirmation ||
+          action.type === "setFilter" ||
+          action.type === "selectAccount" ||
+          action.type === "setView";
+        if (needsConfirmation && !window.confirm("Apply this assistant-requested UI/view change?")) {
           return { ok: false, message: `Skipped ${action.type}: user cancelled confirmation.` };
         }
         return onExecuteAction(action);
@@ -1175,7 +1180,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button" type="button" onClick={onAdd}>Add row</button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}<td><button className="ghost-button ghost-button--compact" type="button" onClick={() => onRemove(row.id)}>Remove</button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetId, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetId: number | null; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetId, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetId: number | null; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -1212,6 +1217,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const displayedDerivedRows = displayedRows
     .map((row) => derivedMap[row.id])
     .filter((row): row is DerivedInvestmentRow => Boolean(row));
+  const selectedRow = selectedAssetId ? rows.find((row) => row.id === selectedAssetId) : null;
+  const hasViewState = Boolean(filters.account || filters.category || filters.asset || sort.column || selectedRow);
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
   const [newFavoriteName, setNewFavoriteName] = useState("");
   const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
@@ -1451,6 +1458,17 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Select Rows</button>
         <button className="ghost-button" type="button" onClick={handleRemoveAllRows}>Remove all rows</button>
       </div>
+      {hasViewState && (
+        <div className="view-state-strip" role="status">
+          <strong>Showing {displayedRows.length} of {rows.length} rows</strong>
+          {selectedRow && <span>Selected: {selectedRow.description || selectedRow.symbol || selectedRow.id}</span>}
+          {filters.account && <span>Account: {filters.account}</span>}
+          {filters.category && <span>Category: {filters.category}</span>}
+          {filters.asset && <span>Asset: {filters.asset}</span>}
+          {sort.column && <span>Sorted: {sort.column} {sort.direction}</span>}
+          <button className="ghost-button ghost-button--compact" type="button" onClick={onClearViewState}>Show all rows</button>
+        </div>
+      )}
       {isRemoveConfirmOpen && (
         <div className="confirm-panel" role="alertdialog" aria-modal="true" aria-labelledby="remove-all-confirm-title">
           <div>
@@ -2178,9 +2196,8 @@ export default function App() {
       const row = derivedRows.find((item) => normalizeLookupKey(String(item.id)) === assetKey || normalizeLookupKey(item.symbol) === assetKey || normalizeLookupKey(item.effectiveSymbol) === assetKey || normalizeLookupKey(item.description) === assetKey);
       if (!row) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
       setSelectedInvestmentId(row.id);
-      setInvestmentFilters((current) => ({ ...current, asset: row.effectiveSymbol || row.symbol || String(row.id) }));
       setActiveTab("investments");
-      return { ok: true, message: `Selected asset ${row.description || row.effectiveSymbol}.` };
+      return { ok: true, message: `Selected asset ${row.description || row.effectiveSymbol}; no rows were hidden.` };
     }
 
     if (actionType === "selectAccount") {
@@ -2337,6 +2354,11 @@ export default function App() {
             onRemove={removeRow(setInvestments)}
             onReorder={reorderInvestments}
             onClear={() => setInvestments([])}
+            onClearViewState={() => {
+              setInvestmentFilters({ account: "", category: "", asset: "" });
+              setInvestmentSort({ tableId: "investments", column: "", direction: "asc" });
+              setSelectedInvestmentId(null);
+            }}
             onSelectAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: true })))}
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />

@@ -110,6 +110,10 @@
 .primary-button { background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; }
 .ghost-button { background: rgba(255,255,255,.72); color: #2e5057; }
 .ghost-button--compact { padding: 6px 9px; font-size: .76rem; }
+.view-state-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 7px 9px; border: 1px solid rgba(35,96,106,.14); border-radius: 13px; background: rgba(235,246,248,.94); color: #285860; font-size: .76rem; }
+.view-state-strip strong { color: #17313a; }
+.view-state-strip span { padding: 3px 7px; border-radius: 999px; background: rgba(255,255,255,.8); border: 1px solid rgba(24,49,58,.08); }
+.view-state-strip button { margin-left: auto; }
 .table-wrap { overflow: auto; border-radius: 18px; border: 1px solid rgba(24,49,58,.1); background: rgba(255,255,255,.7); }
 .table-wrap--tall { max-height: 68vh; }
 .sheet-table { width: 100%; min-width: 980px; border-collapse: collapse; }
