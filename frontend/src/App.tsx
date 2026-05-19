@@ -118,6 +118,7 @@ type PortfolioSnapshot = {
 };
 type AssistantAction =
   | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
+  | { type: "setAllCheckboxes"; payload: { checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "selectAsset"; payload: { assetId: number | string }; requiresConfirmation?: boolean }
   | { type: "selectAccount"; payload: { accountId: number | string }; requiresConfirmation?: boolean }
   | { type: "setFilter"; payload: { filterName: keyof InvestmentFilters; value: string }; requiresConfirmation?: boolean }
@@ -1077,9 +1078,10 @@ function AssistantPanel({
         const needsConfirmation =
           action.requiresConfirmation ||
           action.type === "setFilter" ||
+          action.type === "setAllCheckboxes" ||
           action.type === "selectAccount" ||
           action.type === "setView";
-        if (needsConfirmation && !window.confirm("Apply this assistant-requested UI/view change?")) {
+        if (needsConfirmation && !window.confirm("Apply this assistant-requested checkbox/filter/view change?")) {
           return { ok: false, message: `Skipped ${action.type}: user cancelled confirmation.` };
         }
         return onExecuteAction(action);
@@ -2190,6 +2192,16 @@ export default function App() {
       return { ok: true, message: `Updated ${field} for investment ${id}.` };
     }
 
+    if (actionType === "setAllCheckboxes") {
+      const checked = (action as any).payload?.checked;
+      const field = ((action as any).payload?.field || "includeIncome") as "includeIncome" | "overrideProposal";
+      if (typeof checked !== "boolean" || (field !== "includeIncome" && field !== "overrideProposal")) {
+        return { ok: false, message: "Rejected setAllCheckboxes: invalid checked value or checkbox field." };
+      }
+      setInvestments((current) => current.map((row) => ({ ...row, [field]: checked })));
+      return { ok: true, message: `Updated ${field} for all ${investments.length} investment rows.` };
+    }
+
     if (actionType === "selectAsset") {
       const assetId = String((action as any).payload?.assetId || "");
       const assetKey = normalizeLookupKey(assetId);
@@ -2210,8 +2222,16 @@ export default function App() {
     }
 
     if (actionType === "setFilter") {
-      const filterName = String((action as any).payload?.filterName || "") as keyof InvestmentFilters;
+      const rawFilterName = String((action as any).payload?.filterName || "");
+      const filterName = rawFilterName as keyof InvestmentFilters;
       const value = String((action as any).payload?.value || "");
+      const checkboxFilterKey = normalizeLookupKey(rawFilterName).replace(/\s+/g, "");
+      if (["inc", "include", "includeincome", "inccheckbox"].includes(checkboxFilterKey)) {
+        const valueKey = normalizeLookupKey(value);
+        const checked = ["true", "1", "yes", "on", "select", "selected", "checked", "check"].includes(valueKey);
+        setInvestments((current) => current.map((row) => ({ ...row, includeIncome: checked })));
+        return { ok: true, message: `Interpreted Inc as checkboxes and ${checked ? "selected" : "cleared"} all Inc rows.` };
+      }
       if (!["account", "category", "asset"].includes(filterName)) return { ok: false, message: `Rejected setFilter: ${filterName || "(blank)"} is not an allowed filter.` };
       if (filterName === "account" && value && !accounts.some((row) => normalizeLookupKey(row.account) === normalizeLookupKey(value))) return { ok: false, message: `Rejected setFilter: account ${value} was not found.` };
       if (filterName === "category" && value && !categories.some((row) => normalizeLookupKey(row.name) === normalizeLookupKey(value)) && !derivedRows.some((row) => normalizeLookupKey(row.category) === normalizeLookupKey(value))) return { ok: false, message: `Rejected setFilter: category ${value} was not found.` };

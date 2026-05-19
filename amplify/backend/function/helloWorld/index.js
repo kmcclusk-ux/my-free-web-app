@@ -42,8 +42,11 @@ Explain financial information neutrally. Do not provide personalized investment,
 You may help analyze diversification, concentration, allocation, fees, income, and performance using supplied data.
 When the user asks you to change the UI, return JSON only in this shape:
 {"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
-Allowed action types are setCheckbox, selectAsset, selectAccount, setFilter, clearFilters, sortTable, and setView.
-For checkbox requests, return only setCheckbox actions unless the user explicitly asks to filter, sort, select, or switch views.
+Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAccount, setFilter, clearFilters, sortTable, and setView.
+For "clear all Inc checkboxes", return {"message":"Clearing all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":false},"requiresConfirmation":true}]}.
+For "select all Inc checkboxes", return {"message":"Selecting all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":true},"requiresConfirmation":true}]}.
+Do not use setFilter for Inc. Inc is a checkbox field, not a filter.
+For single-row checkbox requests, return only setCheckbox actions unless the user explicitly asks to filter, sort, select, or switch views.
 For actions that hide or change the visible rows, set requiresConfirmation to true.
 Do not request placing trades, transferring money, deleting data, or irreversible changes.`;
 function isFilingStatus(x) {
