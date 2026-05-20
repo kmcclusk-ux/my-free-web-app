@@ -98,6 +98,7 @@ const PORTFOLIO_ASSISTANT_SYSTEM_PROMPT = `You are a portfolio assistant embedde
 Use only the provided portfolio state, workbook tables, reference tables, and calculated metrics. If data is missing, say what is missing.
 You can answer open-ended questions about investments, tickers, accounts, tax treatment, account tax type, investment type, categories, filters, selected rows, allocation, income, diversification, concentration, and calculated tax/after-tax metrics.
 Do not invent balances, prices, returns, allocations, gains, losses, or tax figures. Explain financial information neutrally. Do not provide personalized investment, tax, legal, trading, transfer, or irreversible-action advice.
+If web search tools are available, use them only when the user asks for current external information or facts not present in the workbook snapshot. Do not browse for questions that can be answered from the supplied portfolio/workbook data.
 When the user only asks a question, answer normally in concise prose or markdown. When the user asks you to change the app UI or workbook data, return JSON only in this shape:
 {"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
 Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAssets, selectAccount, setFilter, clearFilters, sortTable, setView, addRow, updateRow, and deleteRows.
@@ -365,6 +366,16 @@ function extractAssistantText(parsed: any): string | null {
 function toSnapshotNumber(value: unknown) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function parseBooleanEnv(value: unknown) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function parsePositiveIntegerEnv(value: unknown, fallback: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
 }
 
 function formatSnapshotCurrency(value: number) {
@@ -646,6 +657,13 @@ async function handlePortfolioChatRoute(
   }
 
   const model = process.env.OPENROUTER_MODEL || "openrouter/free";
+  const webSearchEnabled = parseBooleanEnv(process.env.ENABLE_ASSISTANT_WEB_SEARCH);
+  const webSearchMaxResults = parsePositiveIntegerEnv(process.env.ASSISTANT_WEB_SEARCH_MAX_RESULTS, 3, 10);
+  const webSearchContextSize = String(process.env.ASSISTANT_WEB_SEARCH_CONTEXT_SIZE || "low").toLowerCase();
+  const webSearchParameters = {
+    max_results: webSearchMaxResults,
+    search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
+  };
   const portfolioContext = JSON.stringify(body.portfolioSnapshot || {});
   const requestPayload = {
     model,
@@ -659,6 +677,16 @@ async function handlePortfolioChatRoute(
       },
       ...messages,
     ],
+    ...(webSearchEnabled
+      ? {
+          tools: [
+            {
+              type: "openrouter:web_search",
+              parameters: webSearchParameters,
+            },
+          ],
+        }
+      : {}),
   };
 
   let openRouterResult: { statusCode: number; body: string };

@@ -32,6 +32,11 @@ Current free model options checked on OpenRouter:
 Optional Lambda environment variable:
 
 - `OPENROUTER_SITE_URL`, used for OpenRouter request attribution
+- `ENABLE_ASSISTANT_WEB_SEARCH`, default `false`. Set to `true` only if you want OpenRouter web search enabled for the assistant.
+- `ASSISTANT_WEB_SEARCH_MAX_RESULTS`, default `3`, capped at `10`.
+- `ASSISTANT_WEB_SEARCH_CONTEXT_SIZE`, default `low`; allowed values are `low`, `medium`, or `high`.
+
+Web search note: OpenRouter free models can be used with the `openrouter:web_search` server tool, but search operations may add OpenRouter costs even when the model itself is free. Keep `ENABLE_ASSISTANT_WEB_SEARCH=false` for strict lowest-cost operation.
 
 Frontend environment still uses `VITE_API_BASE_URL` for the existing Amplify REST API base URL. Do not put `OPENROUTER_API_KEY` in any frontend `.env` file.
 
@@ -41,6 +46,6 @@ PowerShell example for the live Lambda after you have AWS credentials configured
 aws lambda update-function-configuration `
   --region us-west-2 `
   --function-name helloWorld-portfolio `
-  --environment "Variables={ENV=portfolio,REGION=us-west-2,WORKBOOK_TABLE_NAME=portfolio-workbook-portfolio,OPENROUTER_MODEL=openrouter/free,OPENROUTER_SITE_URL=https://live.d3gqzb2viphf8u.amplifyapp.com,OPENROUTER_API_KEY=$env:OPENROUTER_API_KEY}"
+  --environment "Variables={ENV=portfolio,REGION=us-west-2,WORKBOOK_TABLE_NAME=portfolio-workbook-portfolio,OPENROUTER_MODEL=openrouter/free,OPENROUTER_SITE_URL=https://live.d3gqzb2viphf8u.amplifyapp.com,ENABLE_ASSISTANT_WEB_SEARCH=false,ASSISTANT_WEB_SEARCH_MAX_RESULTS=3,ASSISTANT_WEB_SEARCH_CONTEXT_SIZE=low,OPENROUTER_API_KEY=$env:OPENROUTER_API_KEY}"
 ```
 
