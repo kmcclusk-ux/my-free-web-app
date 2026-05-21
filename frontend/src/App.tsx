@@ -225,6 +225,10 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
+const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
+const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
+const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
+const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
@@ -1134,6 +1138,54 @@ function TaxThermometerPanel({ totalIncome, federalTaxable, stateTaxable, federa
   );
 }
 
+function readAssistantPromptHistory() {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ASSISTANT_PROMPT_HISTORY_KEY) || "[]");
+    const history = Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT)
+      : [];
+    return [...new Set(history)];
+  } catch {
+    return [];
+  }
+}
+
+function writeAssistantPromptHistory(history: string[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ASSISTANT_PROMPT_HISTORY_KEY, JSON.stringify([...new Set(history)].slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT)));
+}
+
+function readAssistantMessageHistory() {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ASSISTANT_MESSAGE_HISTORY_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((message): message is ChatMessage =>
+        message &&
+        typeof message === "object" &&
+        (message.role === "user" || message.role === "assistant") &&
+        typeof message.content === "string" &&
+        typeof message.createdAt === "string"
+      )
+      .slice(-ASSISTANT_MESSAGE_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function writeAssistantMessageHistory(messages: ChatMessage[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ASSISTANT_MESSAGE_HISTORY_KEY, JSON.stringify(messages.slice(-ASSISTANT_MESSAGE_HISTORY_LIMIT)));
+}
+
+function clearAssistantMessageHistory() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ASSISTANT_MESSAGE_HISTORY_KEY, "[]");
+}
+
 function AssistantPanel({
   portfolioSnapshot,
   onExecuteAction,
@@ -1143,17 +1195,81 @@ function AssistantPanel({
   onExecuteAction: (action: AssistantAction) => AssistantActionResult;
   onClose: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(readAssistantMessageHistory);
   const [draft, setDraft] = useState("");
+  const [promptHistory, setPromptHistory] = useState<string[]>(readAssistantPromptHistory);
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null);
+  const [historyDraft, setHistoryDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const askInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const visibleMetrics = portfolioSnapshot.metrics;
   useEffect(() => {
+    setMessages(readAssistantMessageHistory());
+    setPromptHistory(readAssistantPromptHistory());
     const focusTimer = window.setTimeout(() => askInputRef.current?.focus(), 0);
     return () => window.clearTimeout(focusTimer);
   }, []);
+
+  useEffect(() => {
+    writeAssistantMessageHistory(messages);
+  }, [messages]);
+
+  useEffect(() => {
+    const refreshStoredAssistantState = () => {
+      setMessages(readAssistantMessageHistory());
+      setPromptHistory(readAssistantPromptHistory());
+    };
+    window.addEventListener("focus", refreshStoredAssistantState);
+    window.addEventListener("storage", refreshStoredAssistantState);
+    return () => {
+      window.removeEventListener("focus", refreshStoredAssistantState);
+      window.removeEventListener("storage", refreshStoredAssistantState);
+    };
+  }, []);
+
+  const rememberPrompt = (content: string) => {
+    const current = readAssistantPromptHistory();
+    const next = [content, ...current.filter((entry) => entry !== content)].slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT);
+    writeAssistantPromptHistory(next);
+    setPromptHistory(next);
+    setHistoryCursor(null);
+    setHistoryDraft("");
+  };
+
+  const recallPromptFromHistory = (direction: "older" | "newer", textarea: HTMLTextAreaElement) => {
+    const latestHistory = promptHistory.length ? promptHistory : readAssistantPromptHistory();
+    if (latestHistory.length === 0) return;
+    if (latestHistory !== promptHistory) setPromptHistory(latestHistory);
+
+    if (direction === "older") {
+      const nextCursor = historyCursor === null ? 0 : Math.min(historyCursor + 1, latestHistory.length - 1);
+      if (historyCursor === null) setHistoryDraft(draft);
+      setHistoryCursor(nextCursor);
+      setDraft(latestHistory[nextCursor]);
+      window.setTimeout(() => {
+        textarea.selectionStart = textarea.value.length;
+        textarea.selectionEnd = textarea.value.length;
+      }, 0);
+      return;
+    }
+
+    if (historyCursor === null) return;
+    const nextCursor = historyCursor - 1;
+    if (nextCursor < 0) {
+      setHistoryCursor(null);
+      setDraft(historyDraft);
+      setHistoryDraft("");
+    } else {
+      setHistoryCursor(nextCursor);
+      setDraft(latestHistory[nextCursor]);
+    }
+    window.setTimeout(() => {
+      textarea.selectionStart = textarea.value.length;
+      textarea.selectionEnd = textarea.value.length;
+    }, 0);
+  };
 
   const submitPrompt = async () => {
     const content = draft.trim();
@@ -1167,6 +1283,8 @@ function AssistantPanel({
       createdAt: now,
     };
     const nextMessages = [...messages, userMessage];
+    rememberPrompt(content);
+    writeAssistantMessageHistory(nextMessages);
     setMessages(nextMessages);
     setDraft("");
     setIsLoading(true);
@@ -1202,20 +1320,24 @@ function AssistantPanel({
         actions: response.actions || [],
         createdAt: new Date().toISOString(),
       };
-      setMessages([...nextMessages, assistantMessage]);
+      const finalMessages = [...nextMessages, assistantMessage];
+      writeAssistantMessageHistory(finalMessages);
+      setMessages(finalMessages);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Portfolio assistant failed.";
-      setError(message);
-      setMessages([
+      const errorMessages = [
         ...nextMessages,
         {
           id: `assistant-error-${Date.now()}`,
-          role: "assistant",
+          role: "assistant" as const,
           content: message,
           createdAt: new Date().toISOString(),
           error: true,
         },
-      ]);
+      ];
+      setError(message);
+      writeAssistantMessageHistory(errorMessages);
+      setMessages(errorMessages);
     } finally {
       setIsLoading(false);
     }
@@ -1229,7 +1351,7 @@ function AssistantPanel({
           <h3>Ask about holdings, filters, and live metrics</h3>
         </div>
         <div className="assistant-panel__actions">
-          <button className="ghost-button ghost-button--compact" type="button" onClick={() => { setMessages([]); setError(null); }}>
+          <button className="ghost-button ghost-button--compact" type="button" onClick={() => { clearAssistantMessageHistory(); setMessages([]); setError(null); }}>
             Reset
           </button>
           <button className="ghost-button ghost-button--compact" type="button" onClick={onClose}>
@@ -1267,11 +1389,32 @@ function AssistantPanel({
         <textarea
           ref={askInputRef}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setHistoryCursor(null);
+            setHistoryDraft("");
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               void submitPrompt();
+              return;
+            }
+
+            if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+              const textarea = event.currentTarget;
+              const cursor = textarea.selectionStart ?? 0;
+              const firstLineEnd = textarea.value.indexOf("\n");
+              const isOnFirstLine = firstLineEnd === -1 || cursor <= firstLineEnd;
+              const isOnLastLine = textarea.value.indexOf("\n", cursor) === -1;
+
+              if (event.key === "ArrowUp" && isOnFirstLine) {
+                event.preventDefault();
+                recallPromptFromHistory("older", textarea);
+              } else if (event.key === "ArrowDown" && historyCursor !== null && isOnLastLine) {
+                event.preventDefault();
+                recallPromptFromHistory("newer", textarea);
+              }
             }
           }}
           placeholder="Ask the assistant to analyze or change the current view..."
