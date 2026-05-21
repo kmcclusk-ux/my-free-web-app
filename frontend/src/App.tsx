@@ -1147,8 +1147,14 @@ function AssistantPanel({
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const askInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const visibleMetrics = portfolioSnapshot.metrics;
+  useEffect(() => {
+    const focusTimer = window.setTimeout(() => askInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, []);
+
   const submitPrompt = async () => {
     const content = draft.trim();
     if (!content || isLoading) return;
@@ -1259,6 +1265,7 @@ function AssistantPanel({
         }}
       >
         <textarea
+          ref={askInputRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
