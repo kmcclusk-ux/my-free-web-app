@@ -410,40 +410,50 @@ function getYahooFinanceQuoteSymbol(text) {
         return null;
     return extractTickerSymbolsFromText(text)[0] || null;
 }
+async function fetchYahooFinanceQuote(symbol) {
+    const cleanSymbol = symbol.toUpperCase();
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanSymbol)}?range=1d&interval=1m`;
+    const response = await getTextFromHttps(url, 8000);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`Yahoo quote endpoint returned ${response.statusCode}.`);
+    }
+    const parsed = JSON.parse(response.body);
+    const result = parsed?.chart?.result?.[0];
+    const meta = result?.meta;
+    if (!meta)
+        throw new Error("Yahoo quote endpoint did not include quote metadata.");
+    const price = toSnapshotNumber(meta.regularMarketPrice);
+    const previousClose = toSnapshotNumber(meta.previousClose ?? meta.chartPreviousClose);
+    const change = previousClose > 0 ? price - previousClose : 0;
+    return {
+        symbol: cleanSymbol,
+        name: String(meta.longName || meta.shortName || cleanSymbol),
+        price,
+        previousClose,
+        change,
+        changePercent: previousClose > 0 ? change / previousClose : 0,
+        dayLow: toSnapshotNumber(meta.regularMarketDayLow),
+        dayHigh: toSnapshotNumber(meta.regularMarketDayHigh),
+        volume: toSnapshotNumber(meta.regularMarketVolume),
+        currency: String(meta.currency || "USD"),
+        quoteTime: formatQuoteTime(meta.regularMarketTime, meta.exchangeTimezoneName),
+        yahooUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(cleanSymbol)}/`,
+    };
+}
 async function answerYahooFinanceQuoteQuestion(messages) {
     const lastUserMessage = getRecentUserContent(messages);
     const symbol = getYahooFinanceQuoteSymbol(lastUserMessage);
     if (!symbol)
         return null;
     try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`;
-        const response = await getTextFromHttps(url, 8000);
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-            throw new Error(`Yahoo quote endpoint returned ${response.statusCode}.`);
-        }
-        const parsed = JSON.parse(response.body);
-        const result = parsed?.chart?.result?.[0];
-        const meta = result?.meta;
-        if (!meta)
-            throw new Error("Yahoo quote endpoint did not include quote metadata.");
-        const price = toSnapshotNumber(meta.regularMarketPrice);
-        const previousClose = toSnapshotNumber(meta.previousClose ?? meta.chartPreviousClose);
-        const change = previousClose > 0 ? price - previousClose : 0;
-        const changePercent = previousClose > 0 ? change / previousClose : 0;
-        const dayLow = toSnapshotNumber(meta.regularMarketDayLow);
-        const dayHigh = toSnapshotNumber(meta.regularMarketDayHigh);
-        const volume = toSnapshotNumber(meta.regularMarketVolume);
-        const currency = String(meta.currency || "USD");
-        const name = String(meta.longName || meta.shortName || symbol);
-        const quoteTime = formatQuoteTime(meta.regularMarketTime, meta.exchangeTimezoneName);
-        const yahooUrl = `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/`;
+        const quote = await fetchYahooFinanceQuote(symbol);
         return {
             message: [
-                `Yahoo Finance quote for **${symbol}** (${name}): **${formatSnapshotCurrency(price)} ${currency}** as of ${quoteTime}.`,
-                `Change vs previous close ${formatSnapshotCurrency(previousClose)}: **${formatSignedCurrency(change)} (${changePercent >= 0 ? "+" : ""}${formatSnapshotPercent(changePercent)})**.`,
-                dayLow || dayHigh ? `Day range: ${formatSnapshotCurrency(dayLow)} - ${formatSnapshotCurrency(dayHigh)}.` : "",
-                volume ? `Volume: ${volume.toLocaleString("en-US", { maximumFractionDigits: 0 })}.` : "",
-                `Source: ${yahooUrl}`,
+                `Yahoo Finance quote for **${quote.symbol}** (${quote.name}): **${formatSnapshotCurrency(quote.price)} ${quote.currency}** as of ${quote.quoteTime}.`,
+                `Change vs previous close ${formatSnapshotCurrency(quote.previousClose)}: **${formatSignedCurrency(quote.change)} (${quote.changePercent >= 0 ? "+" : ""}${formatSnapshotPercent(quote.changePercent)})**.`,
+                quote.dayLow || quote.dayHigh ? `Day range: ${formatSnapshotCurrency(quote.dayLow)} - ${formatSnapshotCurrency(quote.dayHigh)}.` : "",
+                quote.volume ? `Volume: ${quote.volume.toLocaleString("en-US", { maximumFractionDigits: 0 })}.` : "",
+                `Source: ${quote.yahooUrl}`,
             ].filter(Boolean).join("\n"),
             actions: [],
             model: "direct-yahoo-finance-chart",
@@ -457,6 +467,75 @@ async function answerYahooFinanceQuoteQuestion(messages) {
             model: "direct-yahoo-finance-chart",
         };
     }
+}
+function isLikelyMarketTickerSymbol(value) {
+    const symbol = String(value || "").trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol))
+        return false;
+    return !new Set(["SS", "AUX-SS"]).has(symbol);
+}
+function getPortfolioPriceRequest(text) {
+    return /\b(current|latest|today|market)?\s*(prices?|quotes?)\b/i.test(text) &&
+        /\b(each|all|every|portfolio|investments?|tickers?|symbols?)\b/i.test(text);
+}
+function getPortfolioTickerSymbols(snapshot) {
+    if (!snapshot || typeof snapshot !== "object")
+        return [];
+    const source = snapshot;
+    const holdings = Array.isArray(source.holdings) ? source.holdings : [];
+    const symbols = holdings
+        .flatMap((holding) => [holding?.effectiveSymbol, holding?.symbol])
+        .map((symbol) => String(symbol || "").trim().toUpperCase())
+        .filter((symbol) => isLikelyMarketTickerSymbol(symbol));
+    return [...new Set(symbols)].sort((a, b) => a.localeCompare(b));
+}
+async function mapWithConcurrency(items, limit, mapper) {
+    const results = [];
+    for (let index = 0; index < items.length; index += limit) {
+        const chunk = items.slice(index, index + limit);
+        results.push(...await Promise.all(chunk.map(mapper)));
+    }
+    return results;
+}
+async function answerPortfolioTickerPricesQuestion(messages, snapshot) {
+    const lastUserMessage = getRecentUserContent(messages);
+    if (!getPortfolioPriceRequest(lastUserMessage))
+        return null;
+    const symbols = getPortfolioTickerSymbols(snapshot);
+    if (symbols.length === 0) {
+        return {
+            message: "I could not find any market-style ticker symbols in the current portfolio snapshot.",
+            actions: [],
+            model: "direct-yahoo-finance-chart",
+        };
+    }
+    const quoteResults = await mapWithConcurrency(symbols, 6, async (symbol) => {
+        try {
+            return { symbol, quote: await fetchYahooFinanceQuote(symbol), error: "" };
+        }
+        catch (error) {
+            const message = error instanceof Error && error.message ? error.message : "quote lookup failed";
+            return { symbol, quote: null, error: message };
+        }
+    });
+    const tableRows = quoteResults.map((result) => {
+        if (!result.quote) {
+            return `| ${escapeMarkdownCell(result.symbol)} | unavailable | - | - | - | ${escapeMarkdownCell(result.error)} |`;
+        }
+        const quote = result.quote;
+        return `| ${escapeMarkdownCell(quote.symbol)} | ${formatSnapshotCurrency(quote.price)} ${escapeMarkdownCell(quote.currency)} | ${formatSignedCurrency(quote.change)} | ${quote.changePercent >= 0 ? "+" : ""}${formatSnapshotPercent(quote.changePercent)} | ${escapeMarkdownCell(quote.quoteTime)} | ${escapeMarkdownCell(quote.name)} |`;
+    });
+    return {
+        message: [
+            `Current Yahoo Finance prices for ${symbols.length} portfolio ticker${symbols.length === 1 ? "" : "s"}:`,
+            "",
+            "| Ticker | Price | Change | Change % | Quote time | Name / status |",
+            "|---|---:|---:|---:|---|---|",
+            ...tableRows,
+        ].join("\n"),
+        actions: [],
+        model: "direct-yahoo-finance-chart",
+    };
 }
 function normalizePortfolioMatchValue(value) {
     return String(value || "")
@@ -677,6 +756,10 @@ async function handlePortfolioChatRoute(event, origin) {
     const directQuoteAnswer = await answerYahooFinanceQuoteQuestion(messages);
     if (directQuoteAnswer) {
         return jsonResponse(200, directQuoteAnswer, origin);
+    }
+    const portfolioPricesAnswer = await answerPortfolioTickerPricesQuestion(messages, body.portfolioSnapshot);
+    if (portfolioPricesAnswer) {
+        return jsonResponse(200, portfolioPricesAnswer, origin);
     }
     const localAnswer = answerSelectRowsQuestion(messages, body.portfolioSnapshot) ||
         answerSymbolDividendTableQuestion(messages, body.portfolioSnapshot) ||
