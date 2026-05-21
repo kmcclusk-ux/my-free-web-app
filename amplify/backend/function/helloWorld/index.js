@@ -109,7 +109,7 @@ function parseJsonBody(event) {
         return null;
     return JSON.parse(raw.trim());
 }
-function postJsonToOpenRouter(payload, apiKey, timeoutMs = 18000) {
+function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
     const body = JSON.stringify(payload);
     return new Promise((resolve, reject) => {
         let completed = false;

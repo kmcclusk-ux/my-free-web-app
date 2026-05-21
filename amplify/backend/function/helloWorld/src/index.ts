@@ -180,7 +180,7 @@ function parseJsonBody<T>(event: APIGatewayProxyEvent): T | null {
 function postJsonToOpenRouter(
   payload: unknown,
   apiKey: string,
-  timeoutMs = 18000
+  timeoutMs = 22000
 ): Promise<{ statusCode: number; body: string }> {
   const body = JSON.stringify(payload);
 
