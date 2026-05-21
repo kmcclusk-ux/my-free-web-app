@@ -34,7 +34,7 @@ Optional Lambda environment variable:
 - `OPENROUTER_SITE_URL`, used for OpenRouter request attribution
 - `ENABLE_ASSISTANT_WEB_SEARCH`, default `false`. Set to `true` only if you want OpenRouter web search enabled for the assistant.
 - `OPENROUTER_WEB_SEARCH_MODEL`, optional model used only for web-search requests. A free tool-oriented option to try is `openrouter/owl-alpha`.
-- `OPENROUTER_TIMEOUT_MS`, default `22000` for web-search requests and capped at `24000` so API Gateway can receive a clean error instead of timing out.
+- `OPENROUTER_TIMEOUT_MS`, default `18000` for web-search requests and capped at `24000` so API Gateway can receive a clean error instead of timing out.
 - `ASSISTANT_WEB_SEARCH_MAX_RESULTS`, default `3`, capped at `10`.
 - `ASSISTANT_WEB_SEARCH_CONTEXT_SIZE`, default `low`; allowed values are `low`, `medium`, or `high`.
 
@@ -48,6 +48,6 @@ PowerShell example for the live Lambda after you have AWS credentials configured
 aws lambda update-function-configuration `
   --region us-west-2 `
   --function-name helloWorld-portfolio `
-  --environment "Variables={ENV=portfolio,REGION=us-west-2,WORKBOOK_TABLE_NAME=portfolio-workbook-portfolio,OPENROUTER_MODEL=openrouter/free,OPENROUTER_WEB_SEARCH_MODEL=openrouter/owl-alpha,OPENROUTER_TIMEOUT_MS=22000,OPENROUTER_SITE_URL=https://live.d3gqzb2viphf8u.amplifyapp.com,ENABLE_ASSISTANT_WEB_SEARCH=false,ASSISTANT_WEB_SEARCH_MAX_RESULTS=3,ASSISTANT_WEB_SEARCH_CONTEXT_SIZE=low,OPENROUTER_API_KEY=$env:OPENROUTER_API_KEY}"
+  --environment "Variables={ENV=portfolio,REGION=us-west-2,WORKBOOK_TABLE_NAME=portfolio-workbook-portfolio,OPENROUTER_MODEL=openrouter/free,OPENROUTER_WEB_SEARCH_MODEL=openrouter/owl-alpha,OPENROUTER_TIMEOUT_MS=18000,OPENROUTER_SITE_URL=https://live.d3gqzb2viphf8u.amplifyapp.com,ENABLE_ASSISTANT_WEB_SEARCH=false,ASSISTANT_WEB_SEARCH_MAX_RESULTS=3,ASSISTANT_WEB_SEARCH_CONTEXT_SIZE=low,OPENROUTER_API_KEY=$env:OPENROUTER_API_KEY}"
 ```
 

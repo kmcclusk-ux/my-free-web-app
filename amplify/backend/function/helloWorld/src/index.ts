@@ -180,12 +180,24 @@ function parseJsonBody<T>(event: APIGatewayProxyEvent): T | null {
 function postJsonToOpenRouter(
   payload: unknown,
   apiKey: string,
-  timeoutMs = 22000
+  timeoutMs = 18000
 ): Promise<{ statusCode: number; body: string }> {
   const body = JSON.stringify(payload);
 
   return new Promise((resolve, reject) => {
-    const req = httpsRequest(
+    let completed = false;
+    let req: ReturnType<typeof httpsRequest>;
+    const finish = (callback: () => void) => {
+      if (completed) return;
+      completed = true;
+      clearTimeout(totalTimeout);
+      callback();
+    };
+    const totalTimeout = setTimeout(() => {
+      req.destroy(new Error("OpenRouter request timed out."));
+    }, timeoutMs);
+
+    req = httpsRequest(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
@@ -201,16 +213,18 @@ function postJsonToOpenRouter(
         const chunks: Buffer[] = [];
         res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
         res.on("end", () => {
-          resolve({
+          finish(() => resolve({
             statusCode: res.statusCode || 0,
             body: Buffer.concat(chunks).toString("utf8"),
-          });
+          }));
         });
       }
     );
 
-    req.on("error", reject);
-    req.setTimeout(timeoutMs, () => {
+    req.on("error", (error) => {
+      finish(() => reject(error));
+    });
+    req.setTimeout(Math.min(timeoutMs, 15000), () => {
       req.destroy(new Error("OpenRouter request timed out."));
     });
     req.write(body);
@@ -705,6 +719,7 @@ async function handlePortfolioChatRoute(
   const webSearchContextSize = String(process.env.ASSISTANT_WEB_SEARCH_CONTEXT_SIZE || "low").toLowerCase();
   const webSearchParameters = {
     max_results: webSearchMaxResults,
+    max_total_results: webSearchMaxResults,
     search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
   };
   const portfolioContext = JSON.stringify(

@@ -109,10 +109,22 @@ function parseJsonBody(event) {
         return null;
     return JSON.parse(raw.trim());
 }
-function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
+function postJsonToOpenRouter(payload, apiKey, timeoutMs = 18000) {
     const body = JSON.stringify(payload);
     return new Promise((resolve, reject) => {
-        const req = (0, https_1.request)("https://openrouter.ai/api/v1/chat/completions", {
+        let completed = false;
+        let req;
+        const finish = (callback) => {
+            if (completed)
+                return;
+            completed = true;
+            clearTimeout(totalTimeout);
+            callback();
+        };
+        const totalTimeout = setTimeout(() => {
+            req.destroy(new Error("OpenRouter request timed out."));
+        }, timeoutMs);
+        req = (0, https_1.request)("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${apiKey}`,
@@ -125,14 +137,16 @@ function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
             const chunks = [];
             res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
             res.on("end", () => {
-                resolve({
+                finish(() => resolve({
                     statusCode: res.statusCode || 0,
                     body: Buffer.concat(chunks).toString("utf8"),
-                });
+                }));
             });
         });
-        req.on("error", reject);
-        req.setTimeout(timeoutMs, () => {
+        req.on("error", (error) => {
+            finish(() => reject(error));
+        });
+        req.setTimeout(Math.min(timeoutMs, 15000), () => {
             req.destroy(new Error("OpenRouter request timed out."));
         });
         req.write(body);
@@ -572,6 +586,7 @@ async function handlePortfolioChatRoute(event, origin) {
     const webSearchContextSize = String(process.env.ASSISTANT_WEB_SEARCH_CONTEXT_SIZE || "low").toLowerCase();
     const webSearchParameters = {
         max_results: webSearchMaxResults,
+        max_total_results: webSearchMaxResults,
         search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
     };
     const portfolioContext = JSON.stringify(shouldAttachWebSearch
