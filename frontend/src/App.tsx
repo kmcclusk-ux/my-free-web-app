@@ -2754,19 +2754,6 @@ export default function App() {
         <div className="sidebar__brand"><p>Portfolio Planner</p><h1>Workbook Frontend</h1><span>Git-backed Amplify app using the same tax backend and workbook storage as the sheet.</span></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
-      {!focusGrid && showThermometerRail && (
-        <aside className="thermometer-rail" aria-label="Tax thermometers">
-          <TaxThermometerPanel
-            totalIncome={flows.totalIncome}
-            federalTaxable={federalTaxableAfterDeductions}
-            stateTaxable={stateTaxableAfterDeductions}
-            federalTax={federalResult?.tax || 0}
-            stateTax={stateResult?.tax || 0}
-            filingStatus={federalSettings.filingStatus}
-            niitThreshold={niitThreshold}
-          />
-        </aside>
-      )}
       <main className="content-panel">
         <div className="portfolio-workstation__sticky">
           <CompactKpiHeader
@@ -3034,6 +3021,19 @@ export default function App() {
           </Section>
         )}
       </main>
+      {!focusGrid && showThermometerRail && (
+        <aside className="thermometer-rail" aria-label="Tax thermometers">
+          <TaxThermometerPanel
+            totalIncome={flows.totalIncome}
+            federalTaxable={federalTaxableAfterDeductions}
+            stateTaxable={stateTaxableAfterDeductions}
+            federalTax={federalResult?.tax || 0}
+            stateTax={stateResult?.tax || 0}
+            filingStatus={federalSettings.filingStatus}
+            niitThreshold={niitThreshold}
+          />
+        </aside>
+      )}
     </div>
   );
 }
