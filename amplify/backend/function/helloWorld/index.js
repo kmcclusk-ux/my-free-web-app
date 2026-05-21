@@ -621,6 +621,15 @@ async function handlePortfolioChatRoute(event, origin) {
     }
     catch (error) {
         const message = error instanceof Error ? error.message : "OpenRouter network error.";
+        if (message.toLowerCase().includes("timed out")) {
+            return jsonResponse(200, {
+                message: shouldAttachWebSearch
+                    ? "OpenRouter web search timed out before returning current market data. Try the same question again, or ask for a known source/site if you want me to narrow the lookup."
+                    : "OpenRouter timed out before returning an answer. Try again with a smaller question.",
+                actions: [],
+                model,
+            }, origin);
+        }
         return jsonResponse(502, { error: message }, origin);
     }
     if (openRouterResult.statusCode < 200 || openRouterResult.statusCode >= 300) {
