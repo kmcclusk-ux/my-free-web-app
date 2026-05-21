@@ -153,6 +153,45 @@ function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
         req.end();
     });
 }
+function getTextFromHttps(url, timeoutMs = 8000) {
+    return new Promise((resolve, reject) => {
+        let completed = false;
+        let req;
+        const finish = (callback) => {
+            if (completed)
+                return;
+            completed = true;
+            clearTimeout(totalTimeout);
+            callback();
+        };
+        const totalTimeout = setTimeout(() => {
+            req.destroy(new Error("External quote request timed out."));
+        }, timeoutMs);
+        req = (0, https_1.request)(url, {
+            method: "GET",
+            headers: {
+                "Accept": "application/json,text/plain,*/*",
+                "User-Agent": "PortfolioWorkbookAssistant/1.0",
+            },
+        }, (res) => {
+            const chunks = [];
+            res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            res.on("end", () => {
+                finish(() => resolve({
+                    statusCode: res.statusCode || 0,
+                    body: Buffer.concat(chunks).toString("utf8"),
+                }));
+            });
+        });
+        req.on("error", (error) => {
+            finish(() => reject(error));
+        });
+        req.setTimeout(Math.min(timeoutMs, 7000), () => {
+            req.destroy(new Error("External quote request timed out."));
+        });
+        req.end();
+    });
+}
 function sanitizeChatMessages(messages) {
     if (!Array.isArray(messages))
         return [];
@@ -340,6 +379,20 @@ function formatSnapshotCurrency(value) {
 function formatSnapshotPercent(value) {
     return `${(value * 100).toFixed(2)}%`;
 }
+function formatSignedCurrency(value) {
+    const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+    return `${sign}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+function formatQuoteTime(epochSeconds, timeZone) {
+    const epoch = Number(epochSeconds);
+    if (!Number.isFinite(epoch) || epoch <= 0)
+        return "the latest available Yahoo Finance timestamp";
+    return new Date(epoch * 1000).toLocaleString("en-US", {
+        timeZone: timeZone || "America/New_York",
+        dateStyle: "medium",
+        timeStyle: "short",
+    });
+}
 function escapeMarkdownCell(value) {
     return String(value ?? "")
         .replace(/\|/g, "\\|")
@@ -348,6 +401,62 @@ function escapeMarkdownCell(value) {
 }
 function getRecentUserContent(messages) {
     return [...messages].reverse().find((message) => message.role === "user")?.content || "";
+}
+function getYahooFinanceQuoteSymbol(text) {
+    const urlMatch = text.match(/finance\.yahoo\.com\/quote\/([^/?#\s]+)/i);
+    if (urlMatch?.[1])
+        return decodeURIComponent(urlMatch[1]).toUpperCase();
+    if (!/\bquote\b/i.test(text))
+        return null;
+    return extractTickerSymbolsFromText(text)[0] || null;
+}
+async function answerYahooFinanceQuoteQuestion(messages) {
+    const lastUserMessage = getRecentUserContent(messages);
+    const symbol = getYahooFinanceQuoteSymbol(lastUserMessage);
+    if (!symbol)
+        return null;
+    try {
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`;
+        const response = await getTextFromHttps(url, 8000);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw new Error(`Yahoo quote endpoint returned ${response.statusCode}.`);
+        }
+        const parsed = JSON.parse(response.body);
+        const result = parsed?.chart?.result?.[0];
+        const meta = result?.meta;
+        if (!meta)
+            throw new Error("Yahoo quote endpoint did not include quote metadata.");
+        const price = toSnapshotNumber(meta.regularMarketPrice);
+        const previousClose = toSnapshotNumber(meta.previousClose ?? meta.chartPreviousClose);
+        const change = previousClose > 0 ? price - previousClose : 0;
+        const changePercent = previousClose > 0 ? change / previousClose : 0;
+        const dayLow = toSnapshotNumber(meta.regularMarketDayLow);
+        const dayHigh = toSnapshotNumber(meta.regularMarketDayHigh);
+        const volume = toSnapshotNumber(meta.regularMarketVolume);
+        const currency = String(meta.currency || "USD");
+        const name = String(meta.longName || meta.shortName || symbol);
+        const quoteTime = formatQuoteTime(meta.regularMarketTime, meta.exchangeTimezoneName);
+        const yahooUrl = `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/`;
+        return {
+            message: [
+                `Yahoo Finance quote for **${symbol}** (${name}): **${formatSnapshotCurrency(price)} ${currency}** as of ${quoteTime}.`,
+                `Change vs previous close ${formatSnapshotCurrency(previousClose)}: **${formatSignedCurrency(change)} (${changePercent >= 0 ? "+" : ""}${formatSnapshotPercent(changePercent)})**.`,
+                dayLow || dayHigh ? `Day range: ${formatSnapshotCurrency(dayLow)} - ${formatSnapshotCurrency(dayHigh)}.` : "",
+                volume ? `Volume: ${volume.toLocaleString("en-US", { maximumFractionDigits: 0 })}.` : "",
+                `Source: ${yahooUrl}`,
+            ].filter(Boolean).join("\n"),
+            actions: [],
+            model: "direct-yahoo-finance-chart",
+        };
+    }
+    catch (error) {
+        const message = error instanceof Error && error.message ? error.message : "Yahoo Finance lookup failed.";
+        return {
+            message: `I could not fetch the Yahoo Finance quote directly for ${symbol}: ${message}`,
+            actions: [],
+            model: "direct-yahoo-finance-chart",
+        };
+    }
 }
 function normalizePortfolioMatchValue(value) {
     return String(value || "")
@@ -551,10 +660,6 @@ async function handlePortfolioChatRoute(event, origin) {
     if (event.httpMethod !== "POST") {
         return jsonResponse(405, { error: "Portfolio chat route supports POST only." }, origin);
     }
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
-        return jsonResponse(500, { error: "Missing OPENROUTER_API_KEY on the backend." }, origin);
-    }
     let body = null;
     try {
         body = parseJsonBody(event);
@@ -569,11 +674,19 @@ async function handlePortfolioChatRoute(event, origin) {
     if (messages.length === 0) {
         return jsonResponse(400, { error: "Portfolio chat requires at least one user message." }, origin);
     }
+    const directQuoteAnswer = await answerYahooFinanceQuoteQuestion(messages);
+    if (directQuoteAnswer) {
+        return jsonResponse(200, directQuoteAnswer, origin);
+    }
     const localAnswer = answerSelectRowsQuestion(messages, body.portfolioSnapshot) ||
         answerSymbolDividendTableQuestion(messages, body.portfolioSnapshot) ||
         answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
     if (localAnswer) {
         return jsonResponse(200, localAnswer, origin);
+    }
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+        return jsonResponse(500, { error: "Missing OPENROUTER_API_KEY on the backend." }, origin);
     }
     const lastUserMessage = getRecentUserContent(messages);
     const webSearchEnabled = parseBooleanEnv(process.env.ENABLE_ASSISTANT_WEB_SEARCH);
