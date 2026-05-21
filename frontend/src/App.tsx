@@ -1017,15 +1017,32 @@ function KpiPill({ label, value, numericValue, deltaKind = "currency", tone = "d
   );
 }
 
-function CompactKpiHeader({ metrics, focusGrid, onToggleFocus }: { metrics: KpiMetricConfig[]; focusGrid: boolean; onToggleFocus: () => void }) {
+function CompactKpiHeader({
+  metrics,
+  focusGrid,
+  showThermometers,
+  onToggleFocus,
+  onToggleThermometers,
+}: {
+  metrics: KpiMetricConfig[];
+  focusGrid: boolean;
+  showThermometers: boolean;
+  onToggleFocus: () => void;
+  onToggleThermometers: () => void;
+}) {
   return (
     <div className="kpi-header">
       <div className="kpi-header__metrics">
         {metrics.map((metric) => <KpiPill key={metric.label} {...metric} />)}
       </div>
-      <button className="ghost-button ghost-button--compact kpi-header__toggle" type="button" onClick={onToggleFocus}>
-        {focusGrid ? "Show Analytics" : "Focus Grid"}
-      </button>
+      <div className="kpi-header__actions">
+        <button className="ghost-button ghost-button--compact kpi-header__toggle" type="button" onClick={onToggleThermometers}>
+          {showThermometers && !focusGrid ? "Hide Tax Panel" : "Show Tax Panel"}
+        </button>
+        <button className="ghost-button ghost-button--compact kpi-header__toggle" type="button" onClick={onToggleFocus}>
+          {focusGrid ? "Show Analytics" : "Focus Grid"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1909,6 +1926,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [focusGrid, setFocusGrid] = useState(false);
+  const [showThermometerRail, setShowThermometerRail] = useState(true);
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
@@ -2731,12 +2749,12 @@ export default function App() {
     return { ok: false, message: `Rejected action: ${actionType || "(missing)"} is not allowed.` };
   }
   return (
-    <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : ""}`}>
+    <div className={`workspace-shell ${focusGrid || !showThermometerRail ? "workspace-shell--focus-grid" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar__brand"><p>Portfolio Planner</p><h1>Workbook Frontend</h1><span>Git-backed Amplify app using the same tax backend and workbook storage as the sheet.</span></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
-      {!focusGrid && (
+      {!focusGrid && showThermometerRail && (
         <aside className="thermometer-rail" aria-label="Tax thermometers">
           <TaxThermometerPanel
             totalIncome={flows.totalIncome}
@@ -2751,7 +2769,13 @@ export default function App() {
       )}
       <main className="content-panel">
         <div className="portfolio-workstation__sticky">
-          <CompactKpiHeader metrics={kpiMetrics} focusGrid={focusGrid} onToggleFocus={() => setFocusGrid((current) => !current)} />
+          <CompactKpiHeader
+            metrics={kpiMetrics}
+            focusGrid={focusGrid}
+            showThermometers={showThermometerRail}
+            onToggleFocus={() => setFocusGrid((current) => !current)}
+            onToggleThermometers={() => setShowThermometerRail((current) => !current)}
+          />
         </div>
         <div className="content-topbar">
           <div>
