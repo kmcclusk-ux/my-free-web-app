@@ -109,7 +109,7 @@ function parseJsonBody(event) {
         return null;
     return JSON.parse(raw.trim());
 }
-function postJsonToOpenRouter(payload, apiKey) {
+function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
     const body = JSON.stringify(payload);
     return new Promise((resolve, reject) => {
         const req = (0, https_1.request)("https://openrouter.ai/api/v1/chat/completions", {
@@ -132,7 +132,7 @@ function postJsonToOpenRouter(payload, apiKey) {
             });
         });
         req.on("error", reject);
-        req.setTimeout(30000, () => {
+        req.setTimeout(timeoutMs, () => {
             req.destroy(new Error("OpenRouter request timed out."));
         });
         req.write(body);
@@ -287,6 +287,38 @@ function parsePositiveIntegerEnv(value, fallback, max) {
     if (!Number.isFinite(parsed) || parsed <= 0)
         return fallback;
     return Math.min(Math.floor(parsed), max);
+}
+function extractTickerSymbolsFromText(text) {
+    const ignored = new Set(["AI", "API", "IRS", "CA", "MFJ", "SS"]);
+    const matches = text.match(/\b[A-Z]{2,6}[A-Z0-9.-]*\b/g) || [];
+    return [...new Set(matches.map((match) => match.toUpperCase()).filter((match) => !ignored.has(match)))];
+}
+function questionLikelyNeedsWebSearch(text) {
+    return /\b(current|latest|today|market|quote|price|dividend|distribution|yield|ex[-\s]?dividend|nav|expense ratio)\b/i.test(text);
+}
+function buildCompactExternalLookupContext(snapshot, userContent) {
+    if (!snapshot || typeof snapshot !== "object") {
+        return { querySymbols: extractTickerSymbolsFromText(userContent) };
+    }
+    const querySymbols = extractTickerSymbolsFromText(userContent);
+    const upperSymbols = new Set(querySymbols);
+    const source = snapshot;
+    const holdings = Array.isArray(source.holdings)
+        ? source.holdings.filter((holding) => {
+            const symbols = [holding?.symbol, holding?.effectiveSymbol, holding?.newSymbol].map((value) => normalizePortfolioMatchValue(value));
+            return symbols.some((symbol) => upperSymbols.has(symbol));
+        })
+        : [];
+    const tickers = Array.isArray(source.referenceTables?.tickers)
+        ? source.referenceTables.tickers.filter((ticker) => upperSymbols.has(normalizePortfolioMatchValue(ticker?.symbol)))
+        : [];
+    return {
+        generatedAt: source.generatedAt,
+        querySymbols,
+        matchingHoldings: holdings,
+        matchingTickers: tickers,
+        metrics: source.metrics || {},
+    };
 }
 function formatSnapshotCurrency(value) {
     return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -529,15 +561,22 @@ async function handlePortfolioChatRoute(event, origin) {
     if (localAnswer) {
         return jsonResponse(200, localAnswer, origin);
     }
-    const model = process.env.OPENROUTER_MODEL || "openrouter/free";
+    const lastUserMessage = getRecentUserContent(messages);
     const webSearchEnabled = parseBooleanEnv(process.env.ENABLE_ASSISTANT_WEB_SEARCH);
+    const shouldAttachWebSearch = webSearchEnabled && questionLikelyNeedsWebSearch(lastUserMessage);
+    const model = shouldAttachWebSearch
+        ? process.env.OPENROUTER_WEB_SEARCH_MODEL || process.env.OPENROUTER_MODEL || "openrouter/free"
+        : process.env.OPENROUTER_MODEL || "openrouter/free";
+    const openRouterTimeoutMs = parsePositiveIntegerEnv(process.env.OPENROUTER_TIMEOUT_MS, shouldAttachWebSearch ? 22000 : 18000, 24000);
     const webSearchMaxResults = parsePositiveIntegerEnv(process.env.ASSISTANT_WEB_SEARCH_MAX_RESULTS, 3, 10);
     const webSearchContextSize = String(process.env.ASSISTANT_WEB_SEARCH_CONTEXT_SIZE || "low").toLowerCase();
     const webSearchParameters = {
         max_results: webSearchMaxResults,
         search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
     };
-    const portfolioContext = JSON.stringify(body.portfolioSnapshot || {});
+    const portfolioContext = JSON.stringify(shouldAttachWebSearch
+        ? buildCompactExternalLookupContext(body.portfolioSnapshot, lastUserMessage)
+        : body.portfolioSnapshot || {});
     const requestPayload = {
         model,
         temperature: 0.2,
@@ -550,7 +589,7 @@ async function handlePortfolioChatRoute(event, origin) {
             },
             ...messages,
         ],
-        ...(webSearchEnabled
+        ...(shouldAttachWebSearch
             ? {
                 tools: [
                     {
@@ -563,7 +602,7 @@ async function handlePortfolioChatRoute(event, origin) {
     };
     let openRouterResult;
     try {
-        openRouterResult = await postJsonToOpenRouter(requestPayload, apiKey);
+        openRouterResult = await postJsonToOpenRouter(requestPayload, apiKey, openRouterTimeoutMs);
     }
     catch (error) {
         const message = error instanceof Error ? error.message : "OpenRouter network error.";
