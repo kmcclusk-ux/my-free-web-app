@@ -141,7 +141,9 @@ type AssistantAction =
   | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "setAllCheckboxes"; payload: { checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "selectAsset"; payload: { assetId: number | string }; requiresConfirmation?: boolean }
-  | { type: "selectAssets"; payload: { assetIds?: Array<number | string>; symbol?: string }; requiresConfirmation?: boolean }
+  | { type: "selectAssets"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string }; requiresConfirmation?: boolean }
+  | { type: "highlightRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string }; requiresConfirmation?: boolean }
+  | { type: "selectRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string }; requiresConfirmation?: boolean }
   | { type: "selectAccount"; payload: { accountId: number | string }; requiresConfirmation?: boolean }
   | { type: "setFilter"; payload: { filterName: keyof InvestmentFilters; value: string }; requiresConfirmation?: boolean }
   | { type: "clearFilters"; payload?: Record<string, never>; requiresConfirmation?: boolean }
@@ -1545,6 +1547,16 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (selectedAssetIds.length === 0) return;
+    const container = tableScrollRef.current;
+    if (!container) return;
+    const frame = window.requestAnimationFrame(() => {
+      const firstSelectedRow = container.querySelector<HTMLElement>(`tr[data-investment-id="${selectedAssetIds[0]}"]`);
+      firstSelectedRow?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedAssetIds, displayedRows]);
   const topDescriptions = Object.entries(
     rows.reduce<Record<string, number>>((acc, row) => {
       const key = String(row.description || "(blank)").trim() || "(blank)";
@@ -1889,6 +1901,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               return (
                 <tr
                   key={row.id}
+                  data-investment-id={row.id}
                   className={`${getDragRowClassName(row)} ${selectedIdSet.has(row.id) ? "investment-row--selected" : ""}`}
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
@@ -2628,6 +2641,13 @@ export default function App() {
     const selector = payload.selector;
     return config.rows.filter((row) => ids.has(normalizeLookupKey(String(row.id))) || (selector !== undefined && rowMatchesAssistantSelector(row, selector)));
   }
+  function highlightInvestmentMatches(matches: DerivedInvestmentRow[], label: string) {
+    const ids = [...new Set(matches.map((row) => row.id))];
+    setSelectedInvestmentIds(ids);
+    setInvestmentFilters({ account: "", category: "", asset: "" });
+    setActiveTab("investments");
+    return { ok: true, message: `Highlighted ${ids.length} matching investment row${ids.length === 1 ? "" : "s"}${label ? ` for ${label}` : ""}; filters were cleared so the rows are visible.` };
+  }
   function executeAssistantAction(action: AssistantAction): AssistantActionResult {
     const actionType = String((action as any)?.type || "");
 
@@ -2661,25 +2681,28 @@ export default function App() {
     }
 
     if (actionType === "selectAsset") {
-      const assetId = String((action as any).payload?.assetId || "");
+      const payload = (action as any).payload || {};
+      const assetId = String(payload.assetId ?? payload.id ?? payload.symbol ?? payload.selector ?? payload.description ?? payload.query ?? "");
       const matches = derivedRows.filter((item) => investmentMatchesAssetSelector(item, assetId));
       if (matches.length === 0) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
-      setSelectedInvestmentIds([...new Set(matches.map((row) => row.id))]);
-      setActiveTab("investments");
-      return { ok: true, message: `Highlighted ${matches.length} matching investment row${matches.length === 1 ? "" : "s"} for ${assetId}; no rows were hidden.` };
+      return highlightInvestmentMatches(matches, assetId);
     }
 
-    if (actionType === "selectAssets") {
+    if (actionType === "selectAssets" || actionType === "highlightRows" || actionType === "selectRows") {
       const payload = (action as any).payload || {};
-      const requestedIds = Array.isArray(payload.assetIds) ? payload.assetIds.map((id: unknown) => normalizeLookupKey(String(id))) : [];
+      const idSources = [payload.assetIds, payload.ids, payload.rowIds, payload.investmentIds];
+      const requestedIds = idSources
+        .flatMap((source) => Array.isArray(source) ? source : [])
+        .map((id: unknown) => normalizeLookupKey(String(id)));
+      const selectors = [payload.symbol, payload.selector, payload.assetId, payload.description, payload.query]
+        .map((selector) => String(selector || "").trim())
+        .filter(Boolean);
       const matches = derivedRows.filter((item) =>
-        (payload.symbol && investmentMatchesAssetSelector(item, payload.symbol)) ||
+        selectors.some((selector) => investmentMatchesAssetSelector(item, selector)) ||
         requestedIds.includes(normalizeLookupKey(String(item.id)))
       );
-      if (matches.length === 0) return { ok: false, message: "Rejected selectAssets: no matching investments were found." };
-      setSelectedInvestmentIds([...new Set(matches.map((row) => row.id))]);
-      setActiveTab("investments");
-      return { ok: true, message: `Highlighted ${matches.length} matching investment rows.` };
+      if (matches.length === 0) return { ok: false, message: `Rejected ${actionType}: no matching investments were found.` };
+      return highlightInvestmentMatches(matches, selectors[0] || `${requestedIds.length} requested id${requestedIds.length === 1 ? "" : "s"}`);
     }
 
     if (actionType === "selectAccount") {
