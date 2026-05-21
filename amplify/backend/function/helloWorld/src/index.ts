@@ -692,34 +692,54 @@ function portfolioValueMatchesSelector(value: unknown, selector: string) {
   return selector.length >= 3 && normalized.includes(selector);
 }
 
+function portfolioSelectorTokens(selector: string) {
+  return normalizePortfolioMatchValue(selector)
+    .split(/[^A-Z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token && !["ROW", "ROWS", "HOLDING", "HOLDINGS", "INVESTMENT", "INVESTMENTS", "DESC", "DESCRIPTION"].includes(token));
+}
+
 function holdingMatchesSelector(holding: any, selector: string) {
-  return [
+  const values = [
     holding?.symbol,
     holding?.effectiveSymbol,
     holding?.newSymbol,
     holding?.description,
     holding?.account,
-  ].some((value) => portfolioValueMatchesSelector(value, selector));
+  ];
+  if (values.some((value) => portfolioValueMatchesSelector(value, selector))) return true;
+
+  const combined = values.filter(Boolean).join(" ");
+  const tokens = portfolioSelectorTokens(selector);
+  return tokens.length > 1 && tokens.every((token) => portfolioValueMatchesSelector(combined, token));
 }
 
 function cleanPortfolioSelectorPhrase(value: unknown) {
   return String(value || "")
     .replace(/^[\s"'`]+|[\s"'`.?!]+$/g, "")
     .replace(/[';]s\b/gi, "")
+    .replace(/\b(?:row|rows|holding|holdings|investment|investments)\b/gi, " ")
+    .replace(/\b(?:desc|description)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function getSelectRowsSelector(matchesText: string) {
   const text = matchesText.trim();
+  const normalizedCommand = text.replace(/\bhightlight\b/gi, "highlight").replace(/\bhilight\b/gi, "highlight");
   const asksToSelectRows =
-    /\b(select|highlight|find)\b/i.test(text) &&
-    /\b(rows?|holdings?|investments?)\b/i.test(text);
+    /\bhighlight\b/i.test(normalizedCommand) ||
+    (
+      /\b(select|find)\b/i.test(normalizedCommand) &&
+      /\b(rows?|holdings?|investments?)\b/i.test(normalizedCommand) &&
+      !/\b(check|checkbox|checked|unchecked|inc)\b/i.test(normalizedCommand)
+    );
   if (!asksToSelectRows) return null;
 
   const selectorMatch =
-    text.match(/\b(?:contain(?:s|ing)?|with|matching|for|called|named)\s+(.+)$/i) ||
-    text.match(/\b(?:select|highlight|find)\s+(?:the\s+)?(?:rows?|holdings?|investments?)\s+(.+)$/i);
+    normalizedCommand.match(/\b(?:contain(?:s|ing)?|with|matching|for|called|named)\s+(.+)$/i) ||
+    normalizedCommand.match(/\b(?:select|highlight|find)\s+(?:the\s+)?(?:rows?|holdings?|investments?)\s+(.+)$/i) ||
+    normalizedCommand.match(/\b(?:select|highlight|find)\s+(.+?)(?:\s+(?:rows?|holdings?|investments?))?$/i);
   const selector = cleanPortfolioSelectorPhrase(selectorMatch?.[1] || "");
   return selector ? selector : null;
 }
@@ -743,7 +763,7 @@ function answerSelectRowsQuestion(messages: PortfolioChatMessage[], snapshot: un
 
     return {
       message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} containing "${selector}".`,
-      actions: [{ type: "selectAsset", payload: { assetId: selector }, requiresConfirmation: false }],
+      actions: [{ type: "selectAssets", payload: { assetIds: matches.map((holding: any) => holding.id).filter((id: unknown) => id !== undefined), selector }, requiresConfirmation: false }],
       model: "local-portfolio-calculation",
     };
   }

@@ -376,13 +376,22 @@ function valueMatchesAssetSelector(value: unknown, selectorKey: string) {
   if (selectorKey === "ss" && normalized.includes("social security")) return true;
   return selectorKey.length >= 3 && normalized.includes(selectorKey);
 }
+function assetSelectorTokens(selectorKey: string) {
+  return selectorKey
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token && !["row", "rows", "holding", "holdings", "investment", "investments", "desc", "description"].includes(token));
+}
 function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unknown) {
   const selectorKey = normalizeAssetMatchKey(selector);
   if (!selectorKey) return false;
   if (normalizeLookupKey(String(row.id)) === selectorKey) return true;
-  return [row.symbol, row.effectiveSymbol, row.newSymbol, row.description, row.account].some((value) =>
-    valueMatchesAssetSelector(value, selectorKey)
-  );
+  const values = [row.symbol, row.effectiveSymbol, row.newSymbol, row.description, row.account];
+  if (values.some((value) => valueMatchesAssetSelector(value, selectorKey))) return true;
+
+  const combined = values.filter(Boolean).join(" ");
+  const tokens = assetSelectorTokens(selectorKey);
+  return tokens.length > 1 && tokens.every((token) => valueMatchesAssetSelector(combined, token));
 }
 function buildAccountLookupMap(rows: AccountRow[]) {
   const map: Record<string, AccountRow> = {};
