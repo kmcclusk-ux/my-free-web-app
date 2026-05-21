@@ -44,7 +44,7 @@
 .tax-thermometer-panel__summary { padding: 14px; }
 .tax-thermometer-panel__summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
 .tax-thermometer-panel__summary-grid > div { padding: 10px; border-radius: 14px; background: rgba(238,244,240,.72); }
-.tax-thermometer-panel__summary-grid span, .tax-thermometer__heading span, .tax-thermometer__heading em, .tax-thermometer__legend span { display: block; color: #62767a; font-size: .72rem; }
+.tax-thermometer-panel__summary-grid span, .tax-thermometer__heading span, .tax-thermometer__heading em, .tax-thermometer__stats span, .tax-thermometer__footer span { display: block; color: #62767a; font-size: .72rem; }
 .tax-thermometer-panel__summary-grid strong { display: block; margin-top: 4px; color: #17313a; font-size: .98rem; }
 .tax-thermometer { padding: 14px; overflow: hidden; }
 .tax-thermometer--collapsed { padding-bottom: 12px; }
@@ -65,9 +65,11 @@
 .tax-thermometer__value--income { background: #17313a; }
 .tax-thermometer__value--taxable { background: #2f7480; }
 .tax-thermometer__value--tax { background: #c3732c; }
-.tax-thermometer__legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
-.tax-thermometer__legend div { display: flex; align-items: center; gap: 5px; }
-.tax-thermometer__legend strong { color: #17313a; font-size: .78rem; }
+.tax-thermometer__stats { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+.tax-thermometer__stats div { display: flex; align-items: center; gap: 5px; }
+.tax-thermometer__stats strong { color: #17313a; font-size: .78rem; }
+.tax-thermometer__footer { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(24,49,58,.1); }
+.tax-thermometer__footer strong { color: #17313a; font-size: .8rem; }
 .tax-thermometer__dot { width: 8px; height: 8px; border-radius: 999px; }
 .tax-thermometer__dot--income { background: #17313a; }
 .tax-thermometer__dot--taxable { background: #2f7480; }
@@ -85,8 +87,8 @@
 .impact-strip .tax-thermometer__tick span { top: -10px; font-size: .52rem; }
 .impact-strip .tax-thermometer__value { top: 24px; width: 9px; height: 9px; }
 .impact-strip .tax-thermometer__value span { display: none; }
-.impact-strip .tax-thermometer__legend { gap: 4px 8px; margin-top: 5px; }
-.impact-strip .tax-thermometer__legend strong { font-size: .68rem; }
+.impact-strip .tax-thermometer__stats { gap: 4px 8px; margin-top: 5px; }
+.impact-strip .tax-thermometer__stats strong { font-size: .68rem; }
 .thermometer-rail .tax-thermometer-panel { display: flex; flex-direction: column; gap: 8px; }
 .thermometer-rail .tax-thermometer-panel__summary, .thermometer-rail .tax-thermometer { padding: 8px; border-radius: 14px; box-shadow: 0 10px 22px rgba(24,49,58,.06); }
 .thermometer-rail .tax-thermometer-panel__summary-heading, .thermometer-rail .tax-thermometer__heading { margin-bottom: 6px; }
@@ -107,10 +109,13 @@
 .thermometer-rail .tax-thermometer__tick span { top: 50%; left: calc(100% + 4px); transform: translateY(-50%); font-size: .5rem; }
 .thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
 .thermometer-rail .tax-thermometer__value span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 1px 5px; font-size: .55rem; }
-.thermometer-rail .tax-thermometer__legend { display: grid; gap: 4px; margin-top: 8px; }
-.thermometer-rail .tax-thermometer__legend div { justify-content: space-between; gap: 4px; }
-.thermometer-rail .tax-thermometer__legend span { font-size: .58rem; }
-.thermometer-rail .tax-thermometer__legend strong { font-size: .62rem; }
+.thermometer-rail .tax-thermometer__stats { display: grid; gap: 4px; margin-top: 8px; }
+.thermometer-rail .tax-thermometer__stats div { justify-content: space-between; gap: 4px; }
+.thermometer-rail .tax-thermometer__stats span { font-size: .58rem; }
+.thermometer-rail .tax-thermometer__stats strong { font-size: .62rem; }
+.thermometer-rail .tax-thermometer__footer { gap: 4px; margin-top: 6px; padding-top: 6px; }
+.thermometer-rail .tax-thermometer__footer span { font-size: .58rem; }
+.thermometer-rail .tax-thermometer__footer strong { font-size: .64rem; text-align: right; }
 @media (prefers-reduced-motion: reduce) { .tax-thermometer__value { transition: none; will-change: auto; } }
 .content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; }
 .content-topbar h2 { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.22rem; color: #18313a; }
