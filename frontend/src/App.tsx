@@ -1037,7 +1037,7 @@ function Section({ title, subtitle, children, className = "" }: { title: string;
 function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; collapsed: boolean; onToggle: () => void }) {
   const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
   const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
-  const toPercent = (amount: number) => `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%`;
+  const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
@@ -1061,7 +1061,7 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
               <div
                 key={`${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
-                style={{ left: toPercent(marker.amount) }}
+                style={positionStyle(marker.amount)}
                 title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
               >
                 <span>{marker.label}</span>
@@ -1071,7 +1071,7 @@ function TaxThermometer({ title, subtitle, values, markers, collapsed, onToggle 
               <div
                 key={`${value.label}-${value.tone}`}
                 className={`tax-thermometer__value tax-thermometer__value--${value.tone}`}
-                style={{ left: toPercent(value.amount) }}
+                style={positionStyle(value.amount)}
                 title={`${value.label}: ${value.value}`}
               >
                 <span>{value.label}</span>
@@ -2736,22 +2736,22 @@ export default function App() {
         <div className="sidebar__brand"><p>Portfolio Planner</p><h1>Workbook Frontend</h1><span>Git-backed Amplify app using the same tax backend and workbook storage as the sheet.</span></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
+      {!focusGrid && (
+        <aside className="thermometer-rail" aria-label="Tax thermometers">
+          <TaxThermometerPanel
+            totalIncome={flows.totalIncome}
+            federalTaxable={federalTaxableAfterDeductions}
+            stateTaxable={stateTaxableAfterDeductions}
+            federalTax={federalResult?.tax || 0}
+            stateTax={stateResult?.tax || 0}
+            filingStatus={federalSettings.filingStatus}
+            niitThreshold={niitThreshold}
+          />
+        </aside>
+      )}
       <main className="content-panel">
         <div className="portfolio-workstation__sticky">
           <CompactKpiHeader metrics={kpiMetrics} focusGrid={focusGrid} onToggleFocus={() => setFocusGrid((current) => !current)} />
-          {!focusGrid && (
-            <div className="impact-strip">
-              <TaxThermometerPanel
-                totalIncome={flows.totalIncome}
-                federalTaxable={federalTaxableAfterDeductions}
-                stateTaxable={stateTaxableAfterDeductions}
-                federalTax={federalResult?.tax || 0}
-                stateTax={stateResult?.tax || 0}
-                filingStatus={federalSettings.filingStatus}
-                niitThreshold={niitThreshold}
-              />
-            </div>
-          )}
         </div>
         <div className="content-topbar">
           <div>

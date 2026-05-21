@@ -1,5 +1,6 @@
 #root { width: 100%; }
-.workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr); min-height: 100vh; }
+.workspace-shell { display: grid; grid-template-columns: 132px 216px minmax(0, 1fr); min-height: 100vh; }
+.workspace-shell--focus-grid { grid-template-columns: 132px minmax(0, 1fr); }
 .sidebar { position: sticky; top: 0; z-index: 30; display: flex; flex-direction: column; gap: 12px; width: 132px; height: 100vh; padding: 14px 10px; border-right: 1px solid rgba(18,41,54,.1); background: linear-gradient(180deg, rgba(245,247,244,.98), rgba(226,238,240,.98)); overflow: auto; transition: width 180ms ease, box-shadow 180ms ease; }
 .sidebar:hover { width: 280px; box-shadow: 18px 0 40px rgba(24,49,58,.12); }
 .sidebar__brand p,.eyebrow { margin: 0; font-size: .73rem; letter-spacing: .18em; text-transform: uppercase; color: #6c7e7a; }
@@ -13,6 +14,7 @@
 .sidebar:hover .nav-item span { display: block; }
 .nav-item--active { background: linear-gradient(135deg, #18313a, #2f6976); border-color: transparent; box-shadow: 0 14px 34px rgba(24,49,58,.18); }
 .nav-item--active strong,.nav-item--active span { color: #f7faf8; }
+.thermometer-rail { position: sticky; top: 0; z-index: 25; height: 100vh; padding: 8px 8px 12px; border-right: 1px solid rgba(18,41,54,.1); background: linear-gradient(180deg, rgba(237,244,240,.98), rgba(224,237,236,.94)); overflow: auto; }
 .content-panel { min-width: 0; padding: 0 16px 18px; }
 .portfolio-workstation__sticky { position: sticky; top: 0; z-index: 20; display: grid; gap: 6px; padding: 8px 0 8px; background: linear-gradient(180deg, rgba(238,244,240,.98), rgba(238,244,240,.9), rgba(238,244,240,.74)); backdrop-filter: blur(10px); }
 .kpi-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
@@ -53,11 +55,11 @@
 .tax-thermometer__toggle { min-width: 58px; }
 .tax-thermometer__track { position: relative; height: 78px; border-radius: 999px; background: linear-gradient(90deg, rgba(61,145,123,.16), rgba(231,188,87,.22), rgba(196,90,62,.26)); border: 1px solid rgba(24,49,58,.1); overflow: visible; }
 .tax-thermometer__heat { position: absolute; inset: 26px 10px; border-radius: 999px; background: linear-gradient(90deg, #5aa77b, #d8ad43, #ba4d3c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); }
-.tax-thermometer__tick { position: absolute; top: 16px; bottom: 12px; width: 1px; background: rgba(24,49,58,.28); transform: translateX(-50%); }
+.tax-thermometer__tick { position: absolute; top: 16px; bottom: 12px; left: var(--thermo-position); width: 1px; background: rgba(24,49,58,.28); transform: translateX(-50%); }
 .tax-thermometer__tick span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); padding: 1px 4px; border-radius: 999px; background: rgba(255,255,255,.88); color: #40595f; font-size: .62rem; white-space: nowrap; }
 .tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
 .tax-thermometer__tick--surtax span { color: #7f4b29; }
-.tax-thermometer__value { position: absolute; top: 38px; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); transition: left 640ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms ease; will-change: left; }
+.tax-thermometer__value { position: absolute; top: 38px; left: var(--thermo-position); width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); transition: left 640ms cubic-bezier(.22, 1, .36, 1), bottom 640ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms ease; will-change: left, bottom; }
 .tax-thermometer__value span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
 .tax-thermometer__value--income { background: #17313a; }
 .tax-thermometer__value--taxable { background: #2f7480; }
@@ -84,6 +86,30 @@
 .impact-strip .tax-thermometer__value span { display: none; }
 .impact-strip .tax-thermometer__legend { gap: 4px 8px; margin-top: 5px; }
 .impact-strip .tax-thermometer__legend strong { font-size: .68rem; }
+.thermometer-rail .tax-thermometer-panel { display: flex; flex-direction: column; gap: 8px; }
+.thermometer-rail .tax-thermometer-panel__summary, .thermometer-rail .tax-thermometer { padding: 8px; border-radius: 14px; box-shadow: 0 10px 22px rgba(24,49,58,.06); }
+.thermometer-rail .tax-thermometer-panel__summary-heading, .thermometer-rail .tax-thermometer__heading { margin-bottom: 6px; }
+.thermometer-rail .tax-thermometer-panel__summary-heading { gap: 6px; }
+.thermometer-rail .tax-thermometer-panel__summary-heading strong, .thermometer-rail .tax-thermometer__heading strong { font-size: .76rem; }
+.thermometer-rail .tax-thermometer-panel__summary-heading span, .thermometer-rail .tax-thermometer__heading span { display: none; }
+.thermometer-rail .tax-thermometer-panel__summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.thermometer-rail .tax-thermometer-panel__summary-grid > div { padding: 6px; border-radius: 10px; }
+.thermometer-rail .tax-thermometer-panel__summary-grid span { font-size: .56rem; }
+.thermometer-rail .tax-thermometer-panel__summary-grid strong { font-size: .68rem; }
+.thermometer-rail .tax-thermometer__heading { align-items: flex-start; gap: 6px; }
+.thermometer-rail .tax-thermometer__heading-actions { flex-direction: column; align-items: flex-end; gap: 4px; }
+.thermometer-rail .tax-thermometer__heading em { font-size: .58rem; white-space: normal; text-align: right; }
+.thermometer-rail .tax-thermometer__toggle { min-width: 46px; padding: 4px 7px; font-size: .68rem; }
+.thermometer-rail .tax-thermometer__track { width: 58px; height: 245px; margin: 0 auto; background: linear-gradient(0deg, rgba(61,145,123,.16), rgba(231,188,87,.22), rgba(196,90,62,.26)); }
+.thermometer-rail .tax-thermometer__heat { inset: 10px 20px; background: linear-gradient(0deg, #5aa77b, #d8ad43, #ba4d3c); }
+.thermometer-rail .tax-thermometer__tick { top: auto; bottom: var(--thermo-position); left: 50%; width: 72px; height: 1px; transform: translate(-50%, 50%); }
+.thermometer-rail .tax-thermometer__tick span { top: 50%; left: calc(100% + 4px); transform: translateY(-50%); font-size: .5rem; }
+.thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
+.thermometer-rail .tax-thermometer__value span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 1px 5px; font-size: .55rem; }
+.thermometer-rail .tax-thermometer__legend { display: grid; gap: 4px; margin-top: 8px; }
+.thermometer-rail .tax-thermometer__legend div { justify-content: space-between; gap: 4px; }
+.thermometer-rail .tax-thermometer__legend span { font-size: .58rem; }
+.thermometer-rail .tax-thermometer__legend strong { font-size: .62rem; }
 @media (prefers-reduced-motion: reduce) { .tax-thermometer__value { transition: none; will-change: auto; } }
 .content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; }
 .content-topbar h2 { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.22rem; color: #18313a; }
@@ -124,8 +150,8 @@
 .status-card { margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; }
 .status-card--error { border: 1px solid rgba(167,63,43,.14); background: rgba(255,236,232,.92); color: #8f3623; }
 .status-card--note { border: 1px solid rgba(35,96,106,.14); background: rgba(235,246,248,.94); color: #285860; }
-@media (max-width: 1180px) { .kpi-header { grid-template-columns: 1fr; } .kpi-header__metrics { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); } .impact-strip { max-height: none; } .impact-strip .tax-thermometer-panel { grid-template-columns: 1fr; } .investments-workspace { height: calc(100vh - 300px); } }
-@media (max-width: 980px) { .workspace-shell { grid-template-columns: 1fr; } .sidebar { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .sidebar:hover { width: auto; box-shadow: none; } .sidebar__brand span,.nav-item span { display: block; } .sidebar__nav { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); } .content-panel { padding: 0 12px 18px; } .content-topbar { flex-direction: column; align-items: flex-start; } .portfolio-workstation__sticky { position: static; } .investments-workspace { height: auto; min-height: 520px; } .investments-workspace .table-wrap--tall { height: 64vh; } }
+@media (max-width: 1180px) { .workspace-shell { grid-template-columns: 118px 190px minmax(0, 1fr); } .workspace-shell--focus-grid { grid-template-columns: 118px minmax(0, 1fr); } .kpi-header { grid-template-columns: 1fr; } .kpi-header__metrics { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 205px; } .investments-workspace { height: calc(100vh - 150px); } }
+@media (max-width: 980px) { .workspace-shell,.workspace-shell--focus-grid { grid-template-columns: 1fr; } .sidebar { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .sidebar:hover { width: auto; box-shadow: none; } .sidebar__brand span,.nav-item span { display: block; } .sidebar__nav { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); } .thermometer-rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .thermometer-rail .tax-thermometer-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 150px; } .content-panel { padding: 0 12px 18px; } .content-topbar { flex-direction: column; align-items: flex-start; } .portfolio-workstation__sticky { position: static; } .investments-workspace { height: auto; min-height: 520px; } .investments-workspace .table-wrap--tall { height: 64vh; } }
 
 .topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .ai-button { display: inline-flex; align-items: center; border: 1px solid rgba(24,49,58,.12); border-radius: 999px; padding: 8px 14px; background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; font-weight: 700; letter-spacing: .08em; text-decoration: none; }
@@ -178,8 +204,8 @@
 .sheet-table--workbook tr.investment-row--non-taxable td .readonly-cell { background: rgba(226, 245, 230, 0.94); }
 .sheet-table--workbook tr.investment-row--partial td .readonly-cell { background: rgba(255, 231, 231, 0.95); }
 .sheet-table--workbook tr.investment-row--taxable td .readonly-cell { background: rgba(255, 231, 231, 0.95); }
-.investments-workspace { display: flex; flex-direction: column; height: calc(100vh - 238px); min-height: 560px; padding: 10px; }
-.workspace-shell--focus-grid .investments-workspace { height: calc(100vh - 150px); }
+.investments-workspace { display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 560px; padding: 10px; }
+.workspace-shell--focus-grid .investments-workspace { height: calc(100vh - 128px); }
 .investments-workspace .section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .investments-workspace .section-heading h2 { font-size: 1.05rem; }
 .investments-workspace .section-heading p { display: none; }
