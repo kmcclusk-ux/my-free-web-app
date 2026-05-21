@@ -1052,9 +1052,30 @@ function Section({ title, subtitle, children, className = "" }: { title: string;
   return <section className={`sheet-section ${className}`.trim()}><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
 }
 
+function getThermometerScale(values: ThermometerValue[], markers: ThermometerMarker[]) {
+  const valueMax = Math.max(1000, ...values.map((value) => value.amount));
+  const sortedMarkers = [...markers].sort((a, b) => a.amount - b.amount);
+  const nearbyCeiling = Math.max(valueMax * 1.35, valueMax + 75000);
+  const nextMarker = sortedMarkers.find((marker) => marker.amount > valueMax);
+  const nearbyMarkers = sortedMarkers.filter((marker) => marker.amount <= nearbyCeiling);
+  const shouldIncludeNext =
+    nextMarker &&
+    (nearbyMarkers.length === 0 || nextMarker.amount <= Math.max(valueMax * 1.75, valueMax + 125000));
+  const scaleBase = Math.max(
+    valueMax,
+    ...nearbyMarkers.map((marker) => marker.amount),
+    ...(shouldIncludeNext ? [nextMarker.amount] : [])
+  );
+  const increment = scaleBase <= 100000 ? 10000 : scaleBase <= 500000 ? 25000 : 50000;
+  const scaleMax = Math.ceil((scaleBase * 1.08) / increment) * increment;
+  return {
+    scaleMax,
+    visibleMarkers: sortedMarkers.filter((marker) => marker.amount <= scaleMax),
+  };
+}
+
 function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, footerValue, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; collapsed: boolean; onToggle: () => void }) {
-  const maxAmount = Math.max(1000, ...values.map((value) => value.amount), ...markers.map((marker) => marker.amount));
-  const scaleMax = Math.ceil((maxAmount * 1.08) / 50000) * 50000;
+  const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
 
   return (
@@ -1075,7 +1096,7 @@ function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, 
         <>
           <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
             <div className="tax-thermometer__heat" />
-            {markers.map((marker) => (
+            {visibleMarkers.map((marker) => (
               <div
                 key={`${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
