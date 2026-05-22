@@ -512,12 +512,16 @@ function getRecentUserContent(messages: PortfolioChatMessage[]) {
 function getYahooFinanceQuoteSymbol(text: string) {
   const urlMatch = text.match(/finance\.yahoo\.com\/quote\/([^/?#\s]+)/i);
   if (urlMatch?.[1]) return decodeURIComponent(urlMatch[1]).toUpperCase();
-  if (!/\bquote\b/i.test(text)) return null;
-  return extractTickerSymbolsFromText(text)[0] || null;
+  if (!/\b(current|latest|today|market|quote|prices?|value)\b/i.test(text)) return null;
+  const symbols = extractTickerSymbolsFromText(text);
+  if (symbols.length !== 1) return null;
+  if (/\b(each|all|every|portfolio|investments?|tickers?|symbols?)\b/i.test(text)) return null;
+  return symbols[0];
 }
 
 type YahooQuote = {
   symbol: string;
+  lookupSymbol: string;
   name: string;
   price: number;
   previousClose: number;
@@ -531,9 +535,14 @@ type YahooQuote = {
   yahooUrl: string;
 };
 
+const YAHOO_QUOTE_SYMBOL_ALIASES: Record<string, string> = {
+  SPX: "^SPX",
+};
+
 async function fetchYahooFinanceQuote(symbol: string): Promise<YahooQuote> {
   const cleanSymbol = symbol.toUpperCase();
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(cleanSymbol)}?range=1d&interval=1m`;
+  const lookupSymbol = YAHOO_QUOTE_SYMBOL_ALIASES[cleanSymbol] || cleanSymbol;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(lookupSymbol)}?range=1d&interval=1m`;
   const response = await getTextFromHttps(url, 8000);
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(`Yahoo quote endpoint returned ${response.statusCode}.`);
@@ -545,10 +554,14 @@ async function fetchYahooFinanceQuote(symbol: string): Promise<YahooQuote> {
   if (!meta) throw new Error("Yahoo quote endpoint did not include quote metadata.");
 
   const price = toSnapshotNumber(meta.regularMarketPrice);
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error("Yahoo quote endpoint did not include a usable current market price.");
+  }
   const previousClose = toSnapshotNumber(meta.previousClose ?? meta.chartPreviousClose);
   const change = previousClose > 0 ? price - previousClose : 0;
   return {
     symbol: cleanSymbol,
+    lookupSymbol,
     name: String(meta.longName || meta.shortName || cleanSymbol),
     price,
     previousClose,
@@ -559,7 +572,7 @@ async function fetchYahooFinanceQuote(symbol: string): Promise<YahooQuote> {
     volume: toSnapshotNumber(meta.regularMarketVolume),
     currency: String(meta.currency || "USD"),
     quoteTime: formatQuoteTime(meta.regularMarketTime, meta.exchangeTimezoneName),
-    yahooUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(cleanSymbol)}/`,
+    yahooUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(lookupSymbol)}/`,
   };
 }
 
