@@ -342,8 +342,13 @@ function parsePositiveIntegerEnv(value, fallback, max) {
     return Math.min(Math.floor(parsed), max);
 }
 function extractTickerSymbolsFromText(text) {
-    const ignored = new Set(["AI", "API", "IRS", "CA", "MFJ", "SS"]);
-    const matches = text.match(/\b[A-Z]{2,6}[A-Z0-9.-]*\b/g) || [];
+    const ignored = new Set([
+        "AI", "API", "IRS", "CA", "MFJ", "SS",
+        "A", "AN", "AND", "ARE", "ASK", "AT", "CURRENT", "DIVIDEND", "DIVIDENDS", "DO", "EACH", "EVERY", "FOR", "FROM", "GET", "GIVE", "HERE",
+        "IN", "INVESTMENT", "INVESTMENTS", "IS", "LATEST", "LIST", "MARKET", "ME", "NAV", "OF", "PORTFOLIO", "PRICE", "PRICES", "QUOTE",
+        "QUOTES", "RATIO", "SHOW", "SYMBOL", "SYMBOLS", "THE", "THEIR", "TICKER", "TICKERS", "TODAY", "VALUE", "WHAT", "YIELD",
+    ]);
+    const matches = text.match(/\b\^?[A-Za-z][A-Za-z0-9.-]{0,9}\b/g) || [];
     return [...new Set(matches.map((match) => match.toUpperCase()).filter((match) => !ignored.has(match)))];
 }
 function questionLikelyNeedsWebSearch(text) {
@@ -408,10 +413,23 @@ function getYahooFinanceQuoteSymbol(text) {
         return decodeURIComponent(urlMatch[1]).toUpperCase();
     if (!/\b(current|latest|today|market|quote|prices?|value)\b/i.test(text))
         return null;
+    if (/\b(each|all|every|portfolio|investments?|tickers?|symbols?)\b/i.test(text))
+        return null;
+    const quotePatterns = [
+        /\b(?:quote|prices?|value)\s+(?:of|for)?\s*(\^?[A-Za-z][A-Za-z0-9.-]{0,9})\b/i,
+        /\b(?:current|latest|today|market)\s+(?:quote|prices?|value)\s+(?:of|for)?\s*(\^?[A-Za-z][A-Za-z0-9.-]{0,9})\b/i,
+        /\b(\^?[A-Za-z][A-Za-z0-9.-]{0,9})\s+(?:current\s+|latest\s+|today\s+|market\s+)?(?:quote|prices?|value)\b/i,
+    ];
+    for (const pattern of quotePatterns) {
+        const match = text.match(pattern)?.[1];
+        if (!match)
+            continue;
+        const symbol = match.toUpperCase();
+        if (extractTickerSymbolsFromText(symbol).length === 1)
+            return symbol;
+    }
     const symbols = extractTickerSymbolsFromText(text);
     if (symbols.length !== 1)
-        return null;
-    if (/\b(each|all|every|portfolio|investments?|tickers?|symbols?)\b/i.test(text))
         return null;
     return symbols[0];
 }
