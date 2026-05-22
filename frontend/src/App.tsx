@@ -1276,6 +1276,7 @@ function AssistantPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const askInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
 
   const visibleMetrics = portfolioSnapshot.metrics;
   useEffect(() => {
@@ -1288,6 +1289,23 @@ function AssistantPanel({
   useEffect(() => {
     writeAssistantMessageHistory(messages);
   }, [messages]);
+
+  const scrollAssistantMessagesToBottom = (behavior: ScrollBehavior = "smooth") => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+  };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => scrollAssistantMessagesToBottom());
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, isLoading, error]);
+
+  useEffect(() => {
+    if (!isLoading) return;
+    const interval = window.setInterval(() => scrollAssistantMessagesToBottom("auto"), 120);
+    return () => window.clearInterval(interval);
+  }, [isLoading]);
 
   useEffect(() => {
     const refreshStoredAssistantState = () => {
@@ -1438,7 +1456,7 @@ function AssistantPanel({
         <span>{formatCurrency(visibleMetrics.totalIncome)} income</span>
         <span>{formatCurrency(visibleMetrics.afterTaxIncome)} after tax</span>
       </div>
-      <div className="assistant-panel__messages" aria-live="polite">
+      <div className="assistant-panel__messages" aria-live="polite" ref={messagesScrollRef}>
         {messages.length === 0 && (
           <div className="assistant-panel__empty">
             Try “show only taxable accounts”, “sort investments by income”, or “what is my largest concentration?”
