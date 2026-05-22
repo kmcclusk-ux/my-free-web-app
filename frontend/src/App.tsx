@@ -990,12 +990,13 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
 type KpiMetricConfig = {
   label: string;
   value: string;
+  secondaryValue?: string;
   numericValue?: number;
   deltaKind?: "currency" | "percent";
   tone?: "default" | "accent" | "warning" | "sync";
 };
 
-function KpiPill({ label, value, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
+function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const [delta, setDelta] = useState<number | null>(null);
 
@@ -1020,6 +1021,7 @@ function KpiPill({ label, value, numericValue, deltaKind = "currency", tone = "d
     <div className={`kpi-pill kpi-pill--${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+      {secondaryValue && <small>{secondaryValue}</small>}
       {formattedDelta && deltaValue !== null && (
         <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
           {deltaValue >= 0 ? "↑" : "↓"} {deltaValue >= 0 ? "+" : "-"}{formattedDelta}
@@ -2346,10 +2348,11 @@ export default function App() {
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
+  const monthlyIncome = flows.totalIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0;
   const kpiMetrics: KpiMetricConfig[] = [
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
-    { label: "Annual income", value: formatCurrency(flows.totalIncome), numericValue: flows.totalIncome },
+    { label: "Annual income", value: formatCurrency(flows.totalIncome), secondaryValue: `${formatCurrency(monthlyIncome)} monthly`, numericValue: flows.totalIncome },
     { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
     { label: "After-tax income", value: formatCurrency(afterTaxIncome), numericValue: afterTaxIncome, tone: "warning" },
     { label: "Federal tax", value: formatCurrencyDetailed(federalResult?.tax || 0), numericValue: federalResult?.tax || 0 },

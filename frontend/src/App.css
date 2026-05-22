@@ -22,10 +22,11 @@
 .kpi-pill { display: grid; grid-template-rows: auto auto auto; min-height: 48px; padding: 7px 9px; border: 1px solid rgba(24,49,58,.1); border-radius: 13px; background: rgba(255,255,255,.84); box-shadow: 0 8px 20px rgba(24,49,58,.06); }
 .kpi-pill span { overflow: hidden; color: #62767a; font-size: .66rem; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .kpi-pill strong { overflow: hidden; color: #17313a; font-size: .88rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-pill small { overflow: hidden; color: #4f666d; font-size: .68rem; line-height: 1.05; text-overflow: ellipsis; white-space: nowrap; }
 .kpi-pill em { font-style: normal; font-size: .66rem; line-height: 1; }
 .kpi-pill--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
 .kpi-pill--warning { background: linear-gradient(135deg, #7f4b29, #c3732c); border-color: transparent; }
-.kpi-pill--accent span,.kpi-pill--accent strong,.kpi-pill--warning span,.kpi-pill--warning strong { color: #f8faf7; }
+.kpi-pill--accent span,.kpi-pill--accent strong,.kpi-pill--accent small,.kpi-pill--warning span,.kpi-pill--warning strong,.kpi-pill--warning small { color: #f8faf7; }
 .kpi-pill__delta--up { color: #1f7a54; }
 .kpi-pill__delta--down { color: #a94b32; }
 .kpi-pill--accent .kpi-pill__delta,.kpi-pill--warning .kpi-pill__delta { color: rgba(255,255,255,.86); }
