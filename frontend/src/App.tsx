@@ -140,10 +140,10 @@ type PortfolioSnapshot = {
 type AssistantAction =
   | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "setAllCheckboxes"; payload: { checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
-  | { type: "selectAsset"; payload: { assetId: number | string }; requiresConfirmation?: boolean }
-  | { type: "selectAssets"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string }; requiresConfirmation?: boolean }
-  | { type: "highlightRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string }; requiresConfirmation?: boolean }
-  | { type: "selectRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string }; requiresConfirmation?: boolean }
+  | { type: "selectAsset"; payload: { assetId: number | string; matchMode?: "row" | "symbol"; field?: string; column?: string; symbol?: string }; requiresConfirmation?: boolean }
+  | { type: "selectAssets"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; selectors?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string; matchMode?: "row" | "symbol"; field?: string; column?: string }; requiresConfirmation?: boolean }
+  | { type: "highlightRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; selectors?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string; matchMode?: "row" | "symbol"; field?: string; column?: string }; requiresConfirmation?: boolean }
+  | { type: "selectRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; selectors?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string; matchMode?: "row" | "symbol"; field?: string; column?: string }; requiresConfirmation?: boolean }
   | { type: "selectAccount"; payload: { accountId: number | string }; requiresConfirmation?: boolean }
   | { type: "setFilter"; payload: { filterName: keyof InvestmentFilters; value: string }; requiresConfirmation?: boolean }
   | { type: "clearFilters"; payload?: Record<string, never>; requiresConfirmation?: boolean }
@@ -421,6 +421,20 @@ function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unk
   const combined = values.filter(Boolean).join(" ");
   const tokens = assetSelectorTokens(selectorKey);
   return tokens.length > 1 && tokens.every((token) => valueMatchesAssetSelector(combined, token));
+}
+function investmentMatchesExactSymbolSelector(row: DerivedInvestmentRow, selector: unknown): boolean {
+  const selectorKey = normalizeAssetMatchKey(selector);
+  if (!selectorKey) return false;
+  return normalizeAssetMatchKey(row.symbol) === selectorKey;
+}
+function selectionPayloadUsesExactSymbol(payload: Record<string, unknown>) {
+  const matchMode = normalizeLookupKey(payload.matchMode);
+  const field = normalizeLookupKey(payload.field ?? payload.column ?? "");
+  const selectorText = String(payload.selector ?? payload.query ?? "");
+  return matchMode === "symbol" ||
+    ["symbol", "symbols", "ticker", "tickers"].includes(field) ||
+    Boolean(payload.symbol) ||
+    /\b(?:symbol|symbols|ticker|tickers)\b/i.test(selectorText);
 }
 function buildAccountLookupMap(rows: AccountRow[]) {
   const map: Record<string, AccountRow> = {};
@@ -2742,7 +2756,10 @@ export default function App() {
     if (actionType === "selectAsset") {
       const payload = (action as any).payload || {};
       const assetId = String(payload.assetId ?? payload.id ?? payload.symbol ?? payload.selector ?? payload.description ?? payload.query ?? "");
-      const matches = derivedRows.filter((item) => investmentMatchesAssetSelector(item, assetId));
+      const exactSymbolOnly = selectionPayloadUsesExactSymbol(payload);
+      const matches = derivedRows.filter((item) =>
+        exactSymbolOnly ? investmentMatchesExactSymbolSelector(item, assetId) : investmentMatchesAssetSelector(item, assetId)
+      );
       if (matches.length === 0) return { ok: false, message: `Rejected selectAsset: asset ${assetId || "(blank)"} was not found.` };
       return highlightInvestmentMatches(matches, assetId);
     }
@@ -2753,11 +2770,18 @@ export default function App() {
       const requestedIds = idSources
         .flatMap((source) => Array.isArray(source) ? source : [])
         .map((id: unknown) => normalizeLookupKey(String(id)));
-      const selectors = [payload.symbol, payload.selector, payload.assetId, payload.description, payload.query]
+      const exactSymbolOnly = selectionPayloadUsesExactSymbol(payload);
+      const selectorSources = [payload.symbol, payload.selector, payload.assetId, payload.description, payload.query];
+      if (Array.isArray(payload.selectors)) selectorSources.push(...payload.selectors);
+      const selectors = selectorSources
         .map((selector) => String(selector || "").trim())
         .filter(Boolean);
       const matches = derivedRows.filter((item) =>
-        selectors.some((selector) => investmentMatchesAssetSelector(item, selector)) ||
+        selectors.some((selector) =>
+          exactSymbolOnly
+            ? investmentMatchesExactSymbolSelector(item, selector)
+            : investmentMatchesAssetSelector(item, selector)
+        ) ||
         requestedIds.includes(normalizeLookupKey(String(item.id)))
       );
       if (matches.length === 0) return { ok: false, message: `Rejected ${actionType}: no matching investments were found.` };

@@ -617,6 +617,12 @@ function holdingMatchesSelector(holding, selector) {
     const tokens = portfolioSelectorTokens(selector);
     return tokens.length > 1 && tokens.every((token) => portfolioValueMatchesSelector(combined, token));
 }
+function holdingMatchesExactSymbolSelector(holding, selector) {
+    const selectorKey = normalizePortfolioMatchValue(selector);
+    if (!selectorKey)
+        return false;
+    return normalizePortfolioMatchValue(holding?.symbol) === selectorKey;
+}
 function cleanPortfolioSelectorPhrase(value) {
     return String(value || "")
         .replace(/^[\s"'`]+|[\s"'`.?!]+$/g, "")
@@ -642,6 +648,9 @@ function splitPortfolioSelectors(selector) {
             : [cleaned];
     return [...new Set(parts.map(cleanPortfolioSelectorPhrase).filter(Boolean))];
 }
+function isSymbolOnlySelectRowsRequest(value) {
+    return /\b(?:symbol|symbols|ticker|tickers)\b/i.test(value);
+}
 function getSelectRowsSelector(matchesText) {
     const text = matchesText.trim();
     const normalizedCommand = text.replace(/\bhightlight\b/gi, "highlight").replace(/\bhilight\b/gi, "highlight");
@@ -654,36 +663,55 @@ function getSelectRowsSelector(matchesText) {
     const selectorMatch = normalizedCommand.match(/\b(?:contain(?:s|ing)?|with|matching|for|called|named)\s+(.+)$/i) ||
         normalizedCommand.match(/\b(?:select|highlight|find)\s+(?:the\s+)?(?:rows?|holdings?|investments?)\s+(.+)$/i) ||
         normalizedCommand.match(/\b(?:select|highlight|find)\s+(.+?)(?:\s+(?:rows?|holdings?|investments?))?$/i);
-    const selector = cleanPortfolioSelectorPhrase(selectorMatch?.[1] || "");
-    return selector ? selector : null;
+    const rawSelector = selectorMatch?.[1] || "";
+    const selector = cleanPortfolioSelectorPhrase(rawSelector);
+    if (!selector)
+        return null;
+    return {
+        selector,
+        rawSelector,
+        matchMode: isSymbolOnlySelectRowsRequest(rawSelector) || isSymbolOnlySelectRowsRequest(normalizedCommand) ? "symbol" : "row",
+    };
 }
 function answerSelectRowsQuestion(messages, snapshot) {
     const lastUserMessage = getRecentUserContent(messages);
-    const selector = getSelectRowsSelector(lastUserMessage);
-    if (!selector)
+    const selectRequest = getSelectRowsSelector(lastUserMessage);
+    if (!selectRequest)
         return null;
     if (snapshot && typeof snapshot === "object") {
         const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
-        const selectors = splitPortfolioSelectors(selector);
+        const selectors = splitPortfolioSelectors(selectRequest.matchMode === "symbol" ? selectRequest.rawSelector : selectRequest.selector);
         const selectorKeys = selectors.map(normalizePortfolioMatchValue);
-        const matches = holdings.filter((holding) => selectorKeys.some((selectorKey) => holdingMatchesSelector(holding, selectorKey)));
-        const selectorLabel = selectors.length > 1 ? selectors.join(", ") : selector;
+        const matches = holdings.filter((holding) => selectorKeys.some((selectorKey) => selectRequest.matchMode === "symbol"
+            ? holdingMatchesExactSymbolSelector(holding, selectorKey)
+            : holdingMatchesSelector(holding, selectorKey)));
+        const selectorLabel = selectors.length > 1 ? selectors.join(", ") : selectRequest.selector;
+        const matchDescription = selectRequest.matchMode === "symbol" ? "with symbol" : "containing";
         if (holdings.length > 0 && matches.length === 0) {
             return {
-                message: `I could not find any rows containing "${selectorLabel}".`,
+                message: `I could not find any rows ${matchDescription} "${selectorLabel}".`,
                 actions: [],
                 model: "local-portfolio-calculation",
             };
         }
         return {
-            message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} containing "${selectorLabel}".`,
-            actions: [{ type: "selectAssets", payload: { assetIds: matches.map((holding) => holding.id).filter((id) => id !== undefined), selector: selectorLabel }, requiresConfirmation: false }],
+            message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} ${matchDescription} "${selectorLabel}".`,
+            actions: [{
+                    type: "selectAssets",
+                    payload: {
+                        assetIds: matches.map((holding) => holding.id).filter((id) => id !== undefined),
+                        selector: selectorLabel,
+                        selectors,
+                        matchMode: selectRequest.matchMode,
+                    },
+                    requiresConfirmation: false,
+                }],
             model: "local-portfolio-calculation",
         };
     }
     return {
-        message: `Highlighting rows containing "${selector}".`,
-        actions: [{ type: "selectAsset", payload: { assetId: selector }, requiresConfirmation: false }],
+        message: `Highlighting rows containing "${selectRequest.selector}".`,
+        actions: [{ type: "selectAsset", payload: { assetId: selectRequest.selector }, requiresConfirmation: false }],
         model: "local-portfolio-calculation",
     };
 }
