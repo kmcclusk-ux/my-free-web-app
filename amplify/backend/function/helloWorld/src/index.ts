@@ -748,7 +748,12 @@ function holdingMatchesSelector(holding: any, selector: string) {
 function holdingMatchesExactSymbolSelector(holding: any, selector: string) {
   const selectorKey = normalizePortfolioMatchValue(selector);
   if (!selectorKey) return false;
-  return normalizePortfolioMatchValue(holding?.symbol) === selectorKey;
+  const activeSymbols = [
+    holding?.symbol,
+    holding?.effectiveSymbol,
+    holding?.overrideProposal ? holding?.newSymbol : undefined,
+  ];
+  return activeSymbols.some((value) => normalizePortfolioMatchValue(value) === selectorKey);
 }
 
 function cleanPortfolioSelectorPhrase(value: unknown) {
@@ -952,7 +957,10 @@ function answerSimplePortfolioQuestion(messages: PortfolioChatMessage[], snapsho
 
   const holdings = Array.isArray((snapshot as any).holdings) ? (snapshot as any).holdings : [];
   const selector = normalizePortfolioMatchValue(symbol);
-  const matches = holdings.filter((holding: any) => holdingMatchesSelector(holding, selector));
+  const exactSymbolOnly = isLikelyMarketTickerSymbol(symbol);
+  const matches = holdings.filter((holding: any) =>
+    exactSymbolOnly ? holdingMatchesExactSymbolSelector(holding, selector) : holdingMatchesSelector(holding, selector)
+  );
 
   if (matches.length === 0) return null;
 
@@ -971,7 +979,7 @@ function answerSimplePortfolioQuestion(messages: PortfolioChatMessage[], snapsho
 
   return {
     message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. ${investmentPhrase} Annual income is ${formatSnapshotCurrency(annualIncome)}. Included annual income is ${formatSnapshotCurrency(includedAnnualIncome)}. I highlighted the matching rows.`,
-    actions: [{ type: "selectAsset", payload: { assetId: symbol }, requiresConfirmation: false }],
+    actions: [{ type: "selectAsset", payload: { assetId: symbol, matchMode: exactSymbolOnly ? "symbol" : "row" }, requiresConfirmation: false }],
     model: "local-portfolio-calculation",
   };
 }

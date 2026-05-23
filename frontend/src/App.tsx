@@ -425,7 +425,12 @@ function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unk
 function investmentMatchesExactSymbolSelector(row: DerivedInvestmentRow, selector: unknown): boolean {
   const selectorKey = normalizeAssetMatchKey(selector);
   if (!selectorKey) return false;
-  return normalizeAssetMatchKey(row.symbol) === selectorKey;
+  const activeSymbols = [
+    row.symbol,
+    row.effectiveSymbol,
+    row.overrideProposal ? row.newSymbol : undefined,
+  ];
+  return activeSymbols.some((value) => normalizeAssetMatchKey(value) === selectorKey);
 }
 function selectionPayloadUsesExactSymbol(payload: Record<string, unknown>) {
   const matchMode = normalizeLookupKey(payload.matchMode);

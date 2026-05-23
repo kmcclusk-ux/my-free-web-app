@@ -621,7 +621,12 @@ function holdingMatchesExactSymbolSelector(holding, selector) {
     const selectorKey = normalizePortfolioMatchValue(selector);
     if (!selectorKey)
         return false;
-    return normalizePortfolioMatchValue(holding?.symbol) === selectorKey;
+    const activeSymbols = [
+        holding?.symbol,
+        holding?.effectiveSymbol,
+        holding?.overrideProposal ? holding?.newSymbol : undefined,
+    ];
+    return activeSymbols.some((value) => normalizePortfolioMatchValue(value) === selectorKey);
 }
 function cleanPortfolioSelectorPhrase(value) {
     return String(value || "")
@@ -789,7 +794,8 @@ function answerSimplePortfolioQuestion(messages, snapshot) {
         return null;
     const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
     const selector = normalizePortfolioMatchValue(symbol);
-    const matches = holdings.filter((holding) => holdingMatchesSelector(holding, selector));
+    const exactSymbolOnly = isLikelyMarketTickerSymbol(symbol);
+    const matches = holdings.filter((holding) => exactSymbolOnly ? holdingMatchesExactSymbolSelector(holding, selector) : holdingMatchesSelector(holding, selector));
     if (matches.length === 0)
         return null;
     const totalInvestment = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.totalInvestment), 0);
@@ -806,7 +812,7 @@ function answerSimplePortfolioQuestion(messages, snapshot) {
         : `Total investment is ${formatSnapshotCurrency(totalInvestment)}. Included investment total is ${formatSnapshotCurrency(includedTotal)}.`;
     return {
         message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. ${investmentPhrase} Annual income is ${formatSnapshotCurrency(annualIncome)}. Included annual income is ${formatSnapshotCurrency(includedAnnualIncome)}. I highlighted the matching rows.`,
-        actions: [{ type: "selectAsset", payload: { assetId: symbol }, requiresConfirmation: false }],
+        actions: [{ type: "selectAsset", payload: { assetId: symbol, matchMode: exactSymbolOnly ? "symbol" : "row" }, requiresConfirmation: false }],
         model: "local-portfolio-calculation",
     };
 }
