@@ -380,12 +380,41 @@ function assetSelectorTokens(selectorKey: string) {
   return selectorKey
     .split(/[^a-z0-9]+/)
     .map((token) => token.trim())
-    .filter((token) => token && !["row", "rows", "holding", "holdings", "investment", "investments", "desc", "description"].includes(token));
+    .filter((token) => token && !["all", "line", "lines", "row", "rows", "holding", "holdings", "investment", "investments", "desc", "description", "symbol", "symbols", "ticker", "tickers"].includes(token));
 }
-function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unknown) {
+function splitAssetSelectors(selector: unknown) {
+  const rawSelector = String(selector || "");
+  const cleaned = normalizeAssetMatchKey(rawSelector)
+    .split(/\s+/)
+    .filter((token) => !["all", "line", "lines", "row", "rows", "holding", "holdings", "investment", "investments", "desc", "description", "symbol", "symbols", "ticker", "tickers"].includes(token))
+    .join(" ");
+  if (!cleaned) return [];
+
+  const hasExplicitList = /,|\bor\b/i.test(rawSelector);
+  const tickerLikeTokens = cleaned.split(/\s+/).filter((token) => /^[a-z][a-z0-9.-]{1,9}$/i.test(token));
+  const shouldSplitWhitespaceList =
+    !hasExplicitList &&
+    /\b(?:symbol|symbols|ticker|tickers)\b/i.test(rawSelector) &&
+    tickerLikeTokens.length > 1;
+
+  const parts = hasExplicitList
+    ? rawSelector.split(/\s*,\s*|\s+\bor\s+/i)
+    : shouldSplitWhitespaceList
+      ? tickerLikeTokens
+      : [cleaned];
+
+  return [...new Set(parts.map((part) => normalizeAssetMatchKey(part))
+    .map((part) => part.split(/\s+/).filter((token) => !["all", "line", "lines", "row", "rows", "holding", "holdings", "investment", "investments", "desc", "description", "symbol", "symbols", "ticker", "tickers"].includes(token)).join(" "))
+    .filter(Boolean))];
+}
+function investmentMatchesAssetSelector(row: DerivedInvestmentRow, selector: unknown): boolean {
   const selectorKey = normalizeAssetMatchKey(selector);
   if (!selectorKey) return false;
   if (normalizeLookupKey(String(row.id)) === selectorKey) return true;
+  const selectorParts = splitAssetSelectors(selector);
+  if (selectorParts.length > 1) {
+    return selectorParts.some((selectorPart) => investmentMatchesAssetSelector(row, selectorPart));
+  }
   const values = [row.symbol, row.effectiveSymbol, row.newSymbol, row.description, row.account];
   if (values.some((value) => valueMatchesAssetSelector(value, selectorKey))) return true;
 

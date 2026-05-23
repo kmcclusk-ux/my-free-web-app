@@ -601,7 +601,7 @@ function portfolioSelectorTokens(selector) {
     return normalizePortfolioMatchValue(selector)
         .split(/[^A-Z0-9]+/)
         .map((token) => token.trim())
-        .filter((token) => token && !["ROW", "ROWS", "HOLDING", "HOLDINGS", "INVESTMENT", "INVESTMENTS", "DESC", "DESCRIPTION"].includes(token));
+        .filter((token) => token && !["ALL", "LINE", "LINES", "ROW", "ROWS", "HOLDING", "HOLDINGS", "INVESTMENT", "INVESTMENTS", "DESC", "DESCRIPTION", "SYMBOL", "SYMBOLS", "TICKER", "TICKERS"].includes(token));
 }
 function holdingMatchesSelector(holding, selector) {
     const values = [
@@ -621,10 +621,26 @@ function cleanPortfolioSelectorPhrase(value) {
     return String(value || "")
         .replace(/^[\s"'`]+|[\s"'`.?!]+$/g, "")
         .replace(/[';]s\b/gi, "")
-        .replace(/\b(?:row|rows|holding|holdings|investment|investments)\b/gi, " ")
-        .replace(/\b(?:desc|description)\b/gi, " ")
+        .replace(/\b(?:all|line|lines|row|rows|holding|holdings|investment|investments)\b/gi, " ")
+        .replace(/\b(?:desc|description|symbol|symbols|ticker|tickers)\b/gi, " ")
         .replace(/\s+/g, " ")
         .trim();
+}
+function splitPortfolioSelectors(selector) {
+    const cleaned = cleanPortfolioSelectorPhrase(selector);
+    if (!cleaned)
+        return [];
+    const hasExplicitList = /,|\bor\b/i.test(selector);
+    const tickerLikeTokens = cleaned.split(/\s+/).filter((token) => /^[A-Za-z][A-Za-z0-9.-]{1,9}$/.test(token));
+    const shouldSplitWhitespaceList = !hasExplicitList &&
+        /\b(?:symbol|symbols|ticker|tickers)\b/i.test(selector) &&
+        tickerLikeTokens.length > 1;
+    const parts = hasExplicitList
+        ? cleaned.split(/\s*,\s*|\s+\bor\s+/i)
+        : shouldSplitWhitespaceList
+            ? tickerLikeTokens
+            : [cleaned];
+    return [...new Set(parts.map(cleanPortfolioSelectorPhrase).filter(Boolean))];
 }
 function getSelectRowsSelector(matchesText) {
     const text = matchesText.trim();
@@ -648,18 +664,20 @@ function answerSelectRowsQuestion(messages, snapshot) {
         return null;
     if (snapshot && typeof snapshot === "object") {
         const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
-        const selectorKey = normalizePortfolioMatchValue(selector);
-        const matches = holdings.filter((holding) => holdingMatchesSelector(holding, selectorKey));
+        const selectors = splitPortfolioSelectors(selector);
+        const selectorKeys = selectors.map(normalizePortfolioMatchValue);
+        const matches = holdings.filter((holding) => selectorKeys.some((selectorKey) => holdingMatchesSelector(holding, selectorKey)));
+        const selectorLabel = selectors.length > 1 ? selectors.join(", ") : selector;
         if (holdings.length > 0 && matches.length === 0) {
             return {
-                message: `I could not find any rows containing "${selector}".`,
+                message: `I could not find any rows containing "${selectorLabel}".`,
                 actions: [],
                 model: "local-portfolio-calculation",
             };
         }
         return {
-            message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} containing "${selector}".`,
-            actions: [{ type: "selectAssets", payload: { assetIds: matches.map((holding) => holding.id).filter((id) => id !== undefined), selector }, requiresConfirmation: false }],
+            message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} containing "${selectorLabel}".`,
+            actions: [{ type: "selectAssets", payload: { assetIds: matches.map((holding) => holding.id).filter((id) => id !== undefined), selector: selectorLabel }, requiresConfirmation: false }],
             model: "local-portfolio-calculation",
         };
     }
