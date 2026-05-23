@@ -1232,6 +1232,8 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { label: "Effective", value: formatPercent(stateEffectiveRate), tone: "taxable" },
     { label: "Top bracket", value: getReachedTaxRateLabel(caTaxRateMarkers, stateTaxable, "1%"), tone: "income" },
   ];
+  const federalTopBracket = federalStats.find((stat) => stat.label === "Top bracket")?.value || "10%";
+  const stateTopBracket = stateStats.find((stat) => stat.label === "Top bracket")?.value || "1%";
 
   return (
     <div className="tax-thermometer-panel">
@@ -1252,6 +1254,13 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
             <div><span>CA tax</span><strong>{formatCurrencyDetailed(stateTax)}</strong></div>
             <div><span>CA effective</span><strong>{formatPercent(stateEffectiveRate)}</strong></div>
             <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+          </div>
+        )}
+        {!collapsedSections.summary && (
+          <div className="tax-insight-card">
+            <span>Live tax readout</span>
+            <strong>Federal bracket {federalTopBracket}; California bracket {stateTopBracket}</strong>
+            <p>Updates as included holdings, overrides, and tax inputs change.</p>
           </div>
         )}
       </div>
@@ -1648,19 +1657,20 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const getRowClassName = (row: InvestmentRow) => {
     const accountKey = normalizeLookupKey(row.account);
     const taxStatus = String(accountTaxStatusByName[accountKey] || "").toLowerCase();
-    const isNonTaxableStatus =
-      taxStatus.includes("deferred") ||
-      taxStatus.includes("tax-free") ||
-      taxStatus.includes("tax free") ||
-      taxStatus.includes("tax_deduction") ||
-      taxStatus.includes("tax-deduction");
-    const isTaxableStatus =
-      taxStatus === "taxable" ||
-      taxStatus.includes("taxable") ||
-      taxStatus.includes("partially taxable");
+    const isDeferredStatus = taxStatus.includes("deferred");
+    const isTaxFreeStatus = taxStatus.includes("tax-free") || taxStatus.includes("tax free");
+    const isDeductionStatus = taxStatus.includes("tax_deduction") || taxStatus.includes("tax-deduction");
+    const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
+    const isTaxableStatus = taxStatus === "taxable" || (taxStatus.includes("taxable") && !isPartiallyTaxableStatus);
 
-    if (isNonTaxableStatus) {
+    if (isDeferredStatus) {
+      return "investment-row investment-row--deferred";
+    }
+    if (isTaxFreeStatus || isDeductionStatus) {
       return "investment-row investment-row--non-taxable";
+    }
+    if (isPartiallyTaxableStatus) {
+      return "investment-row investment-row--partial";
     }
     if (isTaxableStatus) {
       return "investment-row investment-row--taxable";
