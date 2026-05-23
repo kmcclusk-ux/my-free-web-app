@@ -42,6 +42,32 @@ Web search note: OpenRouter free models can be used with the `openrouter:web_sea
 
 Frontend environment still uses `VITE_API_BASE_URL` for the existing Amplify REST API base URL. Do not put `OPENROUTER_API_KEY` in any frontend `.env` file.
 
+## Optional Multi-Account Login
+
+The app supports Cognito Hosted UI login without calling Cognito from the Lambda with browser secrets. When these frontend variables are set, the React app requires sign-in, stores the Cognito session locally, and sends the ID token to workbook/chat API calls:
+
+- `VITE_COGNITO_DOMAIN`, for example `https://your-domain.auth.us-west-2.amazoncognito.com`
+- `VITE_COGNITO_CLIENT_ID`
+- `VITE_COGNITO_REDIRECT_URI`, usually your Amplify URL
+- `VITE_COGNITO_LOGOUT_URI`, usually your Amplify URL
+- `VITE_COGNITO_SCOPES`, default `openid email profile`
+
+Set these Lambda environment variables to make workbook storage and portfolio chat require authentication and scope saved workbooks per user:
+
+- `COGNITO_USER_POOL_ID`
+- `COGNITO_APP_CLIENT_ID`
+- `COGNITO_REGION`, for example `us-west-2`
+
+With Cognito configured, the backend stores workbooks internally under a user-scoped key like `user#<cognito-sub>#workspace#default`. The browser still sees `workspaceId: default`, but each signed-in account gets isolated data.
+
+For Google Sheets export, use a server-side sync token:
+
+- Lambda env `PORTFOLIO_SYNC_TOKEN`: a long random secret.
+- Lambda env `PORTFOLIO_SYNC_USER_ID`: the Cognito `sub` that should own spreadsheet exports.
+- Optional Lambda env `PORTFOLIO_SYNC_USER_EMAIL`.
+
+Then in Google Sheets, use `Workbook Sync -> Set Sync Token` and paste the same token. The Apps Script sends it as `X-Portfolio-Sync-Token` for workbook export/load calls. Pure tax-calculation API calls remain public so spreadsheet tax formulas continue working.
+
 PowerShell example for the live Lambda after you have AWS credentials configured. This command keeps the existing workbook variables and adds OpenRouter free-model settings:
 
 ```powershell

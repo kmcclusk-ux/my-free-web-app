@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { createPublicKey, createVerify, type KeyObject } from "crypto";
 import { request as httpsRequest } from "https";
 import {
   fedTax2025Mfj,
@@ -21,7 +22,7 @@ function jsonResponse(
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token",
     },
     body: JSON.stringify(body),
   };
@@ -34,7 +35,7 @@ function corsPreflight(origin = "*"): APIGatewayProxyResult {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token",
     },
     body: "",
   };
@@ -93,6 +94,23 @@ type PortfolioChatResponse = {
   model: string;
   usage?: unknown;
 };
+
+type AuthContext = {
+  sub: string;
+  email?: string;
+  authType: "cognito" | "syncToken";
+};
+
+type CognitoJwk = {
+  kid: string;
+  kty: string;
+  n: string;
+  e: string;
+  alg?: string;
+  use?: string;
+};
+
+let jwksCache: { issuer: string; keys: CognitoJwk[]; fetchedAt: number } | null = null;
 
 const PORTFOLIO_ASSISTANT_SYSTEM_PROMPT = `You are a portfolio assistant embedded in this investment portfolio app.
 Use only the provided portfolio state, workbook tables, reference tables, and calculated metrics. If data is missing, say what is missing.
@@ -175,6 +193,187 @@ function parseJsonBody<T>(event: APIGatewayProxyEvent): T | null {
   const raw = decodeBody(event);
   if (!raw) return null;
   return JSON.parse(raw.trim()) as T;
+}
+
+function getHeader(event: APIGatewayProxyEvent, name: string) {
+  const headers = event.headers || {};
+  const target = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === target) return value || "";
+  }
+  return "";
+}
+
+function getCognitoConfig() {
+  const userPoolId = String(process.env.COGNITO_USER_POOL_ID || "").trim();
+  const appClientId = String(process.env.COGNITO_APP_CLIENT_ID || "").trim();
+  const region = String(process.env.COGNITO_REGION || process.env.AWS_REGION || process.env.REGION || "").trim();
+  if (!userPoolId || !appClientId || !region) return null;
+  return {
+    userPoolId,
+    appClientId,
+    region,
+    issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+  };
+}
+
+function authIsConfigured() {
+  return Boolean(getCognitoConfig() || process.env.PORTFOLIO_SYNC_TOKEN);
+}
+
+function base64UrlToBuffer(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return Buffer.from(padded, "base64");
+}
+
+function decodeJwtPart<T>(value: string): T {
+  return JSON.parse(base64UrlToBuffer(value).toString("utf8")) as T;
+}
+
+function parseBearerToken(event: APIGatewayProxyEvent) {
+  const authorization = getHeader(event, "authorization");
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || "";
+}
+
+async function fetchCognitoJwks(issuer: string): Promise<CognitoJwk[]> {
+  const cacheTtlMs = 60 * 60 * 1000;
+  if (jwksCache && jwksCache.issuer === issuer && Date.now() - jwksCache.fetchedAt < cacheTtlMs) {
+    return jwksCache.keys;
+  }
+
+  const response = await fetch(`${issuer}/.well-known/jwks.json`);
+  if (!response.ok) {
+    throw new Error(`Unable to fetch Cognito signing keys (${response.status}).`);
+  }
+
+  const json = await response.json() as { keys?: CognitoJwk[] };
+  const keys = Array.isArray(json.keys) ? json.keys : [];
+  jwksCache = { issuer, keys, fetchedAt: Date.now() };
+  return keys;
+}
+
+function jwkToKeyObject(jwk: CognitoJwk): KeyObject {
+  return createPublicKey({
+    key: {
+      kty: jwk.kty,
+      n: jwk.n,
+      e: jwk.e,
+    },
+    format: "jwk",
+  });
+}
+
+async function verifyCognitoJwt(token: string): Promise<AuthContext> {
+  const config = getCognitoConfig();
+  if (!config) {
+    throw new Error("Cognito auth is not configured.");
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Invalid token format.");
+  }
+
+  const header = decodeJwtPart<{ kid?: string; alg?: string }>(parts[0]);
+  const payload = decodeJwtPart<Record<string, unknown>>(parts[1]);
+  if (header.alg !== "RS256" || !header.kid) {
+    throw new Error("Unsupported token signing algorithm.");
+  }
+
+  const keys = await fetchCognitoJwks(config.issuer);
+  const jwk = keys.find((key) => key.kid === header.kid);
+  if (!jwk) {
+    throw new Error("Token signing key was not found.");
+  }
+
+  const verifier = createVerify("RSA-SHA256");
+  verifier.update(`${parts[0]}.${parts[1]}`);
+  verifier.end();
+  if (!verifier.verify(jwkToKeyObject(jwk), base64UrlToBuffer(parts[2]))) {
+    throw new Error("Invalid token signature.");
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const exp = Number(payload.exp || 0);
+  if (!Number.isFinite(exp) || exp <= nowSeconds) {
+    throw new Error("Token is expired.");
+  }
+
+  if (payload.iss !== config.issuer) {
+    throw new Error("Token issuer is invalid.");
+  }
+
+  const tokenUse = String(payload.token_use || "");
+  const clientId = tokenUse === "id" ? String(payload.aud || "") : String(payload.client_id || "");
+  if (clientId !== config.appClientId) {
+    throw new Error("Token audience is invalid.");
+  }
+
+  const sub = String(payload.sub || "");
+  if (!sub) {
+    throw new Error("Token subject is missing.");
+  }
+
+  return {
+    sub,
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    authType: "cognito",
+  };
+}
+
+function verifySyncToken(event: APIGatewayProxyEvent): AuthContext | null {
+  const expected = String(process.env.PORTFOLIO_SYNC_TOKEN || "").trim();
+  if (!expected) return null;
+
+  const provided = getHeader(event, "x-portfolio-sync-token").trim();
+  if (!provided || provided !== expected) return null;
+
+  return {
+    sub: String(process.env.PORTFOLIO_SYNC_USER_ID || "sheet-sync").trim() || "sheet-sync",
+    email: process.env.PORTFOLIO_SYNC_USER_EMAIL,
+    authType: "syncToken",
+  };
+}
+
+async function authenticatePortfolioRequest(event: APIGatewayProxyEvent, origin: string): Promise<{ auth: AuthContext | null } | { response: APIGatewayProxyResult }> {
+  if (!authIsConfigured()) {
+    return { auth: null };
+  }
+
+  const syncAuth = verifySyncToken(event);
+  if (syncAuth) return { auth: syncAuth };
+
+  const token = parseBearerToken(event);
+  if (!token) {
+    return { response: jsonResponse(401, { error: "Authentication required." }, origin) };
+  }
+
+  try {
+    return { auth: await verifyCognitoJwt(token) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid authentication token.";
+    return { response: jsonResponse(401, { error: message }, origin) };
+  }
+}
+
+function sanitizeWorkspacePart(value: string) {
+  return value.trim().replace(/[^a-zA-Z0-9_.:-]+/g, "_").slice(0, 160) || "default";
+}
+
+function scopedWorkspaceId(workspaceId: string, auth: AuthContext | null) {
+  const cleanWorkspaceId = sanitizeWorkspacePart(workspaceId || "default");
+  if (!auth) return cleanWorkspaceId;
+  return `user#${sanitizeWorkspacePart(auth.sub)}#workspace#${cleanWorkspaceId}`;
+}
+
+function workbookResponseForClient<T extends { workspaceId: string }>(result: T, requestedWorkspaceId: string, auth: AuthContext | null): T & { owner?: { email?: string; authType: string } } {
+  return {
+    ...result,
+    workspaceId: sanitizeWorkspacePart(requestedWorkspaceId || "default"),
+    ...(auth ? { owner: { email: auth.email, authType: auth.authType } } : {}),
+  };
 }
 
 function postJsonToOpenRouter(
@@ -1008,6 +1207,9 @@ async function handlePortfolioChatRoute(
     return jsonResponse(405, { error: "Portfolio chat route supports POST only." }, origin);
   }
 
+  const authResult = await authenticatePortfolioRequest(event, origin);
+  if ("response" in authResult) return authResult.response;
+
   let body: { messages?: unknown; portfolioSnapshot?: unknown } | null = null;
   try {
     body = parseJsonBody<{ messages?: unknown; portfolioSnapshot?: unknown }>(event);
@@ -1156,6 +1358,9 @@ async function handleWorkbookRoute(
   event: APIGatewayProxyEvent,
   origin: string
 ): Promise<APIGatewayProxyResult> {
+  const authResult = await authenticatePortfolioRequest(event, origin);
+  if ("response" in authResult) return authResult.response;
+
   let store: WorkbookStore;
   try {
     store = new WorkbookStore();
@@ -1165,24 +1370,26 @@ async function handleWorkbookRoute(
   }
 
   const [, workspaceId = "default", tabName, action] = getProxySegments(event);
+  const requestedWorkspaceId = workspaceId || "default";
+  const storageWorkspaceId = scopedWorkspaceId(requestedWorkspaceId, authResult.auth);
 
   try {
     if (event.httpMethod === "GET") {
-      if (!workspaceId) {
+      if (!requestedWorkspaceId) {
         return jsonResponse(400, { error: "Missing workspaceId in workbook path." }, origin);
       }
 
       if (tabName) {
-        const result = await store.getTab(workspaceId, tabName);
-        return jsonResponse(200, result, origin);
+        const result = await store.getTab(storageWorkspaceId, tabName);
+        return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
       }
 
-      const result = await store.getWorkspace(workspaceId);
-      return jsonResponse(200, result, origin);
+      const result = await store.getWorkspace(storageWorkspaceId);
+      return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
     }
 
     if (event.httpMethod === "PUT") {
-      if (!workspaceId || !tabName) {
+      if (!requestedWorkspaceId || !tabName) {
         return jsonResponse(400, { error: "PUT requires /hello/workbook/{workspaceId}/{tabName}." }, origin);
       }
 
@@ -1197,12 +1404,12 @@ async function handleWorkbookRoute(
         return jsonResponse(400, { error: "PUT body must include a data field." }, origin);
       }
 
-      const result = await store.putTab(workspaceId, tabName, body.data);
-      return jsonResponse(200, result, origin);
+      const result = await store.putTab(storageWorkspaceId, tabName, body.data);
+      return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
     }
 
     if (event.httpMethod === "POST") {
-      if (!workspaceId || action !== "save") {
+      if (!requestedWorkspaceId || action !== "save") {
         return jsonResponse(400, { error: "POST requires /hello/workbook/{workspaceId}/save." }, origin);
       }
 
@@ -1217,8 +1424,8 @@ async function handleWorkbookRoute(
         return jsonResponse(400, { error: "Missing workbook payload." }, origin);
       }
 
-      const result = await store.saveWorkspace(workspaceId, body);
-      return jsonResponse(200, result, origin);
+      const result = await store.saveWorkspace(storageWorkspaceId, body);
+      return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
     }
 
     return jsonResponse(405, { error: "Workbook route supports GET, PUT, and POST." }, origin);
@@ -1286,6 +1493,9 @@ export const handler = async (
   }
 
   if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
+    const authResult = await authenticatePortfolioRequest(event, origin);
+    if ("response" in authResult) return authResult.response;
+
     let store: WorkbookStore;
     try {
       store = new WorkbookStore();
@@ -1295,11 +1505,12 @@ export const handler = async (
     }
 
     try {
-      const workspaceId = String((body as any).workspaceId || "default");
+      const requestedWorkspaceId = String((body as any).workspaceId || "default");
+      const storageWorkspaceId = scopedWorkspaceId(requestedWorkspaceId, authResult.auth);
 
       if (calc === "WORKBOOK_GET") {
-        const result = await store.getWorkspace(workspaceId);
-        return jsonResponse(200, result, origin);
+        const result = await store.getWorkspace(storageWorkspaceId);
+        return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
       }
 
       if (calc === "WORKBOOK_GET_TAB") {
@@ -1307,8 +1518,8 @@ export const handler = async (
         if (!tabName) {
           return jsonResponse(400, { error: "WORKBOOK_GET_TAB requires tabName" }, origin);
         }
-        const result = await store.getTab(workspaceId, tabName);
-        return jsonResponse(200, result, origin);
+        const result = await store.getTab(storageWorkspaceId, tabName);
+        return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
       }
 
       if (calc === "WORKBOOK_SAVE_TAB") {
@@ -1316,15 +1527,15 @@ export const handler = async (
         if (!tabName) {
           return jsonResponse(400, { error: "WORKBOOK_SAVE_TAB requires tabName" }, origin);
         }
-        const result = await store.putTab(workspaceId, tabName, (body as any).data);
-        return jsonResponse(200, result, origin);
+        const result = await store.putTab(storageWorkspaceId, tabName, (body as any).data);
+        return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
       }
 
-      const result = await store.saveWorkspace(workspaceId, {
+      const result = await store.saveWorkspace(storageWorkspaceId, {
         tabs: (body as any).tabs,
         settings: (body as any).settings,
       });
-      return jsonResponse(200, result, origin);
+      return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Workbook storage error.";
       return jsonResponse(400, { error: message }, origin);

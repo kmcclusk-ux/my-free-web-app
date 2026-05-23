@@ -4,13 +4,22 @@ function clearDelta() {
 }
 
 const TAX_API_URL = "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
+const WORKBOOK_SYNC_TOKEN_PROPERTY = "PORTFOLIO_WORKBOOK_SYNC_TOKEN";
+
+function getWorkbookSyncToken_() {
+  return PropertiesService.getScriptProperties().getProperty(WORKBOOK_SYNC_TOKEN_PROPERTY) || "";
+}
 
 function callTaxApi(payload) {
+  var syncToken = getWorkbookSyncToken_();
   var options = {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify(payload),
-    muteHttpExceptions: true
+    muteHttpExceptions: true,
+    headers: syncToken ? {
+      "X-Portfolio-Sync-Token": syncToken
+    } : {}
   };
 
   var resp = UrlFetchApp.fetch(TAX_API_URL, options);
@@ -577,8 +586,32 @@ function WORKBOOK_SAVE(workspaceId, tabs, settings) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Workbook Sync')
+    .addItem('Set Sync Token', 'SET_WORKBOOK_SYNC_TOKEN')
     .addItem('Export To Data Store', 'EXPORT_WORKBOOK_TO_DATASTORE')
     .addToUi();
+}
+
+function SET_WORKBOOK_SYNC_TOKEN() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt(
+    'Workbook Sync Token',
+    'Paste the sync token for the portfolio account that should own this spreadsheet export.',
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+
+  var token = response.getResponseText().trim();
+  if (!token) {
+    PropertiesService.getScriptProperties().deleteProperty(WORKBOOK_SYNC_TOKEN_PROPERTY);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Workbook sync token cleared.', 'Workbook Sync', 6);
+    return;
+  }
+
+  PropertiesService.getScriptProperties().setProperty(WORKBOOK_SYNC_TOKEN_PROPERTY, token);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Workbook sync token saved.', 'Workbook Sync', 6);
 }
 
 function normalizeExportHeader_(value) {

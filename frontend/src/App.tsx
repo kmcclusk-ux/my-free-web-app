@@ -76,6 +76,12 @@ type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
 type UiSettings = { investmentFavorites: InvestmentFavorite[] };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
+type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
+type AuthUser = { sub: string; email?: string; name?: string };
+type AuthState =
+  | { status: "loading"; user: null; tokens: null; error?: string }
+  | { status: "signedOut"; user: null; tokens: null; error?: string }
+  | { status: "signedIn"; user: AuthUser; tokens: AuthTokens; error?: string };
 type WorkbookTableId = "investments" | "tickers" | "accounts" | "categories" | "taxTreatment" | "accountTaxType" | "investmentType";
 type PortfolioSnapshot = {
   generatedAt: string;
@@ -228,10 +234,165 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
+const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN as string | undefined)?.replace(/\/+$/, "") || "";
+const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined;
+const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI || (typeof window !== "undefined" ? window.location.origin : "");
+const COGNITO_LOGOUT_URI = import.meta.env.VITE_COGNITO_LOGOUT_URI || COGNITO_REDIRECT_URI;
+const COGNITO_SCOPES = import.meta.env.VITE_COGNITO_SCOPES || "openid email profile";
 const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
 const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
 const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
+const AUTH_STORAGE_KEY = "portfolio-auth-session";
+const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
+
+function isCognitoEnabled() {
+  return Boolean(COGNITO_DOMAIN && COGNITO_CLIENT_ID && COGNITO_REDIRECT_URI);
+}
+
+function hasCognitoRedirectCode() {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("code");
+}
+
+function base64UrlEncode(bytes: ArrayBuffer) {
+  const binary = String.fromCharCode(...new Uint8Array(bytes));
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomAuthString() {
+  const bytes = new Uint8Array(32);
+  window.crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes.buffer);
+}
+
+async function sha256Base64Url(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  return base64UrlEncode(await window.crypto.subtle.digest("SHA-256", bytes));
+}
+
+function decodeJwtPayload<T extends Record<string, unknown>>(token: string): T {
+  const payload = token.split(".")[1] || "";
+  const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return JSON.parse(window.atob(padded)) as T;
+}
+
+function authUserFromIdToken(idToken: string): AuthUser {
+  const payload = decodeJwtPayload<Record<string, unknown>>(idToken);
+  return {
+    sub: String(payload.sub || ""),
+    email: typeof payload.email === "string" ? payload.email : undefined,
+    name: typeof payload.name === "string" ? payload.name : undefined,
+  };
+}
+
+function readStoredAuth(): AuthState {
+  if (typeof window === "undefined" || !isCognitoEnabled()) return { status: "signedOut", user: null, tokens: null };
+  if (hasCognitoRedirectCode()) return { status: "loading", user: null, tokens: null };
+
+  try {
+    const tokens = JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) || "null") as AuthTokens | null;
+    if (!tokens?.idToken || tokens.expiresAt <= Date.now() + 30000) {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      return { status: "signedOut", user: null, tokens: null };
+    }
+    return { status: "signedIn", user: authUserFromIdToken(tokens.idToken), tokens };
+  } catch {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    return { status: "signedOut", user: null, tokens: null };
+  }
+}
+
+function writeStoredAuth(tokens: AuthTokens) {
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(tokens));
+}
+
+function clearStoredAuth() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  window.sessionStorage.removeItem(AUTH_PKCE_STORAGE_KEY);
+}
+
+async function startCognitoSignIn() {
+  if (!isCognitoEnabled() || !COGNITO_CLIENT_ID) return;
+  const verifier = randomAuthString();
+  const state = randomAuthString();
+  const challenge = await sha256Base64Url(verifier);
+  window.sessionStorage.setItem(AUTH_PKCE_STORAGE_KEY, JSON.stringify({ verifier, state }));
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: COGNITO_CLIENT_ID,
+    redirect_uri: COGNITO_REDIRECT_URI,
+    scope: COGNITO_SCOPES,
+    state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+  });
+  window.location.assign(`${COGNITO_DOMAIN}/oauth2/authorize?${params.toString()}`);
+}
+
+async function completeCognitoSignInFromUrl(): Promise<AuthState | null> {
+  if (!isCognitoEnabled() || !COGNITO_CLIENT_ID || typeof window === "undefined") return null;
+
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get("code");
+  if (!code) return null;
+
+  const error = url.searchParams.get("error_description") || url.searchParams.get("error");
+  if (error) {
+    return { status: "signedOut", user: null, tokens: null, error };
+  }
+
+  const pkce = JSON.parse(window.sessionStorage.getItem(AUTH_PKCE_STORAGE_KEY) || "null") as { verifier?: string; state?: string } | null;
+  if (!pkce?.verifier || pkce.state !== url.searchParams.get("state")) {
+    return { status: "signedOut", user: null, tokens: null, error: "Sign-in state did not match. Please try again." };
+  }
+
+  const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: COGNITO_CLIENT_ID,
+      code,
+      redirect_uri: COGNITO_REDIRECT_URI,
+      code_verifier: pkce.verifier,
+    }),
+  });
+  const json = await response.json() as { id_token?: string; access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
+  if (!response.ok || !json.id_token || !json.access_token) {
+    return { status: "signedOut", user: null, tokens: null, error: json.error_description || json.error || "Cognito sign-in failed." };
+  }
+
+  const tokens: AuthTokens = {
+    idToken: json.id_token,
+    accessToken: json.access_token,
+    refreshToken: json.refresh_token,
+    expiresAt: Date.now() + Math.max(60, Number(json.expires_in || 3600)) * 1000,
+  };
+  writeStoredAuth(tokens);
+  window.sessionStorage.removeItem(AUTH_PKCE_STORAGE_KEY);
+  window.history.replaceState({}, document.title, `${url.origin}${url.pathname}${url.hash}`);
+  return { status: "signedIn", user: authUserFromIdToken(tokens.idToken), tokens };
+}
+
+function signOutCognito() {
+  clearStoredAuth();
+  if (!isCognitoEnabled() || !COGNITO_CLIENT_ID) {
+    window.location.reload();
+    return;
+  }
+  const params = new URLSearchParams({
+    client_id: COGNITO_CLIENT_ID,
+    logout_uri: COGNITO_LOGOUT_URI,
+  });
+  window.location.assign(`${COGNITO_DOMAIN}/logout?${params.toString()}`);
+}
+
+function authHeaders(idToken?: string): HeadersInit {
+  return idToken ? { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` } : { "Content-Type": "application/json" };
+}
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
@@ -760,27 +921,27 @@ async function postTaxCalculation(payload: Record<string, number | string>) {
   return json as TaxResult;
 }
 
-async function loadWorkbook(workspaceId: string) {
+async function loadWorkbook(workspaceId: string, idToken?: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calc: "WORKBOOK_GET", workspaceId }) });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_GET", workspaceId }) });
   const json = (await response.json()) as WorkbookResponse | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "Workbook load failed");
   return json as WorkbookResponse;
 }
 
-async function saveWorkbook(workspaceId: string, payload: WorkbookResponse) {
+async function saveWorkbook(workspaceId: string, payload: WorkbookResponse, idToken?: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calc: "WORKBOOK_SAVE", workspaceId, tabs: payload.tabs, settings: payload.settings }) });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_SAVE", workspaceId, tabs: payload.tabs, settings: payload.settings }) });
   const json = (await response.json()) as { updatedAt?: string; error?: string };
   if (!response.ok) throw new Error(json.error || "Workbook save failed");
   return json;
 }
 
-async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "content">>, portfolioSnapshot: PortfolioSnapshot) {
+async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "content">>, portfolioSnapshot: PortfolioSnapshot, idToken?: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(idToken),
     body: JSON.stringify({ calc: "PORTFOLIO_CHAT", messages, portfolioSnapshot }),
   });
   const json = (await response.json()) as ChatResponse | ApiError;
@@ -1320,10 +1481,12 @@ function clearAssistantMessageHistory() {
 
 function AssistantPanel({
   portfolioSnapshot,
+  authToken,
   onExecuteAction,
   onClose,
 }: {
   portfolioSnapshot: PortfolioSnapshot;
+  authToken?: string;
   onExecuteAction: (action: AssistantAction) => AssistantActionResult;
   onClose: () => void;
 }) {
@@ -1443,7 +1606,8 @@ function AssistantPanel({
     try {
       const response = await postPortfolioChat(
         nextMessages.map((message) => ({ role: message.role, content: message.content })),
-        portfolioSnapshot
+        portfolioSnapshot,
+        authToken
       );
       const actionResults = (response.actions || []).map((action) => {
         const needsConfirmation =
@@ -2069,6 +2233,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   );
 }
 export default function App() {
+  const authEnabled = isCognitoEnabled();
+  const [authState, setAuthState] = useState<AuthState>(readStoredAuth);
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [focusGrid, setFocusGrid] = useState(false);
   const [showThermometerRail, setShowThermometerRail] = useState(true);
@@ -2101,6 +2267,21 @@ export default function App() {
   const [storageMessage, setStorageMessage] = useState("Loading workbook...");
   const saveTimeout = useRef<number | null>(null);
   const hasLoadedStorage = useRef(false);
+  const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
+  const requiresSignIn = authEnabled && authState.status !== "signedIn";
+
+  useEffect(() => {
+    if (!authEnabled) return;
+    let cancelled = false;
+    completeCognitoSignInFromUrl()
+      .then((nextAuthState) => {
+        if (!cancelled && nextAuthState) setAuthState(nextAuthState);
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setAuthState({ status: "signedOut", user: null, tokens: null, error: error.message });
+      });
+    return () => { cancelled = true; };
+  }, [authEnabled]);
 
   const tickerMap = useMemo(() => Object.fromEntries(tickers.map((row) => [row.symbol, row])), [tickers]);
   const accountMap = useMemo(() => buildAccountLookupMap(accounts), [accounts]);
@@ -2271,8 +2452,17 @@ export default function App() {
     magiStandalone - totalTaxCalc + taxCalcInputs.federalWithholding + taxCalcInputs.stateWithholding;
 
   useEffect(() => {
+    if (authEnabled && authState.status !== "signedIn") {
+      hasLoadedStorage.current = false;
+      setStorageState(authState.status === "loading" ? "loading" : "ready");
+      setStorageMessage(authState.status === "loading" ? "Completing sign in..." : "Sign in to load workbook");
+      return;
+    }
+
     let cancelled = false;
-    loadWorkbook(WORKSPACE_ID).then((response) => {
+    setStorageState("loading");
+    setStorageMessage("Loading workbook...");
+    loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
       if (cancelled) return;
       const workbookSettings = parseWorkbookSettings(response.settings);
       setInvestments(
@@ -2311,7 +2501,7 @@ export default function App() {
       hasLoadedStorage.current = true;
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [authEnabled, authState.status, authToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2385,6 +2575,7 @@ export default function App() {
   }, [stateTaxableForCalc]);
 
   useEffect(() => {
+    if (authEnabled && authState.status !== "signedIn") return;
     if (!hasLoadedStorage.current) return;
     if (!hasRealData && investments.length > 0) {
       return;
@@ -2394,7 +2585,7 @@ export default function App() {
     setStorageMessage("Saving workbook...");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }).then((response) => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then((response) => {
         if (!cancelled) { setStorageState("saved"); setStorageMessage(response.updatedAt ? `Saved ${new Date(response.updatedAt).toLocaleTimeString()}` : "Saved"); }
       }).catch((error: Error) => {
         if (!cancelled) { setStorageState("error"); setStorageMessage(error.message); }
@@ -2402,7 +2593,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData]);
+  }, [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
@@ -2936,6 +3127,20 @@ export default function App() {
             <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
           </div>
           <div className="topbar-stack">
+            {authEnabled ? (
+              authState.status === "signedIn" ? (
+                <>
+                  <div className="topbar-chip">Signed in: {authState.user.email || authState.user.sub.slice(0, 8)}</div>
+                  <button className="ai-button" type="button" onClick={signOutCognito}>Sign out</button>
+                </>
+              ) : (
+                <button className="ai-button ai-button--assistant" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"}>
+                  {authState.status === "loading" ? "Signing in..." : "Sign in"}
+                </button>
+              )
+            ) : (
+              <div className="topbar-chip">Auth: legacy</div>
+            )}
             <button className="ai-button ai-button--assistant" type="button" onClick={() => setIsAssistantOpen((current) => !current)}>
               {isAssistantOpen ? "Close Assistant" : "AI Assistant"}
             </button>
@@ -2951,6 +3156,7 @@ export default function App() {
         {isAssistantOpen && (
           <AssistantPanel
             portfolioSnapshot={portfolioSnapshot}
+            authToken={authToken}
             onExecuteAction={executeAssistantAction}
             onClose={() => setIsAssistantOpen(false)}
           />
@@ -2976,6 +3182,22 @@ export default function App() {
           </section>
         )}
 
+        {requiresSignIn ? (
+          <Section title="Sign In Required" subtitle="Each login gets its own private workbook storage scope.">
+            <div className="auth-required-panel">
+              <div>
+                <p className="eyebrow">Private Portfolio Workspace</p>
+                <h3>Sign in to load your workbook</h3>
+                <p>Your holdings, reference tabs, saved row selections, and assistant context are scoped to your account after login.</p>
+                {authState.error && <div className="status-card status-card--error">{authState.error}</div>}
+              </div>
+              <button className="primary-button" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"}>
+                {authState.status === "loading" ? "Completing sign in..." : "Sign in with Cognito"}
+              </button>
+            </div>
+          </Section>
+        ) : (
+          <>
         {activeTab === "investments" && storageState === "loading" && (
           <Section title="Investments" subtitle="Loading workbook data from storage...">
             <div className="status-card status-card--note">Loading account and tax-status mappings...</div>
@@ -3185,6 +3407,8 @@ export default function App() {
               <MetricCard label="CA taxable" value={formatCurrency(caTaxableIncome)} />
             </div>
           </Section>
+        )}
+          </>
         )}
       </main>
       {!focusGrid && showThermometerRail && (
