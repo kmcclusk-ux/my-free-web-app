@@ -321,6 +321,56 @@
   color: #f8fbfa;
 }
 .sidebar__brand span { color: rgba(229,238,235,.7); line-height: 1.35; }
+.aftertaxum-logo {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: #f8fbfa;
+  text-align: center;
+}
+.aftertaxum-logo__mark {
+  width: 76px;
+  height: 76px;
+  filter: drop-shadow(0 16px 22px rgba(0,0,0,.22));
+}
+.aftertaxum-logo__copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.aftertaxum-logo__copy strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.02rem;
+  font-weight: 500;
+  letter-spacing: -.04em;
+  line-height: 1;
+  color: #f9fcfb;
+}
+.aftertaxum-logo__copy span,
+.aftertaxum-logo__copy small {
+  display: none;
+  color: rgba(229,238,235,.74);
+  line-height: 1.28;
+}
+.aftertaxum-logo__copy span {
+  max-width: 210px;
+  margin-top: 4px;
+  font-size: .64rem;
+  font-weight: 850;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #39d1b1;
+}
+.aftertaxum-logo__copy small {
+  max-width: 205px;
+  justify-self: center;
+  font-size: .72rem;
+  color: rgba(248,251,250,.78);
+}
+.sidebar:hover .aftertaxum-logo__copy span,
+.sidebar:hover .aftertaxum-logo__copy small {
+  display: block;
+}
 .sidebar__nav { gap: 7px; }
 .nav-item {
   min-height: 42px;
@@ -791,5 +841,9 @@
   .workspace-shell,
   .workspace-shell--focus-grid { grid-template-columns: 1fr; }
   .sidebar { width: auto; background: linear-gradient(135deg, var(--pm-sidebar), var(--pm-sidebar-deep)); }
+  .aftertaxum-logo { grid-template-columns: auto minmax(0, 1fr); justify-items: start; text-align: left; }
+  .aftertaxum-logo__mark { width: 58px; height: 58px; }
+  .aftertaxum-logo__copy span,
+  .aftertaxum-logo__copy small { display: block; justify-self: start; }
   .topbar-stack { justify-content: flex-start; }
 }
