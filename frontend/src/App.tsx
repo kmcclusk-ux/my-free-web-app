@@ -3193,7 +3193,7 @@ export default function App() {
                 {authState.error && <div className="status-card status-card--error">{authState.error}</div>}
               </div>
               <button className="primary-button" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"}>
-                {authState.status === "loading" ? "Completing sign in..." : "Sign in with Cognito"}
+                {authState.status === "loading" ? "Completing sign in..." : "Sign In"}
               </button>
             </div>
           </Section>
