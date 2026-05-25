@@ -2271,7 +2271,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
 }
 function AfterTaxUSLogo() {
   return (
-    <div className="aftertaxum-logo" aria-label="AfterTaxUS">
+    <div className="aftertaxum-logo" aria-label="AfterTax US">
       <svg className="aftertaxum-logo__mark" viewBox="0 0 96 96" role="img" aria-hidden="true">
         <defs>
           <linearGradient id="aftertaxumRing" x1="12" y1="20" x2="78" y2="82" gradientUnits="userSpaceOnUse">
@@ -2303,7 +2303,7 @@ function AfterTaxUSLogo() {
         </g>
       </svg>
       <div className="aftertaxum-logo__copy">
-        <strong>AfterTaxUS</strong>
+        <strong>AfterTax US</strong>
         <span>AI-powered after-tax portfolio intelligence</span>
         <small>See the after-tax impact before every decision.</small>
       </div>
