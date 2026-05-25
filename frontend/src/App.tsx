@@ -975,6 +975,26 @@ function mapWorkbookRows<T>(
   if (validator && !mapped.some(validator)) return fallback;
   return mapped;
 }
+function normalizedText(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+function isSameStarterInvestment(row: InvestmentRow, starter: InvestmentRow) {
+  return (
+    normalizedText(row.description) === normalizedText(starter.description) &&
+    normalizedText(row.account) === normalizedText(starter.account) &&
+    normalizedText(row.category) === normalizedText(starter.category) &&
+    normalizedText(row.symbol) === normalizedText(starter.symbol) &&
+    normalizedText(row.newSymbol) === normalizedText(starter.newSymbol) &&
+    Math.abs(row.totalInvestment - starter.totalInvestment) < 0.01 &&
+    Math.abs(row.yearlyIncome - starter.yearlyIncome) < 0.01 &&
+    Math.abs(row.newPercent - starter.newPercent) < 0.000001 &&
+    row.includeIncome === starter.includeIncome &&
+    row.overrideProposal === starter.overrideProposal
+  );
+}
+function isStarterInvestmentSet(rows: InvestmentRow[]) {
+  return rows.length === initialInvestments.length && rows.every((row, index) => isSameStarterInvestment(row, initialInvestments[index]));
+}
 function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fallback?: InvestmentRow): InvestmentRow | null {
   const hasAnyInvestmentField =
     workbookField(
@@ -2243,7 +2263,7 @@ export default function App() {
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
-  const [investments, setInvestments] = useState(initialInvestments);
+  const [investments, setInvestments] = useState<InvestmentRow[]>(() => authEnabled ? [] : initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
   const [categories, setCategories] = useState(initialCategories);
   const [taxTreatments, setTaxTreatments] = useState(initialTaxTreatments);
@@ -2466,9 +2486,13 @@ export default function App() {
     loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
       if (cancelled) return;
       const workbookSettings = parseWorkbookSettings(response.settings);
-      setInvestments(
-        mapWorkbookRows(initialInvestments, response.tabs?.investments, workbookToInvestmentRow)
+      const authenticatedWorkbook = authEnabled && authState.status === "signedIn";
+      const loadedInvestments = mapWorkbookRows(
+        authenticatedWorkbook ? [] : initialInvestments,
+        response.tabs?.investments,
+        workbookToInvestmentRow
       );
+      setInvestments(authenticatedWorkbook && isStarterInvestmentSet(loadedInvestments) ? [] : loadedInvestments);
       setTickers(
         mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
       );
