@@ -2269,9 +2269,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     </Section>
   );
 }
-function AfterTaxumLogo() {
+function AfterTaxUSLogo() {
   return (
-    <div className="aftertaxum-logo" aria-label="AfterTaxum">
+    <div className="aftertaxum-logo" aria-label="AfterTaxUS">
       <svg className="aftertaxum-logo__mark" viewBox="0 0 96 96" role="img" aria-hidden="true">
         <defs>
           <linearGradient id="aftertaxumRing" x1="12" y1="20" x2="78" y2="82" gradientUnits="userSpaceOnUse">
@@ -2303,7 +2303,7 @@ function AfterTaxumLogo() {
         </g>
       </svg>
       <div className="aftertaxum-logo__copy">
-        <strong>AfterTaxum</strong>
+        <strong>AfterTaxUS</strong>
         <span>AI-powered after-tax portfolio intelligence</span>
         <small>See the after-tax impact before every decision.</small>
       </div>
@@ -3190,7 +3190,7 @@ export default function App() {
   return (
     <div className={`workspace-shell ${focusGrid || !showThermometerRail ? "workspace-shell--focus-grid" : ""}`}>
       <aside className="sidebar">
-        <div className="sidebar__brand"><AfterTaxumLogo /></div>
+        <div className="sidebar__brand"><AfterTaxUSLogo /></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
       <main className="content-panel">
