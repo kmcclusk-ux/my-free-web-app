@@ -2878,17 +2878,89 @@ export default function App() {
     if (config.numericFields.includes(field)) return toNumber(value as string | number | boolean | null | undefined);
     return String(value ?? "");
   }
+  function normalizeAssistantFieldName(field: string) {
+    return normalizeLookupKey(field).replace(/[^a-z0-9]/g, "");
+  }
+  function assistantFieldAlias(config: AssistantTableConfig, field: string) {
+    const normalized = normalizeAssistantFieldName(field);
+    const direct = config.allowedFields.find((allowedField) => normalizeAssistantFieldName(allowedField) === normalized);
+    if (direct) return direct;
+
+    const commonAliases: Record<string, Record<string, string>> = {
+      investments: {
+        desc: "description",
+        description: "description",
+        accnt: "account",
+        account: "account",
+        accountname: "account",
+        category: "category",
+        totalinv: "totalInvestment",
+        totalinvestment: "totalInvestment",
+        totalinvestmentamount: "totalInvestment",
+        yrinc: "yearlyIncome",
+        yearinc: "yearlyIncome",
+        yearlyincome: "yearlyIncome",
+        annualincome: "yearlyIncome",
+        inc: "includeIncome",
+        include: "includeIncome",
+        includeincome: "includeIncome",
+        use: "includeIncome",
+        override: "overrideProposal",
+        overrideproposal: "overrideProposal",
+        symbol: "symbol",
+        currentsymbol: "symbol",
+        ticker: "symbol",
+        newsymbol: "newSymbol",
+        proposedsymbol: "newSymbol",
+        newpercent: "newPercent",
+        newpct: "newPercent",
+        new: "newPercent",
+      },
+      tickers: {
+        ticker: "symbol",
+        symbol: "symbol",
+        percentreturn: "percentReturn",
+        return: "percentReturn",
+        pctreturn: "percentReturn",
+        category: "category",
+        taxtreatment: "taxTreatment",
+        taxstatus: "taxTreatment",
+        extradata: "extraData",
+        description: "description",
+        exdividend: "exDividend",
+        divpayout: "divPayout",
+      },
+      accounts: {
+        account: "account",
+        accountname: "account",
+        accountnames: "account",
+        taxstatus: "taxStatus",
+        taxtreatment: "taxStatus",
+        dividendaccrued: "dividendAccrued",
+        dividendacrued: "dividendAccrued",
+        includeinfreecashflow: "includeInFreeCashflow",
+      },
+    };
+    return commonAliases[config.tableId]?.[normalized] || null;
+  }
+  function assistantRawValues(payload: Record<string, unknown>) {
+    const nested = payload.row || payload.values;
+    if (nested && typeof nested === "object") return nested as Record<string, unknown>;
+    const { tableId: _tableId, requiresConfirmation: _requiresConfirmation, ...flatValues } = payload;
+    return flatValues;
+  }
   function sanitizeAssistantValues(config: AssistantTableConfig, rawValues: unknown) {
     const source = rawValues && typeof rawValues === "object" ? rawValues as Record<string, unknown> : {};
     const values: Record<string, unknown> = {};
     const rejected: string[] = [];
     Object.entries(source).forEach(([field, value]) => {
       if (field === "id") return;
-      if (!config.allowedFields.includes(field)) {
+      const allowedField = assistantFieldAlias(config, field);
+      if (!allowedField) {
         rejected.push(field);
         return;
       }
-      values[field] = coerceAssistantFieldValue(config, field, value);
+      values[allowedField] = coerceAssistantFieldValue(config, allowedField, value);
     });
     return { values, rejected };
   }
@@ -3146,11 +3218,16 @@ export default function App() {
       const payload = ((action as any).payload || {}) as Record<string, unknown>;
       const config = getAssistantTableConfig(payload.tableId);
       if (!config) return { ok: false, message: `Rejected addRow: ${String(payload.tableId || "(blank)")} is not an editable table.` };
-      const rawValues = payload.row || payload.values || {};
+      const rawValues = assistantRawValues(payload);
       const { values, rejected } = sanitizeAssistantValues(config, rawValues);
       if (rejected.length) return { ok: false, message: `Rejected addRow: unsupported field(s) ${rejected.join(", ")} for ${config.tableId}.` };
+      if (Object.keys(values).length === 0) return { ok: false, message: "Rejected addRow: no valid row fields were supplied." };
       const id = nextAssistantRowId(config.rows);
       config.setRows((current) => [...current, { ...config.defaultRow(id), ...values, id }]);
+      if (config.tableId === "investments") {
+        setInvestmentFilters({ account: "", category: "", asset: "" });
+        setSelectedInvestmentIds([id]);
+      }
       setActiveTab(config.tab);
       return { ok: true, message: `Added row ${id} to ${config.label}.` };
     }
