@@ -14,8 +14,6 @@ type WorkerEnv = {
   MCP_PATH?: string;
 };
 
-const transports = new Map<string, WebStandardStreamableHTTPServerTransport>();
-
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
     ...init,
@@ -41,37 +39,23 @@ function isAuthorized(request: Request, env: WorkerEnv) {
   return suppliedToken === expectedToken;
 }
 
-async function getTransport(sessionId: string | null, env: WorkerEnv) {
-  if (sessionId && transports.has(sessionId)) {
-    return transports.get(sessionId)!;
-  }
-
+async function handleMcpRequest(request: Request, env: WorkerEnv) {
   const config = resolvePortfolioConfig({
     apiBaseUrl: env.PORTFOLIO_API_BASE_URL,
     defaultWorkspaceId: env.PORTFOLIO_WORKSPACE_ID,
     portfolioSyncToken: env.PORTFOLIO_SYNC_TOKEN,
   });
 
+  // Cloudflare Workers are serverless; subsequent MCP requests are not guaranteed
+  // to hit the same isolate. Stateless transport avoids fragile in-memory sessions.
   const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
+    sessionIdGenerator: undefined,
     enableJsonResponse: true,
-    onsessioninitialized: (id) => {
-      transports.set(id, transport);
-    },
-    onsessionclosed: (id) => {
-      transports.delete(id);
-    },
   });
-
-  transport.onclose = () => {
-    if (transport.sessionId) {
-      transports.delete(transport.sessionId);
-    }
-  };
 
   const server = createPortfolioServer(config);
   await server.connect(transport);
-  return transport;
+  return transport.handleRequest(request);
 }
 
 export default {
@@ -96,9 +80,7 @@ export default {
         return jsonResponse({ error: "Unauthorized MCP request." }, { status: 401 });
       }
 
-      const sessionId = request.headers.get("mcp-session-id");
-      const transport = await getTransport(sessionId, env);
-      return transport.handleRequest(request);
+      return handleMcpRequest(request, env);
     }
 
     if (env.ASSETS) {
