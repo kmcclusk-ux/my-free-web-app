@@ -236,7 +236,14 @@ const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlo
 const CHATGPT_URL = "https://chatgpt.com/";
 const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN as string | undefined)?.replace(/\/+$/, "") || "";
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined;
-const BROWSER_ROOT_URI = typeof window !== "undefined" ? new URL("/", window.location.origin).toString() : "";
+const BROWSER_ROOT_URI = typeof window !== "undefined"
+  ? new URL(
+      "/",
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? window.location.origin
+        : `https://${window.location.host}`
+    ).toString()
+  : "";
 const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI || BROWSER_ROOT_URI;
 const COGNITO_LOGOUT_URI = import.meta.env.VITE_COGNITO_LOGOUT_URI || COGNITO_REDIRECT_URI;
 const COGNITO_SCOPES = import.meta.env.VITE_COGNITO_SCOPES || "openid email profile";
