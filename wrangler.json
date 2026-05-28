@@ -1,8 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "my-free-web-app",
+  "main": "mcp-server/src/worker.ts",
   "compatibility_date": "2026-05-28",
   "assets": {
+    "binding": "ASSETS",
     "directory": "./frontend/dist",
     "not_found_handling": "single-page-application"
   }

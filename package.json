@@ -5,17 +5,20 @@
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "cd amplify/backend/function/helloWorld && npm run build",
     "clean": "rimraf build",
     "rebuild": "npm run clean && npm run build",
     "test": "vitest run"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0",
     "@types/aws-lambda": "^8.10.0",
-    "vitest": "^4.0.18",
-    "rimraf": "^5.0.0"
+    "@types/node": "^20.0.0",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
   }
 }

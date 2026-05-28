@@ -1,0 +1,80 @@
+# Portfolio MCP Server
+
+This MCP server gives ChatGPT access to the existing portfolio workbook data and tax calculation API. Read tools work alongside a small set of explicit write tools for adding or updating investment rows.
+
+## What it exposes
+
+- `get_workbook_overview`
+- `list_investments`
+- `get_reference_tables`
+- `run_federal_tax_calculation`
+- `run_california_tax_calculation`
+- `search_portfolio_notes`
+- `add_investment`
+- `update_investment`
+- `set_investment_checkbox`
+
+The server reads from the existing live workbook API at:
+
+- `https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello`
+
+## Run locally
+
+```powershell
+cd C:\myapp\mcp-server
+npm install
+npm run build
+npm run dev
+```
+
+By default it starts at:
+
+- MCP endpoint: `http://localhost:8787/mcp`
+- Health endpoint: `http://localhost:8787/health`
+
+## Environment variables
+
+- `PORT`: HTTP port, default `8787`
+- `MCP_PATH`: MCP route, default `/mcp`
+- `PORTFOLIO_API_BASE_URL`: workbook and tax backend URL
+- `PORTFOLIO_WORKSPACE_ID`: default workspace, default `default`
+- `PORTFOLIO_SYNC_TOKEN`: optional sync token used as `X-Portfolio-Sync-Token` so the MCP server can access the same user-scoped workbook as the spreadsheet export.
+
+ChatGPT cannot reuse the Cognito login from your browser. To access your signed-in workbook, run the MCP server with a sync token that is mapped to the Cognito user who owns the workbook:
+
+```powershell
+cd C:\myapp\mcp-server
+$env:PORTFOLIO_SYNC_TOKEN = Get-Content C:\myapp\tmp\portfolio-sync-token.txt -Raw
+npm run dev
+```
+
+## Hosted Cloudflare Worker
+
+The repo now includes a Cloudflare Worker entry point at `mcp-server/src/worker.ts`.
+It serves `/mcp` from the same Worker that serves the React app static assets.
+
+Required Worker secret:
+
+- `PORTFOLIO_SYNC_TOKEN`: used as `X-Portfolio-Sync-Token` when the Worker calls the portfolio backend.
+
+Recommended Worker secret:
+
+- `MCP_AUTH_TOKEN`: protects the public MCP endpoint. ChatGPT can connect with either an `Authorization: Bearer ...` header if supported, or by using the MCP URL with `?mcp_token=...`.
+
+The public MCP URL will be one of these after deployment:
+
+- `https://my-free-web-app.kmcclusk.workers.dev/mcp`
+- `https://www.aftertaxus.com/mcp`
+
+If `MCP_AUTH_TOKEN` is set and you use query-token auth, the ChatGPT connector URL should be:
+
+- `https://www.aftertaxus.com/mcp?mcp_token=YOUR_MCP_AUTH_TOKEN`
+
+Do not use `PORTFOLIO_SYNC_TOKEN` as the query-token value. Keep that token server-side only.
+
+## Notes
+
+- This server does not inherit the React app browser login. It authenticates to the portfolio backend with `PORTFOLIO_SYNC_TOKEN` when provided.
+- Write tools are intentionally limited to investment rows and checkbox updates. Do not expose this MCP server publicly without `MCP_AUTH_TOKEN` or equivalent access control.
+- It talks to the same live backend used by the spreadsheet and React app.
+- It does not need direct DynamoDB credentials as long as the workbook API remains available.
