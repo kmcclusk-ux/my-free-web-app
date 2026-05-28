@@ -516,6 +516,7 @@ const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdi
 const initialStateSettings: StateSettings = { extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [] };
+const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
   if (typeof value === "number") {
@@ -1064,6 +1065,9 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
   const idValue = workbookField(row, "id");
   const id = idValue ? Number(idValue) || base.id : base.id;
   const spreadsheetRowNumberValue = workbookField(row, "spreadsheetRowNumber", "spreadsheet_row_number", "sheet_row_number", "source_row_number", "row_number");
+  const spreadsheetRowNumber = spreadsheetRowNumberValue !== undefined
+    ? toNumber(spreadsheetRowNumberValue) || undefined
+    : base.spreadsheetRowNumber ?? index + GOOGLE_SHEET_INVESTMENT_START_ROW;
   const totalInvestmentValue = workbookField(row, "totalInvestment", "total_inv", "total_investment", "totalinvestment", "total_inv_amount");
   const yearlyIncomeValue = workbookField(row, "yearlyIncome", "yr_inc", "yearly_income", "yearinc", "yearly_income_amount");
   const includeIncomeValue = workbookField(row, "includeIncome", "inc", "include_income", "income", "include_investment_income");
@@ -1071,7 +1075,7 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
   const newPercentValue = workbookField(row, "newPercent", "new_percent", "new_pct", "newpercent");
   return {
     id: Number(id) || index + 1,
-    spreadsheetRowNumber: spreadsheetRowNumberValue !== undefined ? toNumber(spreadsheetRowNumberValue) || undefined : base.spreadsheetRowNumber,
+    spreadsheetRowNumber,
     description: workbookField(row, "desc", "description") ?? base.description,
     account: workbookField(row, "accnt", "account", "account_name", "account_names") ?? base.account,
     category: workbookField(row, "category") ?? base.category,

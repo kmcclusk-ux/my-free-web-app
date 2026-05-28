@@ -655,6 +655,7 @@ function sheetToRowObjects_(sheet) {
       record[key] = row[c];
     }
     record.spreadsheet_row_number = r + 1;
+    record.spreadsheetRowNumber = r + 1;
     rows.push(record);
   }
 
@@ -703,6 +704,7 @@ function sheetToRowObjectsFromLine8UntilEndDescription_(sheet) {
       record[key] = row[c];
     }
     record.spreadsheet_row_number = r + 1;
+    record.spreadsheetRowNumber = r + 1;
 
     // Normalize older/short column aliases into canonical keys expected by downstream apps.
     if (!record.total_inv && record.inv !== undefined) record.total_inv = record.inv;
