@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "aftertaxus",
+  "name": "my-free-web-app",
   "compatibility_date": "2026-05-28",
   "assets": {
     "directory": "./frontend/dist",
