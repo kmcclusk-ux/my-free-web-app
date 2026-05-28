@@ -651,29 +651,6 @@
 .sheet-table--workbook tbody tr:hover td {
   box-shadow: inset 0 1px 0 rgba(31,109,106,.08), inset 0 -1px 0 rgba(31,109,106,.08);
 }
-.sheet-table--workbook tbody td.sheet-row-cell::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 4px;
-  border-radius: 999px;
-  background: var(--status-color);
-  opacity: .95;
-}
-.sheet-table--workbook tbody td.sheet-row-cell::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 9px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--status-color);
-  box-shadow: 0 0 0 3px var(--status-bg);
-  transform: translateY(-50%);
-}
 .sheet-table--workbook tbody tr.investment-row--selected {
   --row-bg: rgba(255,249,219,.98);
   --status-color: var(--pm-gold);
