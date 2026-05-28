@@ -3353,7 +3353,7 @@ export default function App() {
             <div className="auth-required-panel">
               <div>
                 <p className="eyebrow">Private Portfolio Workspace</p>
-                <h3>Sign in to load your workbook</h3>
+                <h3>Sign in or create an account</h3>
                 <p>Your holdings, reference tabs, saved row selections, and assistant context are scoped to your account after login.</p>
                 {authState.error && <div className="status-card status-card--error">{authState.error}</div>}
               </div>
