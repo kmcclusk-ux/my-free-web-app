@@ -23,6 +23,7 @@ type ThermometerStat = { label: string; value: string; tone?: string };
 
 type InvestmentRow = {
   id: number;
+  spreadsheetRowNumber?: number;
   description: string;
   account: string;
   category: string;
@@ -88,6 +89,7 @@ type PortfolioSnapshot = {
   view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[] };
   holdings: Array<{
     id: number;
+    spreadsheetRowNumber?: number;
     description: string;
     account: string;
     category: string;
@@ -1047,6 +1049,7 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
 
   const base: InvestmentRow = fallback || {
     id: index + 1,
+    spreadsheetRowNumber: undefined,
     description: "",
     account: "",
     category: "core",
@@ -1060,6 +1063,7 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
   };
   const idValue = workbookField(row, "id");
   const id = idValue ? Number(idValue) || base.id : base.id;
+  const spreadsheetRowNumberValue = workbookField(row, "spreadsheetRowNumber", "spreadsheet_row_number", "sheet_row_number", "source_row_number", "row_number");
   const totalInvestmentValue = workbookField(row, "totalInvestment", "total_inv", "total_investment", "totalinvestment", "total_inv_amount");
   const yearlyIncomeValue = workbookField(row, "yearlyIncome", "yr_inc", "yearly_income", "yearinc", "yearly_income_amount");
   const includeIncomeValue = workbookField(row, "includeIncome", "inc", "include_income", "income", "include_investment_income");
@@ -1067,6 +1071,7 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
   const newPercentValue = workbookField(row, "newPercent", "new_percent", "new_pct", "newpercent");
   return {
     id: Number(id) || index + 1,
+    spreadsheetRowNumber: spreadsheetRowNumberValue !== undefined ? toNumber(spreadsheetRowNumberValue) || undefined : base.spreadsheetRowNumber,
     description: workbookField(row, "desc", "description") ?? base.description,
     account: workbookField(row, "accnt", "account", "account_name", "account_names") ?? base.account,
     category: workbookField(row, "category") ?? base.category,
@@ -1168,6 +1173,7 @@ function buildPortfolioSnapshot({
   const total = Math.max(flows.totalInvestmentAmount, 1);
   const holdings = derivedRows.map((row) => ({
     id: row.id,
+    spreadsheetRowNumber: row.spreadsheetRowNumber,
     description: row.description,
     account: row.account,
     category: row.category,
@@ -2187,7 +2193,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <table className="sheet-table sheet-table--compact sheet-table--workbook">
           <thead>
             <tr>
-              <th className="drag-handle-heading" aria-label="Move row" /><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th />
+              <th className="sheet-row-heading">Sheet row</th><th className="drag-handle-heading" aria-label="Move row" /><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th />
             </tr>
           </thead>
           <tbody>
@@ -2201,6 +2207,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
                 >
+                  <td className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>
                   <td className="drag-handle-cell"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
                   <td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td>
                   <td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
@@ -2243,7 +2250,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </tbody>
           <tfoot>
             <tr className="investment-total-row">
-              <td /><th scope="row">Totals</th><td /><td />
+              <td /><td /><th scope="row">Totals</th><td /><td />
               {renderTotalCell(totals.totalInvestment)}
               {renderTotalCell(totals.yearlyIncome)}
               {renderTotalCell(totals.monthlyIncome)}
