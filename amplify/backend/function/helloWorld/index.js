@@ -12,7 +12,7 @@ function jsonResponse(statusCode, body, origin = "*") {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
         },
         body: JSON.stringify(body),
     };
@@ -24,7 +24,7 @@ function corsPreflight(origin = "*") {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
         },
         body: "",
     };
@@ -235,6 +235,35 @@ function verifySyncToken(event) {
         authType: "syncToken",
     };
 }
+function hashMcpToken(token) {
+    return (0, crypto_1.createHash)("sha256").update(token).digest("hex");
+}
+function createMcpTokenSecret() {
+    return (0, crypto_1.randomBytes)(32).toString("base64url");
+}
+function createTokenId() {
+    return (0, crypto_1.randomBytes)(10).toString("base64url");
+}
+function parseMcpToken(event) {
+    return (getHeader(event, "x-portfolio-mcp-token").trim() ||
+        getHeader(event, "x-mcp-token").trim());
+}
+async function verifyMcpToken(event) {
+    const token = parseMcpToken(event);
+    if (!token)
+        return null;
+    const store = new workbookStore_1.WorkbookStore();
+    const record = await store.getMcpToken(hashMcpToken(token));
+    if (!record || record.revokedAt) {
+        throw new Error("Invalid or revoked MCP token.");
+    }
+    return {
+        sub: record.ownerSub,
+        email: record.ownerEmail,
+        authType: "mcpToken",
+        workspaceId: record.workspaceId || "default",
+    };
+}
 async function authenticatePortfolioRequest(event, origin) {
     if (!authIsConfigured()) {
         return { auth: null };
@@ -242,9 +271,31 @@ async function authenticatePortfolioRequest(event, origin) {
     const syncAuth = verifySyncToken(event);
     if (syncAuth)
         return { auth: syncAuth };
+    try {
+        const mcpAuth = await verifyMcpToken(event);
+        if (mcpAuth)
+            return { auth: mcpAuth };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid MCP token.";
+        return { response: jsonResponse(401, { error: message }, origin) };
+    }
     const token = parseBearerToken(event);
     if (!token) {
         return { response: jsonResponse(401, { error: "Authentication required." }, origin) };
+    }
+    try {
+        return { auth: await verifyCognitoJwt(token) };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid authentication token.";
+        return { response: jsonResponse(401, { error: message }, origin) };
+    }
+}
+async function authenticateCognitoRequest(event, origin) {
+    const token = parseBearerToken(event);
+    if (!token) {
+        return { response: jsonResponse(401, { error: "Cognito sign-in required." }, origin) };
     }
     try {
         return { auth: await verifyCognitoJwt(token) };
@@ -258,7 +309,7 @@ function sanitizeWorkspacePart(value) {
     return value.trim().replace(/[^a-zA-Z0-9_.:-]+/g, "_").slice(0, 160) || "default";
 }
 function scopedWorkspaceId(workspaceId, auth) {
-    const cleanWorkspaceId = sanitizeWorkspacePart(workspaceId || "default");
+    const cleanWorkspaceId = sanitizeWorkspacePart(auth?.authType === "mcpToken" && auth.workspaceId ? auth.workspaceId : workspaceId || "default");
     if (!auth)
         return cleanWorkspaceId;
     return `user#${sanitizeWorkspacePart(auth.sub)}#workspace#${cleanWorkspaceId}`;
@@ -1199,6 +1250,69 @@ async function handleWorkbookRoute(event, origin) {
         return jsonResponse(400, { error: message }, origin);
     }
 }
+async function handleMcpTokenRequest(event, origin, body) {
+    const authResult = await authenticateCognitoRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    let store;
+    try {
+        store = new workbookStore_1.WorkbookStore();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Workbook storage is unavailable.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+    try {
+        const calc = body.calc;
+        if (calc === "MCP_TOKEN_LIST") {
+            const tokens = await store.listMcpTokensForUser(authResult.auth.sub);
+            return jsonResponse(200, {
+                tokens: tokens.map((token) => ({
+                    tokenId: token.tokenId,
+                    workspaceId: token.workspaceId,
+                    label: token.label,
+                    createdAt: token.createdAt,
+                    revokedAt: token.revokedAt,
+                    active: !token.revokedAt,
+                })),
+            }, origin);
+        }
+        if (calc === "MCP_TOKEN_REVOKE") {
+            const tokenId = String(body.tokenId || "").trim();
+            if (!tokenId) {
+                return jsonResponse(400, { error: "MCP_TOKEN_REVOKE requires tokenId." }, origin);
+            }
+            const result = await store.revokeMcpTokenForUser(authResult.auth.sub, tokenId);
+            if (!result) {
+                return jsonResponse(404, { error: "MCP token was not found for this user." }, origin);
+            }
+            return jsonResponse(200, { ok: true, ...result }, origin);
+        }
+        const workspaceId = sanitizeWorkspacePart(String(body.workspaceId || "default"));
+        const token = createMcpTokenSecret();
+        const now = new Date().toISOString();
+        const record = {
+            tokenId: createTokenId(),
+            tokenHash: hashMcpToken(token),
+            ownerSub: authResult.auth.sub,
+            ownerEmail: authResult.auth.email,
+            workspaceId,
+            label: String(body.label || "ChatGPT connector").trim().slice(0, 120) || "ChatGPT connector",
+            createdAt: now,
+        };
+        const saved = await store.putMcpToken(record);
+        return jsonResponse(200, {
+            ...saved,
+            token,
+            tokenType: "mcp_token",
+            note: "This token is shown once. Store it in ChatGPT as the mcp_token query parameter.",
+        }, origin);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "MCP token operation failed.";
+        return jsonResponse(400, { error: message }, origin);
+    }
+}
 const handler = async (event) => {
     const origin = "*";
     if (event.httpMethod === "OPTIONS") {
@@ -1238,6 +1352,9 @@ const handler = async (event) => {
             }),
             isBase64Encoded: false,
         }, origin);
+    }
+    if (calc === "MCP_TOKEN_CREATE" || calc === "MCP_TOKEN_LIST" || calc === "MCP_TOKEN_REVOKE") {
+        return handleMcpTokenRequest(event, origin, body);
     }
     if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
         const authResult = await authenticatePortfolioRequest(event, origin);

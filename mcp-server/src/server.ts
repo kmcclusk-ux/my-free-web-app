@@ -15,6 +15,7 @@ const config = resolvePortfolioConfig({
   apiBaseUrl: process.env.PORTFOLIO_API_BASE_URL,
   defaultWorkspaceId: process.env.PORTFOLIO_WORKSPACE_ID,
   portfolioSyncToken: process.env.PORTFOLIO_SYNC_TOKEN,
+  portfolioMcpToken: process.env.PORTFOLIO_MCP_TOKEN,
 });
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -80,6 +81,7 @@ httpServer.listen(PORT, () => {
       apiBaseUrl: config.apiBaseUrl,
       workspaceId: config.defaultWorkspaceId || DEFAULT_WORKSPACE_ID,
       hasPortfolioSyncToken: Boolean(config.portfolioSyncToken),
+      hasPortfolioMcpToken: Boolean(config.portfolioMcpToken),
     })
   );
 });

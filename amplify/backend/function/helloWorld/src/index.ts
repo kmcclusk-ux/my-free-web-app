@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { createPublicKey, createVerify, type KeyObject } from "crypto";
+import { createHash, createPublicKey, createVerify, randomBytes, type KeyObject } from "crypto";
 import { request as httpsRequest } from "https";
 import {
   fedTax2025Mfj,
@@ -22,7 +22,7 @@ function jsonResponse(
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
     },
     body: JSON.stringify(body),
   };
@@ -35,7 +35,7 @@ function corsPreflight(origin = "*"): APIGatewayProxyResult {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
     },
     body: "",
   };
@@ -75,6 +75,9 @@ type RequestBody =
   | { calc: "WORKBOOK_GET_TAB"; workspaceId?: string; tabName: string }
   | { calc: "WORKBOOK_SAVE"; workspaceId?: string; tabs?: Record<string, unknown>; settings?: Record<string, unknown> }
   | { calc: "WORKBOOK_SAVE_TAB"; workspaceId?: string; tabName: string; data: unknown }
+  | { calc: "MCP_TOKEN_CREATE"; workspaceId?: string; label?: string }
+  | { calc: "MCP_TOKEN_LIST" }
+  | { calc: "MCP_TOKEN_REVOKE"; tokenId: string }
   | { calc: "PORTFOLIO_CHAT"; messages?: PortfolioChatMessage[]; portfolioSnapshot?: unknown };
 
 type PortfolioChatMessage = {
@@ -98,7 +101,8 @@ type PortfolioChatResponse = {
 type AuthContext = {
   sub: string;
   email?: string;
-  authType: "cognito" | "syncToken";
+  authType: "cognito" | "syncToken" | "mcpToken";
+  workspaceId?: string;
 };
 
 type CognitoJwk = {
@@ -338,6 +342,43 @@ function verifySyncToken(event: APIGatewayProxyEvent): AuthContext | null {
   };
 }
 
+function hashMcpToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function createMcpTokenSecret() {
+  return randomBytes(32).toString("base64url");
+}
+
+function createTokenId() {
+  return randomBytes(10).toString("base64url");
+}
+
+function parseMcpToken(event: APIGatewayProxyEvent) {
+  return (
+    getHeader(event, "x-portfolio-mcp-token").trim() ||
+    getHeader(event, "x-mcp-token").trim()
+  );
+}
+
+async function verifyMcpToken(event: APIGatewayProxyEvent): Promise<AuthContext | null> {
+  const token = parseMcpToken(event);
+  if (!token) return null;
+
+  const store = new WorkbookStore();
+  const record = await store.getMcpToken(hashMcpToken(token));
+  if (!record || record.revokedAt) {
+    throw new Error("Invalid or revoked MCP token.");
+  }
+
+  return {
+    sub: record.ownerSub,
+    email: record.ownerEmail,
+    authType: "mcpToken",
+    workspaceId: record.workspaceId || "default",
+  };
+}
+
 async function authenticatePortfolioRequest(event: APIGatewayProxyEvent, origin: string): Promise<{ auth: AuthContext | null } | { response: APIGatewayProxyResult }> {
   if (!authIsConfigured()) {
     return { auth: null };
@@ -346,9 +387,31 @@ async function authenticatePortfolioRequest(event: APIGatewayProxyEvent, origin:
   const syncAuth = verifySyncToken(event);
   if (syncAuth) return { auth: syncAuth };
 
+  try {
+    const mcpAuth = await verifyMcpToken(event);
+    if (mcpAuth) return { auth: mcpAuth };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid MCP token.";
+    return { response: jsonResponse(401, { error: message }, origin) };
+  }
+
   const token = parseBearerToken(event);
   if (!token) {
     return { response: jsonResponse(401, { error: "Authentication required." }, origin) };
+  }
+
+  try {
+    return { auth: await verifyCognitoJwt(token) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid authentication token.";
+    return { response: jsonResponse(401, { error: message }, origin) };
+  }
+}
+
+async function authenticateCognitoRequest(event: APIGatewayProxyEvent, origin: string): Promise<{ auth: AuthContext } | { response: APIGatewayProxyResult }> {
+  const token = parseBearerToken(event);
+  if (!token) {
+    return { response: jsonResponse(401, { error: "Cognito sign-in required." }, origin) };
   }
 
   try {
@@ -364,7 +427,7 @@ function sanitizeWorkspacePart(value: string) {
 }
 
 function scopedWorkspaceId(workspaceId: string, auth: AuthContext | null) {
-  const cleanWorkspaceId = sanitizeWorkspacePart(workspaceId || "default");
+  const cleanWorkspaceId = sanitizeWorkspacePart(auth?.authType === "mcpToken" && auth.workspaceId ? auth.workspaceId : workspaceId || "default");
   if (!auth) return cleanWorkspaceId;
   return `user#${sanitizeWorkspacePart(auth.sub)}#workspace#${cleanWorkspaceId}`;
 }
@@ -1436,6 +1499,79 @@ async function handleWorkbookRoute(
   }
 }
 
+async function handleMcpTokenRequest(
+  event: APIGatewayProxyEvent,
+  origin: string,
+  body: RequestBody
+): Promise<APIGatewayProxyResult> {
+  const authResult = await authenticateCognitoRequest(event, origin);
+  if ("response" in authResult) return authResult.response;
+
+  let store: WorkbookStore;
+  try {
+    store = new WorkbookStore();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Workbook storage is unavailable.";
+    return jsonResponse(500, { error: message }, origin);
+  }
+
+  try {
+    const calc = (body as any).calc;
+
+    if (calc === "MCP_TOKEN_LIST") {
+      const tokens = await store.listMcpTokensForUser(authResult.auth.sub);
+      return jsonResponse(200, {
+        tokens: tokens.map((token) => ({
+          tokenId: token.tokenId,
+          workspaceId: token.workspaceId,
+          label: token.label,
+          createdAt: token.createdAt,
+          revokedAt: token.revokedAt,
+          active: !token.revokedAt,
+        })),
+      }, origin);
+    }
+
+    if (calc === "MCP_TOKEN_REVOKE") {
+      const tokenId = String((body as any).tokenId || "").trim();
+      if (!tokenId) {
+        return jsonResponse(400, { error: "MCP_TOKEN_REVOKE requires tokenId." }, origin);
+      }
+
+      const result = await store.revokeMcpTokenForUser(authResult.auth.sub, tokenId);
+      if (!result) {
+        return jsonResponse(404, { error: "MCP token was not found for this user." }, origin);
+      }
+
+      return jsonResponse(200, { ok: true, ...result }, origin);
+    }
+
+    const workspaceId = sanitizeWorkspacePart(String((body as any).workspaceId || "default"));
+    const token = createMcpTokenSecret();
+    const now = new Date().toISOString();
+    const record = {
+      tokenId: createTokenId(),
+      tokenHash: hashMcpToken(token),
+      ownerSub: authResult.auth.sub,
+      ownerEmail: authResult.auth.email,
+      workspaceId,
+      label: String((body as any).label || "ChatGPT connector").trim().slice(0, 120) || "ChatGPT connector",
+      createdAt: now,
+    };
+
+    const saved = await store.putMcpToken(record);
+    return jsonResponse(200, {
+      ...saved,
+      token,
+      tokenType: "mcp_token",
+      note: "This token is shown once. Store it in ChatGPT as the mcp_token query parameter.",
+    }, origin);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "MCP token operation failed.";
+    return jsonResponse(400, { error: message }, origin);
+  }
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
@@ -1491,6 +1627,10 @@ export const handler = async (
       },
       origin
     );
+  }
+
+  if (calc === "MCP_TOKEN_CREATE" || calc === "MCP_TOKEN_LIST" || calc === "MCP_TOKEN_REVOKE") {
+    return handleMcpTokenRequest(event, origin, body);
   }
 
   if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {

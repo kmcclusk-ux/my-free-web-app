@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   BatchWriteCommand,
+  GetCommand,
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
@@ -18,7 +19,8 @@ export type WorkbookEntityKey =
   | "settings#state"
   | "settings#planner"
   | "settings#formulas"
-  | "settings#ui";
+  | "settings#ui"
+  | "auth#mcpToken";
 
 export type WorkbookPayload = {
   tabs?: Partial<Record<string, unknown>>;
@@ -30,6 +32,17 @@ type WorkbookItem = {
   entityKey: WorkbookEntityKey;
   data: unknown;
   updatedAt: string;
+};
+
+export type McpTokenRecord = {
+  tokenId: string;
+  tokenHash: string;
+  ownerSub: string;
+  ownerEmail?: string;
+  workspaceId: string;
+  label?: string;
+  createdAt: string;
+  revokedAt?: string;
 };
 
 const ENTITY_KEYS: WorkbookEntityKey[] = [
@@ -62,7 +75,7 @@ const TAB_TO_ENTITY: Record<string, WorkbookEntityKey> = {
   uiSettings: "settings#ui",
 };
 
-const ENTITY_TO_RESPONSE_KEY: Record<WorkbookEntityKey, { group: "tabs" | "settings"; key: string }> = {
+const ENTITY_TO_RESPONSE_KEY: Partial<Record<WorkbookEntityKey, { group: "tabs" | "settings"; key: string }>> = {
   "tab#investments": { group: "tabs", key: "investments" },
   "tab#tickers": { group: "tabs", key: "tickers" },
   "tab#categories": { group: "tabs", key: "categories" },
@@ -91,6 +104,14 @@ function toEntityKey(tabName: string): WorkbookEntityKey | null {
 
 function toNowIso(): string {
   return new Date().toISOString();
+}
+
+function mcpTokenLookupWorkspaceId(tokenHash: string) {
+  return `mcpToken#${tokenHash}`;
+}
+
+function mcpTokenUserWorkspaceId(ownerSub: string) {
+  return `mcpTokens#user#${ownerSub}`;
 }
 
 export class WorkbookStore {
@@ -154,6 +175,9 @@ export class WorkbookStore {
 
     const workspace = await this.getWorkspace(workspaceId);
     const mapping = ENTITY_TO_RESPONSE_KEY[entityKey];
+    if (!mapping) {
+      throw new Error(`Unsupported workbook tab: ${tabName}`);
+    }
     const data =
       mapping.group === "tabs"
         ? workspace.tabs[mapping.key]
@@ -195,6 +219,7 @@ export class WorkbookStore {
 
     for (const key of ENTITY_KEYS) {
       const mapping = ENTITY_TO_RESPONSE_KEY[key];
+      if (!mapping) continue;
       const source = mapping.group === "tabs" ? payload.tabs : payload.settings;
       if (!source || !(mapping.key in source)) {
         continue;
@@ -226,6 +251,111 @@ export class WorkbookStore {
       workspaceId,
       updatedAt,
       savedKeys: items.map((item) => item.entityKey),
+    };
+  }
+
+  async putMcpToken(record: McpTokenRecord) {
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: mcpTokenLookupWorkspaceId(record.tokenHash),
+          entityKey: "auth#mcpToken",
+          data: record,
+          updatedAt: record.createdAt,
+        },
+      })
+    );
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: mcpTokenUserWorkspaceId(record.ownerSub),
+          entityKey: `token#${record.tokenId}`,
+          data: record,
+          updatedAt: record.createdAt,
+        },
+      })
+    );
+
+    return {
+      tokenId: record.tokenId,
+      workspaceId: record.workspaceId,
+      createdAt: record.createdAt,
+      label: record.label,
+    };
+  }
+
+  async getMcpToken(tokenHash: string): Promise<McpTokenRecord | null> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          workspaceId: mcpTokenLookupWorkspaceId(tokenHash),
+          entityKey: "auth#mcpToken",
+        },
+      })
+    );
+
+    const item = response.Item as WorkbookItem | undefined;
+    return item?.data && typeof item.data === "object" ? item.data as McpTokenRecord : null;
+  }
+
+  async listMcpTokensForUser(ownerSub: string): Promise<McpTokenRecord[]> {
+    const response = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "workspaceId = :workspaceId",
+        ExpressionAttributeValues: {
+          ":workspaceId": mcpTokenUserWorkspaceId(ownerSub),
+        },
+      })
+    );
+
+    return (response.Items ?? [])
+      .map((rawItem) => (rawItem as WorkbookItem).data)
+      .filter((data): data is McpTokenRecord => Boolean(data) && typeof data === "object");
+  }
+
+  async revokeMcpTokenForUser(ownerSub: string, tokenId: string) {
+    const tokens = await this.listMcpTokensForUser(ownerSub);
+    const token = tokens.find((record) => record.tokenId === tokenId);
+    if (!token) return null;
+
+    const revoked: McpTokenRecord = {
+      ...token,
+      revokedAt: token.revokedAt || toNowIso(),
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: mcpTokenLookupWorkspaceId(revoked.tokenHash),
+          entityKey: "auth#mcpToken",
+          data: revoked,
+          updatedAt: revoked.revokedAt,
+        },
+      })
+    );
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: mcpTokenUserWorkspaceId(ownerSub),
+          entityKey: `token#${revoked.tokenId}`,
+          data: revoked,
+          updatedAt: revoked.revokedAt,
+        },
+      })
+    );
+
+    return {
+      tokenId: revoked.tokenId,
+      workspaceId: revoked.workspaceId,
+      revokedAt: revoked.revokedAt,
     };
   }
 }

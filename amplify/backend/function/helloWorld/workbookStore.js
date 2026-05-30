@@ -58,6 +58,12 @@ function toEntityKey(tabName) {
 function toNowIso() {
     return new Date().toISOString();
 }
+function mcpTokenLookupWorkspaceId(tokenHash) {
+    return `mcpToken#${tokenHash}`;
+}
+function mcpTokenUserWorkspaceId(ownerSub) {
+    return `mcpTokens#user#${ownerSub}`;
+}
 class WorkbookStore {
     constructor() {
         this.tableName = getRequiredEnv("WORKBOOK_TABLE_NAME");
@@ -108,6 +114,9 @@ class WorkbookStore {
         }
         const workspace = await this.getWorkspace(workspaceId);
         const mapping = ENTITY_TO_RESPONSE_KEY[entityKey];
+        if (!mapping) {
+            throw new Error(`Unsupported workbook tab: ${tabName}`);
+        }
         const data = mapping.group === "tabs"
             ? workspace.tabs[mapping.key]
             : workspace.settings[mapping.key];
@@ -140,6 +149,8 @@ class WorkbookStore {
         const items = [];
         for (const key of ENTITY_KEYS) {
             const mapping = ENTITY_TO_RESPONSE_KEY[key];
+            if (!mapping)
+                continue;
             const source = mapping.group === "tabs" ? payload.tabs : payload.settings;
             if (!source || !(mapping.key in source)) {
                 continue;
@@ -165,6 +176,88 @@ class WorkbookStore {
             workspaceId,
             updatedAt,
             savedKeys: items.map((item) => item.entityKey),
+        };
+    }
+    async putMcpToken(record) {
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: mcpTokenLookupWorkspaceId(record.tokenHash),
+                entityKey: "auth#mcpToken",
+                data: record,
+                updatedAt: record.createdAt,
+            },
+        }));
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: mcpTokenUserWorkspaceId(record.ownerSub),
+                entityKey: `token#${record.tokenId}`,
+                data: record,
+                updatedAt: record.createdAt,
+            },
+        }));
+        return {
+            tokenId: record.tokenId,
+            workspaceId: record.workspaceId,
+            createdAt: record.createdAt,
+            label: record.label,
+        };
+    }
+    async getMcpToken(tokenHash) {
+        const response = await this.client.send(new lib_dynamodb_1.GetCommand({
+            TableName: this.tableName,
+            Key: {
+                workspaceId: mcpTokenLookupWorkspaceId(tokenHash),
+                entityKey: "auth#mcpToken",
+            },
+        }));
+        const item = response.Item;
+        return item?.data && typeof item.data === "object" ? item.data : null;
+    }
+    async listMcpTokensForUser(ownerSub) {
+        const response = await this.client.send(new lib_dynamodb_1.QueryCommand({
+            TableName: this.tableName,
+            KeyConditionExpression: "workspaceId = :workspaceId",
+            ExpressionAttributeValues: {
+                ":workspaceId": mcpTokenUserWorkspaceId(ownerSub),
+            },
+        }));
+        return (response.Items ?? [])
+            .map((rawItem) => rawItem.data)
+            .filter((data) => Boolean(data) && typeof data === "object");
+    }
+    async revokeMcpTokenForUser(ownerSub, tokenId) {
+        const tokens = await this.listMcpTokensForUser(ownerSub);
+        const token = tokens.find((record) => record.tokenId === tokenId);
+        if (!token)
+            return null;
+        const revoked = {
+            ...token,
+            revokedAt: token.revokedAt || toNowIso(),
+        };
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: mcpTokenLookupWorkspaceId(revoked.tokenHash),
+                entityKey: "auth#mcpToken",
+                data: revoked,
+                updatedAt: revoked.revokedAt,
+            },
+        }));
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: mcpTokenUserWorkspaceId(ownerSub),
+                entityKey: `token#${revoked.tokenId}`,
+                data: revoked,
+                updatedAt: revoked.revokedAt,
+            },
+        }));
+        return {
+            tokenId: revoked.tokenId,
+            workspaceId: revoked.workspaceId,
+            revokedAt: revoked.revokedAt,
         };
     }
 }

@@ -236,6 +236,7 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
+const MCP_CONNECTOR_BASE_URL = (import.meta.env.VITE_MCP_CONNECTOR_BASE_URL as string | undefined)?.replace(/\/+$/, "") || "https://www.aftertaxus.com/mcp";
 const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN as string | undefined)?.replace(/\/+$/, "") || "";
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined;
 const BROWSER_ROOT_URI = typeof window !== "undefined"
@@ -974,6 +975,18 @@ async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "con
   const json = (await response.json()) as ChatResponse | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "Portfolio chat failed");
   return json as ChatResponse;
+}
+
+async function createMcpConnectorToken(workspaceId: string, idToken?: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello`, {
+    method: "POST",
+    headers: authHeaders(idToken),
+    body: JSON.stringify({ calc: "MCP_TOKEN_CREATE", workspaceId, label: "ChatGPT connector" }),
+  });
+  const json = (await response.json()) as { token?: string; tokenId?: string; error?: string };
+  if (!response.ok || !json.token) throw new Error(json.error || "MCP token creation failed");
+  return json;
 }
 
 function workbookField(row: Record<string, unknown>, ...keys: string[]) {
@@ -2361,6 +2374,8 @@ export default function App() {
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageState, setStorageState] = useState<SaveState>("loading");
   const [storageMessage, setStorageMessage] = useState("Loading workbook...");
+  const [mcpTokenMessage, setMcpTokenMessage] = useState("");
+  const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const saveTimeout = useRef<number | null>(null);
   const hasLoadedStorage = useRef(false);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
@@ -2378,6 +2393,27 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, [authEnabled]);
+
+  const copyChatGptConnectorUrl = async () => {
+    if (!authToken) {
+      setMcpTokenMessage("Sign in first.");
+      return;
+    }
+
+    setIsCreatingMcpToken(true);
+    setMcpTokenMessage("Creating ChatGPT token...");
+    try {
+      const result = await createMcpConnectorToken(WORKSPACE_ID, authToken);
+      const mcpUrl = `${MCP_CONNECTOR_BASE_URL}?mcp_token=${encodeURIComponent(result.token || "")}`;
+      await navigator.clipboard.writeText(mcpUrl);
+      setMcpTokenMessage("ChatGPT connector URL copied.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create ChatGPT token.";
+      setMcpTokenMessage(message);
+    } finally {
+      setIsCreatingMcpToken(false);
+    }
+  };
 
   const tickerMap = useMemo(() => Object.fromEntries(tickers.map((row) => [row.symbol, row])), [tickers]);
   const accountMap = useMemo(() => buildAccountLookupMap(accounts), [accounts]);
@@ -3308,7 +3344,11 @@ export default function App() {
               authState.status === "signedIn" ? (
                 <>
                   <div className="topbar-chip">Signed in: {authState.user.email || authState.user.sub.slice(0, 8)}</div>
+                  <button className="ai-button" type="button" onClick={() => void copyChatGptConnectorUrl()} disabled={isCreatingMcpToken}>
+                    {isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}
+                  </button>
                   <button className="ai-button" type="button" onClick={signOutCognito}>Sign out</button>
+                  {mcpTokenMessage && <div className="topbar-chip">{mcpTokenMessage}</div>}
                 </>
               ) : (
                 <button className="ai-button ai-button--assistant" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"}>

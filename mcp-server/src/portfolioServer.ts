@@ -11,12 +11,14 @@ export type PortfolioServerConfig = {
   apiBaseUrl?: string;
   defaultWorkspaceId?: string;
   portfolioSyncToken?: string;
+  portfolioMcpToken?: string;
 };
 
 type ResolvedPortfolioServerConfig = {
   apiBaseUrl: string;
   defaultWorkspaceId: string;
   portfolioSyncToken: string;
+  portfolioMcpToken: string;
 };
 
 type WorkbookResponse = {
@@ -57,6 +59,7 @@ export function resolvePortfolioConfig(
     apiBaseUrl: config.apiBaseUrl || DEFAULT_API_BASE_URL,
     defaultWorkspaceId: config.defaultWorkspaceId || DEFAULT_WORKSPACE_ID,
     portfolioSyncToken: config.portfolioSyncToken || "",
+    portfolioMcpToken: config.portfolioMcpToken || "",
   };
 }
 
@@ -69,6 +72,7 @@ export function createHealthPayload(config: PortfolioServerConfig, mcpPath: stri
     mcpPath,
     apiBaseUrl: resolved.apiBaseUrl,
     hasPortfolioSyncToken: Boolean(resolved.portfolioSyncToken),
+    hasPortfolioMcpToken: Boolean(resolved.portfolioMcpToken),
   };
 }
 
@@ -90,7 +94,9 @@ async function postPortfolioApi<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (config.portfolioSyncToken) {
+  if (config.portfolioMcpToken) {
+    headers["X-Portfolio-MCP-Token"] = config.portfolioMcpToken;
+  } else if (config.portfolioSyncToken) {
     headers["X-Portfolio-Sync-Token"] = config.portfolioSyncToken;
   }
 

@@ -30,20 +30,36 @@ function getBearerToken(request: Request) {
   return match?.[1] ?? "";
 }
 
-function isAuthorized(request: Request, env: WorkerEnv) {
-  const expectedToken = env.MCP_AUTH_TOKEN?.trim();
-  if (!expectedToken) return true;
-
+function getSuppliedMcpToken(request: Request) {
   const url = new URL(request.url);
-  const suppliedToken = getBearerToken(request) || url.searchParams.get("mcp_token") || "";
-  return suppliedToken === expectedToken;
+  return getBearerToken(request) || url.searchParams.get("mcp_token") || "";
 }
 
-async function handleMcpRequest(request: Request, env: WorkerEnv) {
+function resolveMcpToken(request: Request, env: WorkerEnv) {
+  const suppliedToken = getSuppliedMcpToken(request);
+  const expectedToken = env.MCP_AUTH_TOKEN?.trim();
+
+  if (expectedToken && suppliedToken === expectedToken) {
+    return { ok: true as const, portfolioSyncToken: env.PORTFOLIO_SYNC_TOKEN || "" };
+  }
+
+  if (suppliedToken) {
+    return { ok: true as const, portfolioMcpToken: suppliedToken };
+  }
+
+  if (!expectedToken && !env.PORTFOLIO_SYNC_TOKEN) {
+    return { ok: true as const };
+  }
+
+  return { ok: false as const };
+}
+
+async function handleMcpRequest(request: Request, env: WorkerEnv, tokenConfig: { portfolioSyncToken?: string; portfolioMcpToken?: string }) {
   const config = resolvePortfolioConfig({
     apiBaseUrl: env.PORTFOLIO_API_BASE_URL,
     defaultWorkspaceId: env.PORTFOLIO_WORKSPACE_ID,
-    portfolioSyncToken: env.PORTFOLIO_SYNC_TOKEN,
+    portfolioSyncToken: tokenConfig.portfolioSyncToken,
+    portfolioMcpToken: tokenConfig.portfolioMcpToken,
   });
 
   // Cloudflare Workers are serverless; subsequent MCP requests are not guaranteed
@@ -72,15 +88,16 @@ export default {
         },
         mcpPath
       );
-      return jsonResponse({ ...payload, authProtected: Boolean(env.MCP_AUTH_TOKEN) });
+      return jsonResponse({ ...payload, authProtected: Boolean(env.MCP_AUTH_TOKEN || env.PORTFOLIO_SYNC_TOKEN), supportsUserMcpTokens: true });
     }
 
     if (url.pathname === mcpPath) {
-      if (!isAuthorized(request, env)) {
+      const tokenConfig = resolveMcpToken(request, env);
+      if (!tokenConfig.ok) {
         return jsonResponse({ error: "Unauthorized MCP request." }, { status: 401 });
       }
 
-      return handleMcpRequest(request, env);
+      return handleMcpRequest(request, env, tokenConfig);
     }
 
     if (env.ASSETS) {
