@@ -6,6 +6,10 @@ This MCP server gives ChatGPT access to the existing portfolio workbook data and
 
 - `get_workbook_overview`
 - `list_investments`
+- `get_investments_table`
+- `get_tickers_table`
+- `get_tax_treatment_table`
+- `get_accounts_table`
 - `get_reference_tables`
 - `run_federal_tax_calculation`
 - `run_california_tax_calculation`

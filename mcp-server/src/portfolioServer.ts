@@ -26,6 +26,8 @@ type WorkbookResponse = {
   updatedAt: string | null;
 };
 
+type WorkbookRow = Record<string, unknown>;
+
 type InvestmentRow = {
   id?: string | number;
   description?: string;
@@ -126,25 +128,110 @@ async function saveWorkbook(config: ResolvedPortfolioServerConfig, workbook: Wor
   });
 }
 
-function toInvestmentRows(value: unknown): InvestmentRow[] {
+function toWorkbookRows(value: unknown): WorkbookRow[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((row): row is InvestmentRow => typeof row === "object" && row !== null);
+  return value.filter((row): row is WorkbookRow => typeof row === "object" && row !== null);
+}
+
+function toInvestmentRows(value: unknown): InvestmentRow[] {
+  return toWorkbookRows(value) as InvestmentRow[];
+}
+
+function rowValue(row: WorkbookRow, ...keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+  }
+  return undefined;
+}
+
+function rowText(row: WorkbookRow, ...keys: string[]) {
+  return String(rowValue(row, ...keys) ?? "");
+}
+
+function rowNumber(row: WorkbookRow, ...keys: string[]) {
+  const value = rowValue(row, ...keys);
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value ?? "").replace(/[\$,]/g, "").replace(/%/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function rowMatchesQuery(row: WorkbookRow, query?: string) {
+  if (!query) return true;
+  return JSON.stringify(row).toLowerCase().includes(query.toLowerCase());
+}
+
+function collectColumns(rows: WorkbookRow[]) {
+  const seen = new Set<string>();
+  const columns: string[] = [];
+  for (const row of rows) {
+    for (const column of Object.keys(row)) {
+      if (seen.has(column)) continue;
+      seen.add(column);
+      columns.push(column);
+    }
+  }
+  return columns;
+}
+
+function limitRows(rows: WorkbookRow[], limit?: number) {
+  return rows.slice(0, limit ?? 250);
+}
+
+function tablePayload(
+  workbook: WorkbookResponse,
+  tabName: "investments" | "tickers" | "taxTreatment" | "accounts",
+  sourceRows: WorkbookRow[],
+  rows: WorkbookRow[],
+  limit?: number
+) {
+  const limitedRows = limitRows(rows, limit);
+  return {
+    workspaceId: workbook.workspaceId,
+    updatedAt: workbook.updatedAt,
+    tabName,
+    totalRows: sourceRows.length,
+    matchedRows: rows.length,
+    returnedRows: limitedRows.length,
+    columns: collectColumns(sourceRows),
+    rows: limitedRows,
+  };
+}
+
+function getInvestmentAccount(row: WorkbookRow) {
+  return rowText(row, "account", "accnt", "account_name", "account_names");
+}
+
+function getInvestmentCategory(row: WorkbookRow) {
+  return rowText(row, "category");
+}
+
+function getInvestmentSymbol(row: WorkbookRow) {
+  return rowText(row, "symbol", "current_symbol", "ticker", "use_symbol");
+}
+
+function getInvestmentTotal(row: WorkbookRow) {
+  return rowNumber(row, "totalInvestment", "total_inv", "total_investment", "totalinvestment", "total_inv_amount", "inv");
+}
+
+function getInvestmentIncome(row: WorkbookRow) {
+  return rowNumber(row, "yearlyIncome", "yr_inc", "yearly_income", "yearinc", "yearly_income_amount", "yr");
 }
 
 function summarizeInvestments(investments: InvestmentRow[]) {
   const totalInvestment = investments.reduce(
-    (sum, row) => sum + Number(row.totalInvestment ?? 0),
+    (sum, row) => sum + getInvestmentTotal(row),
     0
   );
   const totalIncome = investments.reduce(
-    (sum, row) => sum + Number(row.yearlyIncome ?? 0),
+    (sum, row) => sum + getInvestmentIncome(row),
     0
   );
 
   const byAccount = Object.entries(
     investments.reduce<Record<string, number>>((acc, row) => {
-      const key = String(row.account ?? "Unassigned");
-      acc[key] = (acc[key] ?? 0) + Number(row.totalInvestment ?? 0);
+      const key = getInvestmentAccount(row) || "Unassigned";
+      acc[key] = (acc[key] ?? 0) + getInvestmentTotal(row);
       return acc;
     }, {})
   )
@@ -153,8 +240,8 @@ function summarizeInvestments(investments: InvestmentRow[]) {
 
   const bySymbol = Object.entries(
     investments.reduce<Record<string, number>>((acc, row) => {
-      const key = String(row.symbol ?? row.description ?? "Unknown");
-      acc[key] = (acc[key] ?? 0) + Number(row.totalInvestment ?? 0);
+      const key = getInvestmentSymbol(row) || rowText(row, "description", "desc") || "Unknown";
+      acc[key] = (acc[key] ?? 0) + getInvestmentTotal(row);
       return acc;
     }, {})
   )
@@ -173,19 +260,7 @@ function summarizeInvestments(investments: InvestmentRow[]) {
 }
 
 function matchQuery(row: InvestmentRow, query: string) {
-  const haystack = [
-    row.description,
-    row.symbol,
-    row.account,
-    row.category,
-    row.taxTreatment,
-    row.investmentType,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return haystack.includes(query.toLowerCase());
+  return rowMatchesQuery(row, query);
 }
 
 function nextInvestmentId(investments: InvestmentRow[]) {
@@ -266,10 +341,10 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const investments = toInvestmentRows(workbook.tabs.investments)
         .filter((row) => (query ? matchQuery(row, query) : true))
         .filter((row) =>
-          account ? String(row.account ?? "").toLowerCase() === account.toLowerCase() : true
+          account ? getInvestmentAccount(row).toLowerCase() === account.toLowerCase() : true
         )
         .filter((row) =>
-          category ? String(row.category ?? "").toLowerCase() === category.toLowerCase() : true
+          category ? getInvestmentCategory(row).toLowerCase() === category.toLowerCase() : true
         )
         .slice(0, limit ?? 25);
 
@@ -278,6 +353,128 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         count: investments.length,
         investments,
       });
+    }
+  );
+
+  server.tool(
+    "get_investments_table",
+    "Return exported investment rows with every available column, including numbered col_N fields from the spreadsheet export.",
+    {
+      workspaceId: z.string().optional(),
+      query: z.string().optional().describe("Free-text match against all exported investment fields."),
+      account: z.string().optional().describe("Exact account/accnt match."),
+      category: z.string().optional().describe("Exact category match."),
+      symbol: z.string().optional().describe("Exact current/effective symbol match."),
+      limit: z.number().int().positive().max(1000).optional(),
+    },
+    async ({ workspaceId, query, account, category, symbol, limit }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const sourceRows = toWorkbookRows(workbook.tabs.investments);
+      const rows = sourceRows
+        .filter((row) => rowMatchesQuery(row, query))
+        .filter((row) =>
+          account ? getInvestmentAccount(row).toLowerCase() === account.toLowerCase() : true
+        )
+        .filter((row) =>
+          category ? getInvestmentCategory(row).toLowerCase() === category.toLowerCase() : true
+        )
+        .filter((row) =>
+          symbol ? getInvestmentSymbol(row).toLowerCase() === symbol.toLowerCase() : true
+        );
+
+      return jsonToolResult(tablePayload(workbook, "investments", sourceRows, rows, limit));
+    }
+  );
+
+  server.tool(
+    "get_tickers_table",
+    "Return exported ticker rows with every available column, including numbered col_N fields from the spreadsheet export.",
+    {
+      workspaceId: z.string().optional(),
+      query: z.string().optional().describe("Free-text match against all exported ticker fields."),
+      symbol: z.string().optional().describe("Exact symbol/ticker match."),
+      category: z.string().optional().describe("Exact category match."),
+      taxTreatment: z.string().optional().describe("Exact tax treatment/status match."),
+      limit: z.number().int().positive().max(1000).optional(),
+    },
+    async ({ workspaceId, query, symbol, category, taxTreatment, limit }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const sourceRows = toWorkbookRows(workbook.tabs.tickers);
+      const rows = sourceRows
+        .filter((row) => rowMatchesQuery(row, query))
+        .filter((row) =>
+          symbol
+            ? rowText(row, "symbol", "ticker").toLowerCase() === symbol.toLowerCase()
+            : true
+        )
+        .filter((row) =>
+          category ? rowText(row, "category").toLowerCase() === category.toLowerCase() : true
+        )
+        .filter((row) =>
+          taxTreatment
+            ? rowText(row, "taxTreatment", "tax_treatment", "tax_status").toLowerCase() ===
+              taxTreatment.toLowerCase()
+            : true
+        );
+
+      return jsonToolResult(tablePayload(workbook, "tickers", sourceRows, rows, limit));
+    }
+  );
+
+  server.tool(
+    "get_tax_treatment_table",
+    "Return exported tax-treatment rows with every available column from the spreadsheet export.",
+    {
+      workspaceId: z.string().optional(),
+      query: z.string().optional().describe("Free-text match against all exported tax-treatment fields."),
+      label: z.string().optional().describe("Exact label/tax_treatment match."),
+      limit: z.number().int().positive().max(1000).optional(),
+    },
+    async ({ workspaceId, query, label, limit }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const sourceRows = toWorkbookRows(workbook.tabs.taxTreatment);
+      const rows = sourceRows
+        .filter((row) => rowMatchesQuery(row, query))
+        .filter((row) =>
+          label
+            ? rowText(row, "label", "taxTreatment", "tax_treatment").toLowerCase() ===
+              label.toLowerCase()
+            : true
+        );
+
+      return jsonToolResult(tablePayload(workbook, "taxTreatment", sourceRows, rows, limit));
+    }
+  );
+
+  server.tool(
+    "get_accounts_table",
+    "Return exported account rows with every available column, including numbered col_N fields from the spreadsheet export.",
+    {
+      workspaceId: z.string().optional(),
+      query: z.string().optional().describe("Free-text match against all exported account fields."),
+      account: z.string().optional().describe("Exact account/account_name/account_names match."),
+      taxStatus: z.string().optional().describe("Exact tax status/tax treatment match."),
+      limit: z.number().int().positive().max(1000).optional(),
+    },
+    async ({ workspaceId, query, account, taxStatus, limit }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const sourceRows = toWorkbookRows(workbook.tabs.accounts);
+      const rows = sourceRows
+        .filter((row) => rowMatchesQuery(row, query))
+        .filter((row) =>
+          account
+            ? rowText(row, "account", "account_name", "account_names").toLowerCase() ===
+              account.toLowerCase()
+            : true
+        )
+        .filter((row) =>
+          taxStatus
+            ? rowText(row, "taxStatus", "tax_status", "tax_treatment").toLowerCase() ===
+              taxStatus.toLowerCase()
+            : true
+        );
+
+      return jsonToolResult(tablePayload(workbook, "accounts", sourceRows, rows, limit));
     }
   );
 
