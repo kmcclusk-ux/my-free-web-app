@@ -623,6 +623,22 @@ function normalizeExportHeader_(value) {
     .replace(/[\s-]+/g, '_');
 }
 
+function setExportRecordCell_(record, headerKey, columnNumber, value) {
+  var columnKey = 'col_' + columnNumber;
+  record[columnKey] = value;
+
+  if (!headerKey) {
+    return;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(record, headerKey)) {
+    record[headerKey] = value;
+    return;
+  }
+
+  record[headerKey + '_' + columnNumber] = value;
+}
+
 function sheetToRowObjects_(sheet) {
   if (!sheet) return [];
 
@@ -651,8 +667,7 @@ function sheetToRowObjects_(sheet) {
 
     var record = {};
     for (var c = 0; c < headers.length; c++) {
-      var key = headers[c] || ('col_' + (c + 1));
-      record[key] = row[c];
+      setExportRecordCell_(record, headers[c], c + 1, row[c]);
     }
     record.spreadsheet_row_number = r + 1;
     record.spreadsheetRowNumber = r + 1;
@@ -700,8 +715,7 @@ function sheetToRowObjectsFromLine8UntilEndDescription_(sheet) {
 
     var record = {};
     for (var c = 0; c < headers.length; c++) {
-      var key = headers[c] || ('col_' + (c + 1));
-      record[key] = row[c];
+      setExportRecordCell_(record, headers[c], c + 1, row[c]);
     }
     record.spreadsheet_row_number = r + 1;
     record.spreadsheetRowNumber = r + 1;
@@ -783,7 +797,7 @@ function collectWorkbookExportPayload_() {
 
   var investmentsSheet = getSheetByNames_(spreadsheet, ['investments', 'Investments']);
   var tickersSheet = getSheetByNames_(spreadsheet, ['tickers', 'Tickers']);
-  var taxTreatmentSheet = getSheetByNames_(spreadsheet, ['tax treatment', 'Tax Treatment']);
+  var taxTreatmentSheet = getSheetByNames_(spreadsheet, ['tax treatment', 'Tax Treatment', 'tax-treatment', 'Tax-Treatment', 'tax_treatment', 'TaxTreatment', 'taxTreatment']);
   var accountsSheet = getSheetByNames_(spreadsheet, ['accounts', 'Accounts']);
   var accountTaxTypeSheet = getSheetByNames_(spreadsheet, ['account tax type', 'Account Tax Type']);
   var investmentTypeSheet = getSheetByNames_(spreadsheet, ['investment type', 'Investment Type']);
