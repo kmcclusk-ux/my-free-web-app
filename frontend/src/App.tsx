@@ -1349,10 +1349,17 @@ function getThermometerScale(values: ThermometerValue[], markers: ThermometerMar
 function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   return (
     <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 5v14" className={variant === "hide" ? "icon-button__line--hidden" : ""} />
-      <path d="M5 12h14" />
-      {variant === "hide" && <path d="M6.5 6.5 17.5 17.5" />}
-      {variant === "hide" && <path d="M17.5 6.5 6.5 17.5" />}
+      {variant === "show" ? (
+        <>
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </>
+      ) : (
+        <>
+          <path d="M6.5 6.5 17.5 17.5" />
+          <path d="M17.5 6.5 6.5 17.5" />
+        </>
+      )}
     </svg>
   );
 }
@@ -1399,7 +1406,6 @@ function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, 
           <span>{subtitle}</span>
         </div>
         <div className="tax-thermometer__heading-actions">
-          <em>Scale to {formatCurrency(scaleMax)}</em>
           <button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? `Show ${title}` : `Hide ${title}`} title={collapsed ? `Show ${title}` : `Hide ${title}`}>
             <VisibilityToggleIcon variant={collapsed ? "show" : "hide"} />
           </button>
