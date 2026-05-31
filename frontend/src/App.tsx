@@ -1337,8 +1337,8 @@ function CompactKpiHeader({
   );
 }
 
-function Section({ title, subtitle, children, className = "" }: { title: string; subtitle: string; children: React.ReactNode; className?: string }) {
-  return <section className={`sheet-section ${className}`.trim()}><div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</section>;
+function Section({ title, subtitle, children, className = "", hideHeading = false }: { title: string; subtitle: string; children: React.ReactNode; className?: string; hideHeading?: boolean }) {
+  return <section className={`sheet-section ${className}`.trim()}>{!hideHeading && <div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>}{children}</section>;
 }
 
 function getThermometerScale(values: ThermometerValue[], markers: ThermometerMarker[]) {
@@ -2097,7 +2097,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--total">{formatCurrencyDetailed(value)}</div></td>;
 
   return (
-    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic." className="investments-workspace">
+    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
       <div className="actions-row">
         <button className="primary-button" type="button" onClick={onAdd}>Add row</button>
         <button className="ghost-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)}>Select Rows</button>
