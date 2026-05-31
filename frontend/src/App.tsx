@@ -1874,17 +1874,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedAssetIds, displayedRows]);
-  const topDescriptions = Object.entries(
-    rows.reduce<Record<string, number>>((acc, row) => {
-      const key = String(row.description || "(blank)").trim() || "(blank)";
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {})
-  )
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8);
-  const duplicateDescriptionCount = topDescriptions.filter((entry) => entry[1] > 1).length;
-
   const getRowClassName = (row: InvestmentRow) => {
     const accountKey = normalizeLookupKey(row.account);
     const taxStatus = String(accountTaxStatusByName[accountKey] || "").toLowerCase();
@@ -2193,19 +2182,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </div>
         </div>
       )}
-      <details className="status-card status-card--note debug-panel">
-        <summary>Debug</summary>
-        <div className="debug-panel__stats">
-          <span>Loaded rows: {rows.length}</span>
-          <span>Displayed rows: {displayedRows.length}</span>
-          <span>Derived rows: {derivedRows.length}</span>
-          <span>Unique descriptions: {topDescriptions.length}</span>
-          <span>Descriptions with duplicates: {duplicateDescriptionCount}</span>
-        </div>
-        <div className="debug-panel__list">
-          {topDescriptions.map((entry) => <span key={entry[0]}>{entry[0]} ({entry[1]})</span>)}
-        </div>
-      </details>
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--workbook">
           <thead>
