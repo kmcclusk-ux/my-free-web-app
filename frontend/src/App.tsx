@@ -1394,7 +1394,17 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" }) {
   );
 }
 
-function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" }) {
+function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" }) {
+  if (name === "menu") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 7h14" />
+        <path d="M5 12h14" />
+        <path d="M5 17h14" />
+      </svg>
+    );
+  }
+
   if (name === "copy") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2444,7 +2454,9 @@ export default function App() {
   const [storageState, setStorageState] = useState<SaveState>("loading");
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
+  const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
   const saveTimeout = useRef<number | null>(null);
+  const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedStorage = useRef(false);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
   const requiresSignIn = authEnabled && authState.status !== "signedIn";
@@ -2461,6 +2473,32 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, [authEnabled]);
+
+  useEffect(() => {
+    if (!isTopbarMenuOpen) return;
+
+    const closeOnOutsideClick = (event: MouseEvent | TouchEvent) => {
+      if (!topbarMenuRef.current?.contains(event.target as Node)) {
+        setIsTopbarMenuOpen(false);
+      }
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsTopbarMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("touchstart", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("touchstart", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isTopbarMenuOpen]);
 
   const copyChatGptConnectorUrl = async () => {
     if (!authToken) {
@@ -3388,28 +3426,55 @@ export default function App() {
             {authEnabled ? (
               authState.status === "signedIn" ? (
                 <>
-                  <button className="ai-button topbar-icon-button" type="button" onClick={signOutCognito} aria-label="Sign out" title="Sign out"><TopbarActionIcon name="signOut" /></button>
                   <div className="topbar-chip">Signed in: {authState.user.email || authState.user.sub.slice(0, 8)}</div>
-                  <button className="ai-button topbar-icon-button" type="button" onClick={() => void copyChatGptConnectorUrl()} disabled={isCreatingMcpToken} aria-label={isCreatingMcpToken ? "Creating ChatGPT connector token" : "Copy ChatGPT connector URL"} title={isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}>
-                    <TopbarActionIcon name="copy" />
-                  </button>
                   {mcpTokenMessage && <div className="topbar-chip">{mcpTokenMessage}</div>}
                 </>
               ) : (
-                <button className="ai-button ai-button--assistant topbar-icon-button" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"} aria-label={authState.status === "loading" ? "Signing in" : "Sign in"} title={authState.status === "loading" ? "Signing in..." : "Sign in"}>
-                  <TopbarActionIcon name="signIn" />
-                </button>
+                <div className="topbar-chip">{authState.status === "loading" ? "Auth: loading" : "Signed out"}</div>
               )
             ) : (
               <div className="topbar-chip">Auth: legacy</div>
             )}
-            <button className="ai-button ai-button--assistant topbar-icon-button" type="button" onClick={() => setIsAssistantOpen((current) => !current)} aria-label={isAssistantOpen ? "Close AI Assistant" : "Open AI Assistant"} title={isAssistantOpen ? "Close AI Assistant" : "AI Assistant"}>
-              <TopbarActionIcon name="assistant" />
-            </button>
-            <button className="ai-button topbar-icon-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)} aria-label={isSheetPanelOpen ? "Close spreadsheet panel" : "Open spreadsheet panel"} title={isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}>
-              <TopbarActionIcon name="sheet" />
-            </button>
-            <a className="ai-button ai-button--link topbar-icon-button" href={CHATGPT_URL} target="_blank" rel="noreferrer" aria-label="Open ChatGPT" title="ChatGPT"><TopbarActionIcon name="chat" /></a>
+            <div className="topbar-menu" ref={topbarMenuRef}>
+              <button className="ai-button topbar-icon-button topbar-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
+                <TopbarActionIcon name="menu" />
+              </button>
+              {isTopbarMenuOpen && (
+                <div className="topbar-menu__panel" role="menu" aria-label="Application actions">
+                  {authEnabled ? (
+                    authState.status === "signedIn" ? (
+                      <>
+                        <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); signOutCognito(); }}>
+                          <TopbarActionIcon name="signOut" />
+                          <span>Sign out</span>
+                        </button>
+                        <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copyChatGptConnectorUrl(); }} disabled={isCreatingMcpToken}>
+                          <TopbarActionIcon name="copy" />
+                          <span>{isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void startCognitoSignIn(); }} disabled={authState.status === "loading"}>
+                        <TopbarActionIcon name="signIn" />
+                        <span>{authState.status === "loading" ? "Signing in..." : "Sign in"}</span>
+                      </button>
+                    )
+                  ) : null}
+                  <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsAssistantOpen((current) => !current); }}>
+                    <TopbarActionIcon name="assistant" />
+                    <span>{isAssistantOpen ? "Close AI Assistant" : "AI Assistant"}</span>
+                  </button>
+                  <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsSheetPanelOpen((current) => !current); }}>
+                    <TopbarActionIcon name="sheet" />
+                    <span>{isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}</span>
+                  </button>
+                  <a className="topbar-menu__item" href={CHATGPT_URL} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setIsTopbarMenuOpen(false)}>
+                    <TopbarActionIcon name="chat" />
+                    <span>ChatGPT</span>
+                  </a>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         {isAssistantOpen && (
