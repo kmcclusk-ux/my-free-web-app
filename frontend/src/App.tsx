@@ -2429,15 +2429,6 @@ function AfterTaxUSLogo() {
   );
 }
 
-function AfterTaxUSMiniLogo() {
-  return (
-    <div className="aftertaxum-mini-logo" aria-label="AfterTax US" title="AfterTax US">
-      <AfterTaxUSMark className="aftertaxum-mini-logo__mark" idSuffix="mini" />
-      <span>AfterTax US</span>
-    </div>
-  );
-}
-
 function AppSplash({ message }: { message: string }) {
   return (
     <div className="app-splash" role="status" aria-live="polite">
@@ -2871,7 +2862,9 @@ export default function App() {
   const portfolioYield = flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0;
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
-      <button className="ai-button topbar-icon-button topbar-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
+      <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
+        <AfterTaxUSMark className="app-action-menu__mark" idSuffix="menu" />
+        <span className="app-action-menu__brand">AfterTax US</span>
         <TopbarActionIcon name="menu" />
       </button>
       {isTopbarMenuOpen && (
@@ -3494,7 +3487,6 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar__topline">
           {actionMenu}
-          <AfterTaxUSMiniLogo />
         </div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
