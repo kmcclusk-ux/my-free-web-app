@@ -1349,9 +1349,10 @@ function getThermometerScale(values: ThermometerValue[], markers: ThermometerMar
 function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   return (
     <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" />
-      <path d="M12 9.25a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5Z" />
-      {variant === "hide" && <path d="M4.75 4.75 19.25 19.25" />}
+      <path d="M12 5v14" className={variant === "hide" ? "icon-button__line--hidden" : ""} />
+      <path d="M5 12h14" />
+      {variant === "hide" && <path d="M6.5 6.5 17.5 17.5" />}
+      {variant === "hide" && <path d="M17.5 6.5 6.5 17.5" />}
     </svg>
   );
 }

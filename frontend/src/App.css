@@ -1589,6 +1589,10 @@
   stroke-width: 1.8;
 }
 
+.icon-button__line--hidden {
+  display: none;
+}
+
 .tax-panel-show-tab {
   display: inline-flex;
   align-items: center;
