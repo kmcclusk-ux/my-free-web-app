@@ -1530,3 +1530,58 @@
     width: auto;
   }
 }
+
+.workspace-shell--tax-collapsed {
+  grid-template-columns: 112px minmax(0, 1fr) 48px;
+}
+
+.tax-panel-control {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.thermometer-rail--collapsed {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10px 6px;
+  overflow: hidden;
+}
+
+.tax-panel-show-tab {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  min-height: 132px;
+  padding: 10px 7px;
+  border: 1px solid var(--poly-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--poly-blue-strong);
+  font-size: .72rem;
+  font-weight: 820;
+  letter-spacing: .03em;
+  box-shadow: var(--poly-shadow-tight);
+}
+
+.tax-panel-show-tab:hover {
+  background: var(--poly-blue-soft);
+  border-color: rgba(11, 99, 246, .22);
+}
+
+@media (max-width: 1180px) {
+  .workspace-shell--tax-collapsed { grid-template-columns: 104px minmax(0, 1fr) 44px; }
+}
+
+@media (max-width: 980px) {
+  .workspace-shell--tax-collapsed { grid-template-columns: 1fr; }
+  .thermometer-rail--collapsed {
+    align-items: stretch;
+    padding: 8px 12px;
+  }
+  .tax-panel-show-tab {
+    writing-mode: horizontal-tb;
+    min-height: 0;
+    width: 100%;
+  }
+}

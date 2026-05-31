@@ -1308,29 +1308,13 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
 
 function CompactKpiHeader({
   metrics,
-  focusGrid,
-  showThermometers,
-  onToggleFocus,
-  onToggleThermometers,
 }: {
   metrics: KpiMetricConfig[];
-  focusGrid: boolean;
-  showThermometers: boolean;
-  onToggleFocus: () => void;
-  onToggleThermometers: () => void;
 }) {
   return (
     <div className="kpi-header">
       <div className="kpi-header__metrics">
         {metrics.map((metric) => <KpiPill key={metric.label} {...metric} />)}
-      </div>
-      <div className="kpi-header__actions">
-        <button className="ghost-button ghost-button--compact kpi-header__toggle" type="button" onClick={onToggleThermometers}>
-          {showThermometers && !focusGrid ? "Hide Tax Panel" : "Show Tax Panel"}
-        </button>
-        <button className="ghost-button ghost-button--compact kpi-header__toggle" type="button" onClick={onToggleFocus}>
-          {focusGrid ? "Show Analytics" : "Focus Grid"}
-        </button>
       </div>
     </div>
   );
@@ -3276,7 +3260,7 @@ export default function App() {
     return { ok: false, message: `Rejected action: ${actionType || "(missing)"} is not allowed.` };
   }
   return (
-    <div className={`workspace-shell ${focusGrid || !showThermometerRail ? "workspace-shell--focus-grid" : ""}`}>
+    <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar__brand"><AfterTaxUSLogo /></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
@@ -3285,10 +3269,6 @@ export default function App() {
         <div className="portfolio-workstation__sticky">
           <CompactKpiHeader
             metrics={kpiMetrics}
-            focusGrid={focusGrid}
-            showThermometers={showThermometerRail}
-            onToggleFocus={() => setFocusGrid((current) => !current)}
-            onToggleThermometers={() => setShowThermometerRail((current) => !current)}
           />
         </div>
         <div className="content-topbar">
@@ -3582,16 +3562,29 @@ export default function App() {
           </>
         )}
       </main>
-      {!focusGrid && showThermometerRail && (
-        <aside className="thermometer-rail" aria-label="Tax thermometers">
-          <TaxThermometerPanel
-            federalTaxable={federalTaxableAfterDeductions}
-            stateTaxable={stateTaxableAfterDeductions}
-            federalTax={federalResult?.tax || 0}
-            stateTax={stateResult?.tax || 0}
-            filingStatus={federalSettings.filingStatus}
-            niitThreshold={niitThreshold}
-          />
+      {!focusGrid && (
+        <aside className={`thermometer-rail ${showThermometerRail ? "" : "thermometer-rail--collapsed"}`} aria-label="Tax panel">
+          {showThermometerRail ? (
+            <>
+              <div className="tax-panel-control">
+                <button className="ghost-button ghost-button--compact" type="button" onClick={() => setShowThermometerRail(false)}>
+                  Hide Tax Panel
+                </button>
+              </div>
+              <TaxThermometerPanel
+                federalTaxable={federalTaxableAfterDeductions}
+                stateTaxable={stateTaxableAfterDeductions}
+                federalTax={federalResult?.tax || 0}
+                stateTax={stateResult?.tax || 0}
+                filingStatus={federalSettings.filingStatus}
+                niitThreshold={niitThreshold}
+              />
+            </>
+          ) : (
+            <button className="tax-panel-show-tab" type="button" onClick={() => setShowThermometerRail(true)}>
+              Show Tax Panel
+            </button>
+          )}
         </aside>
       )}
     </div>
