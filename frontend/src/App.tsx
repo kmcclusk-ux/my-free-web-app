@@ -2379,43 +2379,74 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     </Section>
   );
 }
+function AfterTaxUSMark({ className = "aftertaxum-logo__mark", idSuffix = "logo" }: { className?: string; idSuffix?: string }) {
+  const ringId = `aftertaxusRing-${idSuffix}`;
+  const innerId = `aftertaxusInner-${idSuffix}`;
+  return (
+    <svg className={className} viewBox="0 0 96 96" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id={ringId} x1="12" y1="20" x2="78" y2="82" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#061B38" />
+          <stop offset="0.48" stopColor="#1F5FA8" />
+          <stop offset="1" stopColor="#29C7A3" />
+        </linearGradient>
+        <linearGradient id={innerId} x1="22" y1="28" x2="76" y2="72" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#2A64B8" stopOpacity="0.88" />
+          <stop offset="1" stopColor="#2DD4A2" stopOpacity="0.88" />
+        </linearGradient>
+      </defs>
+      <path d="M48 10a38 38 0 1 0 27.7 64.1l-12-10.4A22.1 22.1 0 1 1 63.4 32l12.4-10A37.8 37.8 0 0 0 48 10Z" fill={`url(#${ringId})`} />
+      <path d="M48 22a26 26 0 1 0 18.7 44.1l-9.1-7.9A14 14 0 1 1 57.7 38l9.4-7.5A25.8 25.8 0 0 0 48 22Z" fill={`url(#${innerId})`} />
+      <g fill="#32C8A6">
+        <circle cx="72" cy="25" r="3.8" />
+        <circle cx="83" cy="30" r="2.4" />
+        <circle cx="70" cy="38" r="2.6" />
+        <circle cx="81" cy="45" r="3" />
+        <circle cx="69" cy="56" r="3.3" />
+        <circle cx="84" cy="64" r="2.2" />
+        <circle cx="75" cy="73" r="2.8" />
+      </g>
+      <g fill="#2361C9">
+        <circle cx="70" cy="15" r="2.2" />
+        <circle cx="80" cy="19" r="3" />
+        <circle cx="88" cy="36" r="2.6" />
+        <circle cx="74" cy="46" r="1.8" />
+      </g>
+    </svg>
+  );
+}
+
 function AfterTaxUSLogo() {
   return (
     <div className="aftertaxum-logo" aria-label="AfterTax US">
-      <svg className="aftertaxum-logo__mark" viewBox="0 0 96 96" role="img" aria-hidden="true">
-        <defs>
-          <linearGradient id="aftertaxumRing" x1="12" y1="20" x2="78" y2="82" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#061B38" />
-            <stop offset="0.48" stopColor="#1F5FA8" />
-            <stop offset="1" stopColor="#29C7A3" />
-          </linearGradient>
-          <linearGradient id="aftertaxumInner" x1="22" y1="28" x2="76" y2="72" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#2A64B8" stopOpacity="0.88" />
-            <stop offset="1" stopColor="#2DD4A2" stopOpacity="0.88" />
-          </linearGradient>
-        </defs>
-        <path d="M48 10a38 38 0 1 0 27.7 64.1l-12-10.4A22.1 22.1 0 1 1 63.4 32l12.4-10A37.8 37.8 0 0 0 48 10Z" fill="url(#aftertaxumRing)" />
-        <path d="M48 22a26 26 0 1 0 18.7 44.1l-9.1-7.9A14 14 0 1 1 57.7 38l9.4-7.5A25.8 25.8 0 0 0 48 22Z" fill="url(#aftertaxumInner)" />
-        <g fill="#32C8A6">
-          <circle cx="72" cy="25" r="3.8" />
-          <circle cx="83" cy="30" r="2.4" />
-          <circle cx="70" cy="38" r="2.6" />
-          <circle cx="81" cy="45" r="3" />
-          <circle cx="69" cy="56" r="3.3" />
-          <circle cx="84" cy="64" r="2.2" />
-          <circle cx="75" cy="73" r="2.8" />
-        </g>
-        <g fill="#2361C9">
-          <circle cx="70" cy="15" r="2.2" />
-          <circle cx="80" cy="19" r="3" />
-          <circle cx="88" cy="36" r="2.6" />
-          <circle cx="74" cy="46" r="1.8" />
-        </g>
-      </svg>
+      <AfterTaxUSMark idSuffix="full" />
       <div className="aftertaxum-logo__copy">
         <strong>AfterTax US</strong>
         <span>AI-powered after-tax portfolio intelligence</span>
         <small>See the after-tax impact before every decision.</small>
+      </div>
+    </div>
+  );
+}
+
+function AfterTaxUSMiniLogo() {
+  return (
+    <div className="aftertaxum-mini-logo" aria-label="AfterTax US" title="AfterTax US">
+      <AfterTaxUSMark className="aftertaxum-mini-logo__mark" idSuffix="mini" />
+      <span>AfterTax US</span>
+    </div>
+  );
+}
+
+function AppSplash({ message }: { message: string }) {
+  return (
+    <div className="app-splash" role="status" aria-live="polite">
+      <div className="app-splash__card">
+        <AfterTaxUSLogo />
+        <div className="app-splash__status">
+          <span className="app-splash__spinner" aria-hidden="true" />
+          <strong>{message}</strong>
+        </div>
       </div>
     </div>
   );
@@ -3447,11 +3478,24 @@ export default function App() {
 
     return { ok: false, message: `Rejected action: ${actionType || "(missing)"} is not allowed.` };
   }
+  const splashMessage =
+    authEnabled && authState.status === "loading"
+      ? "Opening your private AfterTax US workspace..."
+      : !requiresSignIn && storageState === "loading"
+        ? "Loading investments and tax mappings..."
+        : "";
+
+  if (splashMessage) {
+    return <AppSplash message={splashMessage} />;
+  }
+
   return (
     <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
       <aside className="sidebar">
-        {actionMenu}
-        <div className="sidebar__brand"><AfterTaxUSLogo /></div>
+        <div className="sidebar__topline">
+          {actionMenu}
+          <AfterTaxUSMiniLogo />
+        </div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>
       <main className="content-panel">
