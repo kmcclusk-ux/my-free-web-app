@@ -1012,13 +1012,44 @@
 }
 
 .kpi-pill--accent {
-  background: linear-gradient(135deg, var(--poly-blue-strong), var(--poly-blue));
-  box-shadow: 0 12px 26px rgba(11, 99, 246, .24);
+  border-color: rgba(11, 99, 246, .18);
+  background: linear-gradient(180deg, #ffffff, #eaf4ff);
+  box-shadow: 0 8px 20px rgba(11, 99, 246, .10);
 }
 
 .kpi-pill--warning {
-  background: linear-gradient(135deg, #0b4dbb, #2b82ff);
-  box-shadow: 0 12px 26px rgba(11, 99, 246, .22);
+  border-color: rgba(0, 168, 120, .18);
+  background: linear-gradient(180deg, #ffffff, #eefaf6);
+  box-shadow: 0 8px 20px rgba(0, 168, 120, .10);
+}
+
+.kpi-pill--accent span,
+.kpi-pill--accent strong,
+.kpi-pill--accent small,
+.kpi-pill--warning span,
+.kpi-pill--warning strong,
+.kpi-pill--warning small {
+  color: var(--poly-ink);
+}
+
+.kpi-pill--accent span,
+.kpi-pill--warning span {
+  color: var(--poly-muted);
+}
+
+.kpi-pill--accent .kpi-pill__delta,
+.kpi-pill--warning .kpi-pill__delta {
+  color: inherit;
+}
+
+.kpi-pill--accent .kpi-pill__delta--up,
+.kpi-pill--warning .kpi-pill__delta--up {
+  color: var(--poly-green);
+}
+
+.kpi-pill--accent .kpi-pill__delta--down,
+.kpi-pill--warning .kpi-pill__delta--down {
+  color: var(--poly-red);
 }
 
 .kpi-pill--sync {
