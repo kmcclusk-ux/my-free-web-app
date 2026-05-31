@@ -1593,6 +1593,22 @@
   display: none;
 }
 
+.action-icon-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+}
+
+.action-icon-button--danger {
+  color: #b42318;
+}
+
+.action-icon-button--danger:hover {
+  border-color: rgba(229, 72, 77, .22);
+  background: var(--poly-red-soft);
+  color: #b42318;
+}
+
 .tax-panel-show-tab {
   display: inline-flex;
   align-items: center;
