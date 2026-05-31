@@ -2349,7 +2349,6 @@ export default function App() {
   const [federalError, setFederalError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageState, setStorageState] = useState<SaveState>("loading");
-  const [storageMessage, setStorageMessage] = useState("Loading workbook...");
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const saveTimeout = useRef<number | null>(null);
@@ -2563,13 +2562,11 @@ export default function App() {
     if (authEnabled && authState.status !== "signedIn") {
       hasLoadedStorage.current = false;
       setStorageState(authState.status === "loading" ? "loading" : "ready");
-      setStorageMessage(authState.status === "loading" ? "Completing sign in..." : "Sign in to load workbook");
       return;
     }
 
     let cancelled = false;
     setStorageState("loading");
-    setStorageMessage("Loading workbook...");
     loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
       if (cancelled) return;
       const workbookSettings = parseWorkbookSettings(response.settings);
@@ -2606,10 +2603,9 @@ export default function App() {
       });
       hasLoadedStorage.current = true;
       setStorageState("ready");
-      setStorageMessage(response.updatedAt ? `Synced ${new Date(response.updatedAt).toLocaleString()}` : "Ready to save");
     }).catch((error: Error) => {
+      console.error(error);
       setStorageState("error");
-      setStorageMessage(error.message);
       hasLoadedStorage.current = true;
     });
     return () => { cancelled = true; };
@@ -2694,13 +2690,13 @@ export default function App() {
     }
     if (saveTimeout.current) window.clearTimeout(saveTimeout.current);
     setStorageState("saving");
-    setStorageMessage("Saving workbook...");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then((response) => {
-        if (!cancelled) { setStorageState("saved"); setStorageMessage(response.updatedAt ? `Saved ${new Date(response.updatedAt).toLocaleTimeString()}` : "Saved"); }
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
+        if (!cancelled) { setStorageState("saved"); }
       }).catch((error: Error) => {
-        if (!cancelled) { setStorageState("error"); setStorageMessage(error.message); }
+        console.error(error);
+        if (!cancelled) { setStorageState("error"); }
       });
       return () => { cancelled = true; };
     }, 700);
@@ -2718,7 +2714,6 @@ export default function App() {
     { label: "State tax", value: formatCurrencyDetailed(stateResult?.tax || 0), numericValue: stateResult?.tax || 0 },
     { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
-    { label: "Workbook sync", value: storageMessage, tone: storageState === "error" ? "warning" : "sync" },
   ];
   const portfolioSnapshot = buildPortfolioSnapshot({
     activeTab,
@@ -2765,7 +2760,6 @@ export default function App() {
     const name = normalizeFavoriteName(favoriteName);
     if (!name) {
       setStorageState("error");
-      setStorageMessage("Row selection name is required.");
       return;
     }
     const keySet = new Set<string>();
@@ -2774,7 +2768,6 @@ export default function App() {
     });
     if (keySet.size === 0) {
       setStorageState("error");
-      setStorageMessage("Select at least one included investment before saving a row selection.");
       return;
     }
     const nameKey = normalizeLookupKey(name);
@@ -2791,7 +2784,6 @@ export default function App() {
       ],
     }));
     setStorageState("ready");
-    setStorageMessage(`Row selection "${name}" saved.`);
   };
 
   const applyFavorite = (favoriteName: string) => {
@@ -2801,7 +2793,6 @@ export default function App() {
     );
     if (!favorite) {
       setStorageState("error");
-      setStorageMessage("Select a row selection to apply.");
       return;
     }
     const favoriteKeys = new Set(favorite.investmentKeys);
@@ -2812,14 +2803,12 @@ export default function App() {
       })
     );
     setStorageState("ready");
-    setStorageMessage(`Row selection "${favorite.name}" applied.`);
   };
 
   const deleteFavorite = (favoriteName: string) => {
     const selectedKey = normalizeLookupKey(favoriteName);
     if (!selectedKey) {
       setStorageState("error");
-      setStorageMessage("Select a row selection to delete.");
       return;
     }
     const favorite = uiSettings.investmentFavorites.find(
@@ -2827,7 +2816,6 @@ export default function App() {
     );
     if (!favorite) {
       setStorageState("error");
-      setStorageMessage("Row selection not found.");
       return;
     }
     setUiSettings((current) => ({
@@ -2837,7 +2825,6 @@ export default function App() {
       ),
     }));
     setStorageState("ready");
-    setStorageMessage(`Row selection "${favorite.name}" deleted.`);
   };
 
   const renameFavorite = (oldFavoriteName: string, newFavoriteName: string) => {
@@ -2846,13 +2833,11 @@ export default function App() {
     const newKey = normalizeLookupKey(nextName);
     if (!oldKey || !newKey) {
       setStorageState("error");
-      setStorageMessage("Row selection rename requires old and new names.");
       return;
     }
     const existing = uiSettings.investmentFavorites.find((entry) => normalizeLookupKey(entry.name) === oldKey);
     if (!existing) {
       setStorageState("error");
-      setStorageMessage("Row selection not found for rename.");
       return;
     }
     const conflict = uiSettings.investmentFavorites.some(
@@ -2860,7 +2845,6 @@ export default function App() {
     );
     if (conflict) {
       setStorageState("error");
-      setStorageMessage(`Row selection "${nextName}" already exists.`);
       return;
     }
     setUiSettings((current) => ({
@@ -2872,7 +2856,6 @@ export default function App() {
       ),
     }));
     setStorageState("ready");
-    setStorageMessage(`Row selection "${existing.name}" renamed to "${nextName}".`);
   };
 
   const reorderInvestments = (sourceId: number, targetId: number) => {
@@ -2890,7 +2873,6 @@ export default function App() {
       return next;
     });
     setStorageState("ready");
-    setStorageMessage("Investment row order updated.");
   };
 
   function updateCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, numericFields: Array<keyof T> = [], booleanFields: Array<keyof T> = []) {
