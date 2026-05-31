@@ -2693,8 +2693,6 @@ export default function App() {
   const kpiMetrics: KpiMetricConfig[] = [
     { label: "After-tax income", value: formatCurrency(afterTaxIncome), numericValue: afterTaxIncome, tone: "warning" },
     { label: "Annual income", value: formatCurrency(flows.totalIncome), secondaryValue: `${formatCurrency(monthlyIncome)} monthly`, numericValue: flows.totalIncome },
-    { label: "Federal tax", value: formatCurrencyDetailed(federalResult?.tax || 0), numericValue: federalResult?.tax || 0 },
-    { label: "State tax", value: formatCurrencyDetailed(stateResult?.tax || 0), numericValue: stateResult?.tax || 0 },
     { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
   ];
