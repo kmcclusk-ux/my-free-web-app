@@ -3388,11 +3388,11 @@ export default function App() {
             {authEnabled ? (
               authState.status === "signedIn" ? (
                 <>
+                  <button className="ai-button topbar-icon-button" type="button" onClick={signOutCognito} aria-label="Sign out" title="Sign out"><TopbarActionIcon name="signOut" /></button>
                   <div className="topbar-chip">Signed in: {authState.user.email || authState.user.sub.slice(0, 8)}</div>
                   <button className="ai-button topbar-icon-button" type="button" onClick={() => void copyChatGptConnectorUrl()} disabled={isCreatingMcpToken} aria-label={isCreatingMcpToken ? "Creating ChatGPT connector token" : "Copy ChatGPT connector URL"} title={isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}>
                     <TopbarActionIcon name="copy" />
                   </button>
-                  <button className="ai-button topbar-icon-button" type="button" onClick={signOutCognito} aria-label="Sign out" title="Sign out"><TopbarActionIcon name="signOut" /></button>
                   {mcpTokenMessage && <div className="topbar-chip">{mcpTokenMessage}</div>}
                 </>
               ) : (
