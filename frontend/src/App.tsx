@@ -232,7 +232,6 @@ type WorkbookResponse = {
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "local-dev";
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
@@ -3323,9 +3322,6 @@ export default function App() {
               {isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}
             </button>
             <a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a>
-            <div className="topbar-chip">Workspace: {WORKSPACE_ID}</div>
-            <div className="topbar-chip">Storage: {storageState}</div>
-            <div className="topbar-chip">Version: {APP_VERSION}</div>
           </div>
         </div>
         {isAssistantOpen && (
