@@ -3449,8 +3449,8 @@ export default function App() {
   }
   return (
     <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
-      {actionMenu}
       <aside className="sidebar">
+        {actionMenu}
         <div className="sidebar__brand"><AfterTaxUSLogo /></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
       </aside>

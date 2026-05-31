@@ -311,6 +311,7 @@
   border-right: 0;
   background: linear-gradient(180deg, var(--pm-sidebar), var(--pm-sidebar-deep));
   box-shadow: 10px 0 34px rgba(16,38,43,.14);
+  overflow: visible;
 }
 .sidebar:hover { width: 246px; box-shadow: 18px 0 44px rgba(16,38,43,.2); }
 .sidebar__brand { padding: 3px 2px 8px; }
@@ -1134,16 +1135,23 @@
 }
 
 .app-action-menu {
-  position: fixed;
-  top: 10px;
-  right: 14px;
+  position: relative;
+  top: auto;
+  right: auto;
   z-index: 3000;
+  align-self: flex-start;
+  margin: 0 0 4px;
 }
 
 .app-action-menu .topbar-menu__trigger {
   border-color: rgba(16, 24, 40, .10);
   background: rgba(255, 255, 255, .96);
   box-shadow: 0 10px 26px rgba(16, 24, 40, .12), 0 1px 2px rgba(16, 24, 40, .06);
+}
+
+.app-action-menu .topbar-menu__panel {
+  right: auto;
+  left: 0;
 }
 
 .topbar-menu__trigger[aria-expanded="true"] {
