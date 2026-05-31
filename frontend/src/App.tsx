@@ -2863,9 +2863,9 @@ export default function App() {
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
       <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
+        <TopbarActionIcon name="menu" />
         <AfterTaxUSMark className="app-action-menu__mark" idSuffix="menu" />
         <span className="app-action-menu__brand">AfterTax US</span>
-        <TopbarActionIcon name="menu" />
       </button>
       {isTopbarMenuOpen && (
         <div className="topbar-menu__panel" role="menu" aria-label="Application actions">
