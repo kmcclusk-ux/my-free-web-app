@@ -1274,15 +1274,25 @@ type KpiMetricConfig = {
 function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const [delta, setDelta] = useState<number | null>(null);
+  const [isAnimatingValue, setIsAnimatingValue] = useState(false);
+  const isPrimaryMetric = label.toLowerCase() === "after-tax income";
 
   useEffect(() => {
     if (typeof numericValue !== "number" || !Number.isFinite(numericValue)) return;
     const previous = previousValue.current;
     if (previous !== null && Math.abs(numericValue - previous) > 0.005) {
       setDelta(numericValue - previous);
+      setIsAnimatingValue(false);
+      window.requestAnimationFrame(() => setIsAnimatingValue(true));
     }
     previousValue.current = numericValue;
   }, [numericValue]);
+
+  useEffect(() => {
+    if (!isAnimatingValue) return;
+    const timeoutId = window.setTimeout(() => setIsAnimatingValue(false), 720);
+    return () => window.clearTimeout(timeoutId);
+  }, [isAnimatingValue]);
 
   const deltaValue = delta;
   const formattedDelta =
@@ -1293,9 +1303,9 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
         : formatCurrency(Math.abs(deltaValue));
 
   return (
-    <div className={`kpi-pill kpi-pill--${tone}`}>
+    <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}>
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong className="kpi-pill__value">{value}</strong>
       {secondaryValue && <small>{secondaryValue}</small>}
       {formattedDelta && deltaValue !== null && (
         <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
