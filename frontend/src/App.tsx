@@ -1346,6 +1346,16 @@ function getThermometerScale(values: ThermometerValue[], markers: ThermometerMar
   };
 }
 
+function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
+  return (
+    <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" />
+      <path d="M12 9.25a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5Z" />
+      {variant === "hide" && <path d="M4.75 4.75 19.25 19.25" />}
+    </svg>
+  );
+}
+
 function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, footerValue, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; collapsed: boolean; onToggle: () => void }) {
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
@@ -1359,8 +1369,8 @@ function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, 
         </div>
         <div className="tax-thermometer__heading-actions">
           <em>Scale to {formatCurrency(scaleMax)}</em>
-          <button className="ghost-button ghost-button--compact tax-thermometer__toggle" type="button" onClick={onToggle} aria-expanded={!collapsed}>
-            {collapsed ? "Show" : "Hide"}
+          <button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? `Show ${title}` : `Hide ${title}`} title={collapsed ? `Show ${title}` : `Hide ${title}`}>
+            <VisibilityToggleIcon variant={collapsed ? "show" : "hide"} />
           </button>
         </div>
       </div>
@@ -1456,8 +1466,8 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
             <strong>Tax Output Summary</strong>
             <span>Live taxable income and tax totals</span>
           </div>
-          <button className="ghost-button ghost-button--compact" type="button" onClick={() => setCollapsedSections((current) => ({ ...current, summary: !current.summary }))} aria-expanded={!collapsedSections.summary}>
-            {collapsedSections.summary ? "Show" : "Hide"}
+          <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => setCollapsedSections((current) => ({ ...current, summary: !current.summary }))} aria-expanded={!collapsedSections.summary} aria-label={collapsedSections.summary ? "Show Tax Output Summary" : "Hide Tax Output Summary"} title={collapsedSections.summary ? "Show Tax Output Summary" : "Hide Tax Output Summary"}>
+            <VisibilityToggleIcon variant={collapsedSections.summary ? "show" : "hide"} />
           </button>
         </div>
         {!collapsedSections.summary && (
@@ -3565,8 +3575,8 @@ export default function App() {
           {showThermometerRail ? (
             <>
               <div className="tax-panel-control">
-                <button className="ghost-button ghost-button--compact" type="button" onClick={() => setShowThermometerRail(false)}>
-                  Hide Tax Panel
+                <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => setShowThermometerRail(false)} aria-label="Hide tax panel" title="Hide tax panel">
+                  <VisibilityToggleIcon variant="hide" />
                 </button>
               </div>
               <TaxThermometerPanel
@@ -3579,8 +3589,8 @@ export default function App() {
               />
             </>
           ) : (
-            <button className="tax-panel-show-tab" type="button" onClick={() => setShowThermometerRail(true)}>
-              Show Tax Panel
+            <button className="tax-panel-show-tab" type="button" onClick={() => setShowThermometerRail(true)} aria-label="Show tax panel" title="Show tax panel">
+              <VisibilityToggleIcon variant="show" />
             </button>
           )}
         </aside>
