@@ -1394,6 +1394,69 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" }) {
   );
 }
 
+function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" }) {
+  if (name === "copy") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M9 9h8v8H9z" />
+        <path d="M7 15H5V5h10v2" />
+      </svg>
+    );
+  }
+
+  if (name === "signIn") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M10 7V5h8v14h-8v-2" />
+        <path d="M4 12h9" />
+        <path d="m10 9 3 3-3 3" />
+      </svg>
+    );
+  }
+
+  if (name === "signOut") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M14 7V5H6v14h8v-2" />
+        <path d="M10 12h9" />
+        <path d="m16 9 3 3-3 3" />
+      </svg>
+    );
+  }
+
+  if (name === "assistant") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 8.5h14v8H8.5L5 19.5z" />
+        <path d="M9 12h.01" />
+        <path d="M12 12h.01" />
+        <path d="M15 12h.01" />
+        <path d="M12 5v3" />
+      </svg>
+    );
+  }
+
+  if (name === "sheet") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5.5 4.5h13v15h-13z" />
+        <path d="M5.5 9.5h13" />
+        <path d="M10 4.5v15" />
+        <path d="M14.5 4.5v15" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 4.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Z" />
+      <path d="M4.5 12h15" />
+      <path d="M12 4.5c2 2.1 3 4.6 3 7.5s-1 5.4-3 7.5" />
+      <path d="M12 4.5c-2 2.1-3 4.6-3 7.5s1 5.4 3 7.5" />
+    </svg>
+  );
+}
+
 function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, footerValue, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; collapsed: boolean; onToggle: () => void }) {
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
@@ -3326,27 +3389,27 @@ export default function App() {
               authState.status === "signedIn" ? (
                 <>
                   <div className="topbar-chip">Signed in: {authState.user.email || authState.user.sub.slice(0, 8)}</div>
-                  <button className="ai-button" type="button" onClick={() => void copyChatGptConnectorUrl()} disabled={isCreatingMcpToken}>
-                    {isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}
+                  <button className="ai-button topbar-icon-button" type="button" onClick={() => void copyChatGptConnectorUrl()} disabled={isCreatingMcpToken} aria-label={isCreatingMcpToken ? "Creating ChatGPT connector token" : "Copy ChatGPT connector URL"} title={isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}>
+                    <TopbarActionIcon name="copy" />
                   </button>
-                  <button className="ai-button" type="button" onClick={signOutCognito}>Sign out</button>
+                  <button className="ai-button topbar-icon-button" type="button" onClick={signOutCognito} aria-label="Sign out" title="Sign out"><TopbarActionIcon name="signOut" /></button>
                   {mcpTokenMessage && <div className="topbar-chip">{mcpTokenMessage}</div>}
                 </>
               ) : (
-                <button className="ai-button ai-button--assistant" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"}>
-                  {authState.status === "loading" ? "Signing in..." : "Sign in"}
+                <button className="ai-button ai-button--assistant topbar-icon-button" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"} aria-label={authState.status === "loading" ? "Signing in" : "Sign in"} title={authState.status === "loading" ? "Signing in..." : "Sign in"}>
+                  <TopbarActionIcon name="signIn" />
                 </button>
               )
             ) : (
               <div className="topbar-chip">Auth: legacy</div>
             )}
-            <button className="ai-button ai-button--assistant" type="button" onClick={() => setIsAssistantOpen((current) => !current)}>
-              {isAssistantOpen ? "Close Assistant" : "AI Assistant"}
+            <button className="ai-button ai-button--assistant topbar-icon-button" type="button" onClick={() => setIsAssistantOpen((current) => !current)} aria-label={isAssistantOpen ? "Close AI Assistant" : "Open AI Assistant"} title={isAssistantOpen ? "Close AI Assistant" : "AI Assistant"}>
+              <TopbarActionIcon name="assistant" />
             </button>
-            <button className="ai-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)}>
-              {isSheetPanelOpen ? "Close Sheet" : "Spreadsheet"}
+            <button className="ai-button topbar-icon-button" type="button" onClick={() => setIsSheetPanelOpen((current) => !current)} aria-label={isSheetPanelOpen ? "Close spreadsheet panel" : "Open spreadsheet panel"} title={isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}>
+              <TopbarActionIcon name="sheet" />
             </button>
-            <a className="ai-button ai-button--link" href={CHATGPT_URL} target="_blank" rel="noreferrer">ChatGPT</a>
+            <a className="ai-button ai-button--link topbar-icon-button" href={CHATGPT_URL} target="_blank" rel="noreferrer" aria-label="Open ChatGPT" title="ChatGPT"><TopbarActionIcon name="chat" /></a>
           </div>
         </div>
         {isAssistantOpen && (
