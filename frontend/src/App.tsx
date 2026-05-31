@@ -3487,6 +3487,9 @@ export default function App() {
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
           {actionMenu}
+          <CompactKpiHeader
+            metrics={kpiMetrics}
+          />
         </div>
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
@@ -3494,11 +3497,6 @@ export default function App() {
           <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
         </aside>
         <main className="content-panel">
-        <div className="portfolio-workstation__sticky">
-          <CompactKpiHeader
-            metrics={kpiMetrics}
-          />
-        </div>
         <div className="content-topbar">
           <div>
             <p className="eyebrow">Live Model</p>
