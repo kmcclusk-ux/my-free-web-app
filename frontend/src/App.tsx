@@ -1477,9 +1477,13 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
   );
 }
 
-function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, footerValue, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; collapsed: boolean; onToggle: () => void }) {
+function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, footerValue, bandThresholds, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; bandThresholds: { greenEnd: number; yellowEnd: number }; collapsed: boolean; onToggle: () => void }) {
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
+  const bandStyle = {
+    "--thermo-green-end": `${Math.max(0, Math.min(100, (bandThresholds.greenEnd / scaleMax) * 100))}%`,
+    "--thermo-yellow-end": `${Math.max(0, Math.min(100, (bandThresholds.yellowEnd / scaleMax) * 100))}%`,
+  } as React.CSSProperties;
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
@@ -1496,7 +1500,7 @@ function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, 
       </div>
       {!collapsed && (
         <>
-          <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`}>
+          <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`} style={bandStyle}>
             <div className="tax-thermometer__heat" />
             {visibleMarkers.map((marker) => (
               <div
@@ -1548,13 +1552,14 @@ function getReachedTaxRateLabel(markers: ThermometerMarker[], taxableIncome: num
   return reached;
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, niitThreshold }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; niitThreshold: number }) {
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus }) {
   const [collapsedSections, setCollapsedSections] = useState({ summary: false, federal: false, state: false });
   const totalTax = federalTax + stateTax;
-  const federalMarkers = [
-    ...federalOrdinaryRateMarkers[filingStatus],
-    { amount: niitThreshold, label: "NIIT", detail: "Federal NIIT MAGI threshold", tone: "surtax" },
-  ].sort((a, b) => a.amount - b.amount);
+  const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
+  const federal12Threshold = federalMarkers.find((marker) => marker.label === "12%")?.amount || 0;
+  const federal22Threshold = federalMarkers.find((marker) => marker.label === "22%")?.amount || federal12Threshold;
+  const ca4Threshold = caTaxRateMarkers.find((marker) => marker.label === "4%")?.amount || 0;
+  const ca6Threshold = caTaxRateMarkers.find((marker) => marker.label === "6%")?.amount || ca4Threshold;
   const federalEffectiveRate = federalTaxable > 0 ? federalTax / federalTaxable : 0;
   const stateEffectiveRate = stateTaxable > 0 ? stateTax / stateTaxable : 0;
   const federalValues: ThermometerValue[] = [
@@ -1578,8 +1583,8 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
 
   return (
     <div className="tax-thermometer-panel">
-      <TaxThermometer title="Federal Tax" subtitle={`2025 ordinary brackets, ${filingStatus.toUpperCase()}, plus NIIT`} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
-      <TaxThermometer title="California Tax" subtitle="2025 CA MFJ brackets plus 1% surtax trigger" values={stateValues} markers={caTaxRateMarkers} stats={stateStats} footerLabel="CA taxable income" footerValue={formatCurrencyDetailed(stateTaxable)} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
+      <TaxThermometer title="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
+      <TaxThermometer title="California Tax" subtitle="Green <4%, yellow <6%, red above 6%" values={stateValues} markers={caTaxRateMarkers} stats={stateStats} footerLabel="CA taxable income" footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={{ greenEnd: ca4Threshold, yellowEnd: ca6Threshold }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
       <div className={`tax-thermometer-panel__summary ${collapsedSections.summary ? "tax-thermometer-panel__summary--collapsed" : ""}`}>
         <div className="tax-thermometer-panel__summary-heading">
           <div>
@@ -3800,7 +3805,6 @@ export default function App() {
                 federalTax={federalResult?.tax || 0}
                 stateTax={stateResult?.tax || 0}
                 filingStatus={federalSettings.filingStatus}
-                niitThreshold={niitThreshold}
               />
             </>
           ) : (

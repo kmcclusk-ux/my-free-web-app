@@ -159,8 +159,8 @@
 .tax-thermometer__heading em { font-style: normal; white-space: nowrap; }
 .tax-thermometer__heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .tax-thermometer__toggle { min-width: 58px; }
-.tax-thermometer__track { position: relative; height: 78px; border-radius: 999px; background: linear-gradient(90deg, rgba(61,145,123,.16), rgba(231,188,87,.22), rgba(196,90,62,.26)); border: 1px solid rgba(24,49,58,.1); overflow: visible; }
-.tax-thermometer__heat { position: absolute; inset: 26px 10px; border-radius: 999px; background: linear-gradient(90deg, #5aa77b, #d8ad43, #ba4d3c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); }
+.tax-thermometer__track { position: relative; height: 78px; border-radius: 999px; background: linear-gradient(90deg, rgba(31, 157, 104, .20) 0 var(--thermo-green-end), rgba(245, 165, 36, .24) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .24) var(--thermo-yellow-end) 100%); border: 1px solid rgba(24,49,58,.1); overflow: visible; }
+.tax-thermometer__heat { position: absolute; inset: 26px 10px; border-radius: 999px; background: linear-gradient(90deg, #1f9d68 0 var(--thermo-green-end), #f5a524 var(--thermo-green-end) var(--thermo-yellow-end), #e5484d var(--thermo-yellow-end) 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); }
 .tax-thermometer__tick { position: absolute; top: 16px; bottom: 12px; left: var(--thermo-position); width: 1px; background: rgba(24,49,58,.28); transform: translateX(-50%); }
 .tax-thermometer__tick span { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); padding: 1px 4px; border-radius: 999px; background: rgba(255,255,255,.88); color: #40595f; font-size: .62rem; white-space: nowrap; }
 .tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
@@ -208,8 +208,8 @@
 .thermometer-rail .tax-thermometer__heading-actions { flex-direction: column; align-items: flex-end; gap: 4px; }
 .thermometer-rail .tax-thermometer__heading em { font-size: .58rem; white-space: normal; text-align: right; }
 .thermometer-rail .tax-thermometer__toggle { min-width: 46px; padding: 4px 7px; font-size: .68rem; }
-.thermometer-rail .tax-thermometer__track { width: 58px; height: 245px; margin: 0 auto; background: linear-gradient(0deg, rgba(61,145,123,.16), rgba(231,188,87,.22), rgba(196,90,62,.26)); }
-.thermometer-rail .tax-thermometer__heat { inset: 10px 20px; background: linear-gradient(0deg, #5aa77b, #d8ad43, #ba4d3c); }
+.thermometer-rail .tax-thermometer__track { width: 58px; height: 245px; margin: 0 auto; background: linear-gradient(0deg, rgba(31, 157, 104, .20) 0 var(--thermo-green-end), rgba(245, 165, 36, .24) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .24) var(--thermo-yellow-end) 100%); }
+.thermometer-rail .tax-thermometer__heat { inset: 10px 20px; background: linear-gradient(0deg, #1f9d68 0 var(--thermo-green-end), #f5a524 var(--thermo-green-end) var(--thermo-yellow-end), #e5484d var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__tick { top: auto; bottom: var(--thermo-position); left: 50%; width: 72px; height: 1px; transform: translate(-50%, 50%); }
 .thermometer-rail .tax-thermometer__tick span { top: 50%; left: calc(100% + 4px); transform: translateY(-50%); font-size: .5rem; }
 .thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
@@ -872,11 +872,11 @@
 }
 .tax-thermometer__track {
   border: 1px solid rgba(20,33,38,.08);
-  background: linear-gradient(90deg, rgba(31,157,104,.12), rgba(196,139,58,.15), rgba(208,90,90,.16));
+  background: linear-gradient(90deg, rgba(31,157,104,.18) 0 var(--thermo-green-end), rgba(196,139,58,.22) var(--thermo-green-end) var(--thermo-yellow-end), rgba(208,90,90,.22) var(--thermo-yellow-end) 100%);
 }
-.tax-thermometer__heat { background: linear-gradient(90deg, var(--pm-positive), var(--pm-gold), var(--pm-negative)); opacity: .9; }
-.thermometer-rail .tax-thermometer__track { background: linear-gradient(0deg, rgba(31,157,104,.12), rgba(196,139,58,.15), rgba(208,90,90,.16)); }
-.thermometer-rail .tax-thermometer__heat { background: linear-gradient(0deg, var(--pm-positive), var(--pm-gold), var(--pm-negative)); }
+.tax-thermometer__heat { background: linear-gradient(90deg, var(--pm-positive) 0 var(--thermo-green-end), var(--pm-gold) var(--thermo-green-end) var(--thermo-yellow-end), var(--pm-negative) var(--thermo-yellow-end) 100%); opacity: .95; }
+.thermometer-rail .tax-thermometer__track { background: linear-gradient(0deg, rgba(31,157,104,.18) 0 var(--thermo-green-end), rgba(196,139,58,.22) var(--thermo-green-end) var(--thermo-yellow-end), rgba(208,90,90,.22) var(--thermo-yellow-end) 100%); }
+.thermometer-rail .tax-thermometer__heat { background: linear-gradient(0deg, var(--pm-positive) 0 var(--thermo-green-end), var(--pm-gold) var(--thermo-green-end) var(--thermo-yellow-end), var(--pm-negative) var(--thermo-yellow-end) 100%); }
 .tax-thermometer__value--income { background: var(--pm-text); }
 .tax-thermometer__value--taxable { background: var(--pm-teal); }
 .tax-thermometer__value--tax { background: var(--pm-gold); }
@@ -1773,19 +1773,19 @@
 
 .tax-thermometer__track {
   border-color: var(--poly-line);
-  background: linear-gradient(90deg, rgba(0, 168, 120, .13), rgba(245, 165, 36, .16), rgba(229, 72, 77, .16));
+  background: linear-gradient(90deg, rgba(0, 168, 120, .18) 0 var(--thermo-green-end), rgba(245, 165, 36, .22) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .22) var(--thermo-yellow-end) 100%);
 }
 
 .tax-thermometer__heat {
-  background: linear-gradient(90deg, var(--poly-green), var(--poly-amber), var(--poly-red));
+  background: linear-gradient(90deg, var(--poly-green) 0 var(--thermo-green-end), var(--poly-amber) var(--thermo-green-end) var(--thermo-yellow-end), var(--poly-red) var(--thermo-yellow-end) 100%);
 }
 
 .thermometer-rail .tax-thermometer__track {
-  background: linear-gradient(0deg, rgba(0, 168, 120, .13), rgba(245, 165, 36, .16), rgba(229, 72, 77, .16));
+  background: linear-gradient(0deg, rgba(0, 168, 120, .18) 0 var(--thermo-green-end), rgba(245, 165, 36, .22) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .22) var(--thermo-yellow-end) 100%);
 }
 
 .thermometer-rail .tax-thermometer__heat {
-  background: linear-gradient(0deg, var(--poly-green), var(--poly-amber), var(--poly-red));
+  background: linear-gradient(0deg, var(--poly-green) 0 var(--thermo-green-end), var(--poly-amber) var(--thermo-green-end) var(--thermo-yellow-end), var(--poly-red) var(--thermo-yellow-end) 100%);
 }
 
 .tax-thermometer__value--income {
