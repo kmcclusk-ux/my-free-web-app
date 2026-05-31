@@ -2838,6 +2838,48 @@ export default function App() {
   const afterTaxIncome = flows.totalIncome - totalTax;
   const monthlyIncome = flows.totalIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0;
+  const actionMenu = (
+    <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
+      <button className="ai-button topbar-icon-button topbar-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
+        <TopbarActionIcon name="menu" />
+      </button>
+      {isTopbarMenuOpen && (
+        <div className="topbar-menu__panel" role="menu" aria-label="Application actions">
+          {authEnabled ? (
+            authState.status === "signedIn" ? (
+              <>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); signOutCognito(); }}>
+                  <TopbarActionIcon name="signOut" />
+                  <span>Sign out</span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copyChatGptConnectorUrl(); }} disabled={isCreatingMcpToken}>
+                  <TopbarActionIcon name="copy" />
+                  <span>{isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}</span>
+                </button>
+              </>
+            ) : (
+              <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void startCognitoSignIn(); }} disabled={authState.status === "loading"}>
+                <TopbarActionIcon name="signIn" />
+                <span>{authState.status === "loading" ? "Signing in..." : "Sign in"}</span>
+              </button>
+            )
+          ) : null}
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsAssistantOpen((current) => !current); }}>
+            <TopbarActionIcon name="assistant" />
+            <span>{isAssistantOpen ? "Close AI Assistant" : "AI Assistant"}</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsSheetPanelOpen((current) => !current); }}>
+            <TopbarActionIcon name="sheet" />
+            <span>{isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}</span>
+          </button>
+          <a className="topbar-menu__item" href={CHATGPT_URL} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setIsTopbarMenuOpen(false)}>
+            <TopbarActionIcon name="chat" />
+            <span>ChatGPT</span>
+          </a>
+        </div>
+      )}
+    </div>
+  );
   const kpiMetrics: KpiMetricConfig[] = [
     { label: "After-tax income", value: formatCurrency(afterTaxIncome), numericValue: afterTaxIncome, tone: "warning" },
     { label: "Annual income", value: formatCurrency(flows.totalIncome), secondaryValue: `${formatCurrency(monthlyIncome)} monthly`, numericValue: flows.totalIncome },
@@ -3407,6 +3449,7 @@ export default function App() {
   }
   return (
     <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
+      {actionMenu}
       <aside className="sidebar">
         <div className="sidebar__brand"><AfterTaxUSLogo /></div>
         <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
@@ -3435,46 +3478,6 @@ export default function App() {
             ) : (
               <div className="topbar-chip">Auth: legacy</div>
             )}
-            <div className="topbar-menu" ref={topbarMenuRef}>
-              <button className="ai-button topbar-icon-button topbar-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
-                <TopbarActionIcon name="menu" />
-              </button>
-              {isTopbarMenuOpen && (
-                <div className="topbar-menu__panel" role="menu" aria-label="Application actions">
-                  {authEnabled ? (
-                    authState.status === "signedIn" ? (
-                      <>
-                        <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); signOutCognito(); }}>
-                          <TopbarActionIcon name="signOut" />
-                          <span>Sign out</span>
-                        </button>
-                        <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copyChatGptConnectorUrl(); }} disabled={isCreatingMcpToken}>
-                          <TopbarActionIcon name="copy" />
-                          <span>{isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void startCognitoSignIn(); }} disabled={authState.status === "loading"}>
-                        <TopbarActionIcon name="signIn" />
-                        <span>{authState.status === "loading" ? "Signing in..." : "Sign in"}</span>
-                      </button>
-                    )
-                  ) : null}
-                  <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsAssistantOpen((current) => !current); }}>
-                    <TopbarActionIcon name="assistant" />
-                    <span>{isAssistantOpen ? "Close AI Assistant" : "AI Assistant"}</span>
-                  </button>
-                  <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsSheetPanelOpen((current) => !current); }}>
-                    <TopbarActionIcon name="sheet" />
-                    <span>{isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}</span>
-                  </button>
-                  <a className="topbar-menu__item" href={CHATGPT_URL} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setIsTopbarMenuOpen(false)}>
-                    <TopbarActionIcon name="chat" />
-                    <span>ChatGPT</span>
-                  </a>
-                </div>
-              )}
-            </div>
           </div>
         </div>
         {isAssistantOpen && (
