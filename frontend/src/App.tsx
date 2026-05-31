@@ -3483,14 +3483,17 @@ export default function App() {
   }
 
   return (
-    <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
-      <aside className="sidebar">
-        <div className="sidebar__topline">
+    <div className="app-shell">
+      <header className="app-top-nav" aria-label="Application menu">
+        <div className="app-top-nav__inner">
           {actionMenu}
         </div>
-        <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
-      </aside>
-      <main className="content-panel">
+      </header>
+      <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
+        <aside className="sidebar">
+          <nav className="sidebar__nav">{navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</nav>
+        </aside>
+        <main className="content-panel">
         <div className="portfolio-workstation__sticky">
           <CompactKpiHeader
             metrics={kpiMetrics}
@@ -3799,6 +3802,7 @@ export default function App() {
           )}
         </aside>
       )}
+      </div>
     </div>
   );
 }
