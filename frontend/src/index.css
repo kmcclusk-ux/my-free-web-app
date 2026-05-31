@@ -2,11 +2,11 @@
   font-family: "Geist", "Inter", "SF Pro Display", "Segoe UI Variable", "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #142126;
+  color: #111827;
   background:
-    radial-gradient(circle at 8% 0%, rgba(196, 139, 58, 0.16), transparent 28%),
-    radial-gradient(circle at 92% 4%, rgba(31, 109, 106, 0.12), transparent 24%),
-    linear-gradient(180deg, #f5f7f8 0%, #edf3f1 46%, #f7f8f6 100%);
+    radial-gradient(circle at 18% -8%, rgba(0, 102, 255, 0.10), transparent 28%),
+    radial-gradient(circle at 88% 0%, rgba(0, 170, 122, 0.08), transparent 24%),
+    linear-gradient(180deg, #f6f8fb 0%, #eef3f8 48%, #f8fafc 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -25,7 +25,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  color: #142126;
+  color: #111827;
   background: transparent;
 }
 
