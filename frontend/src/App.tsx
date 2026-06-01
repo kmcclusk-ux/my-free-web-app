@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import "./App.css";
 
 type TabKey =
@@ -1271,9 +1271,53 @@ type KpiMetricConfig = {
   tone?: "default" | "accent" | "warning" | "sync";
 };
 
+const ODOMETER_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+function getValueDigits(value: string) {
+  return value.match(/\d/g) ?? [];
+}
+
+function OdometerValue({ value, previousValue, spinning }: { value: string; previousValue: string; spinning: boolean }) {
+  const previousDigits = getValueDigits(previousValue);
+  let digitIndex = 0;
+
+  return (
+    <strong className="kpi-pill__value" aria-label={value}>
+      {value.split("").map((character, index) => {
+        if (!/\d/.test(character)) {
+          return <span className="kpi-odometer-char" key={`${character}-${index}`}>{character}</span>;
+        }
+
+        const fromDigit = previousDigits[digitIndex] ?? character;
+        const toDigit = character;
+        digitIndex += 1;
+        const fromNumber = Number(fromDigit);
+        const toNumber = Number(toDigit);
+        const style = {
+          "--odometer-from-y": `${fromNumber * -1.08}em`,
+          "--odometer-to-y": `${toNumber * -1.08}em`,
+          "--odometer-spin-y": `${(toNumber + 10) * -1.08}em`,
+          "--odometer-settle-y": `${(toNumber - 0.22) * -1.08}em`,
+        } as CSSProperties;
+
+        return (
+          <span className={`kpi-odometer ${spinning ? "kpi-odometer--spinning" : ""}`} style={style} key={`${index}-${fromDigit}-${toDigit}`}>
+            <span className="kpi-odometer__strip" aria-hidden="true">
+              {ODOMETER_DIGITS.map((digit) => <span key={digit}>{digit}</span>)}
+            </span>
+            <span className="kpi-odometer__fallback">{toDigit}</span>
+          </span>
+        );
+      })}
+    </strong>
+  );
+}
+
 function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
+  const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
+  const [odometerValue, setOdometerValue] = useState({ previous: value, current: value });
   const [isAnimatingValue, setIsAnimatingValue] = useState(false);
   const isPrimaryMetric = label.toLowerCase() === "after-tax income";
 
@@ -1282,15 +1326,19 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
     const previous = previousValue.current;
     if (previous !== null && Math.abs(numericValue - previous) > 0.005) {
       setDelta(numericValue - previous);
+      setOdometerValue({ previous: previousDisplayValue.current, current: value });
       setIsAnimatingValue(false);
       window.requestAnimationFrame(() => setIsAnimatingValue(true));
+    } else if (previous === null) {
+      setOdometerValue({ previous: value, current: value });
     }
     previousValue.current = numericValue;
-  }, [numericValue]);
+    previousDisplayValue.current = value;
+  }, [numericValue, value]);
 
   useEffect(() => {
     if (!isAnimatingValue) return;
-    const timeoutId = window.setTimeout(() => setIsAnimatingValue(false), 720);
+    const timeoutId = window.setTimeout(() => setIsAnimatingValue(false), 820);
     return () => window.clearTimeout(timeoutId);
   }, [isAnimatingValue]);
 
@@ -1305,7 +1353,7 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
   return (
     <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}>
       <span>{label}</span>
-      <strong className="kpi-pill__value">{value}</strong>
+      <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
       {secondaryValue && <small>{secondaryValue}</small>}
       {formattedDelta && deltaValue !== null && (
         <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>

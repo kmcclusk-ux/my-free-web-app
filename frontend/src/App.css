@@ -80,27 +80,80 @@
   color: #ff8a8a;
 }
 .kpi-pill__value {
-  display: block;
-  transform-origin: left center;
-  will-change: transform, color, text-shadow;
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
 }
-.kpi-pill--changed .kpi-pill__value {
-  animation: kpi-value-rise 720ms cubic-bezier(.2, .85, .22, 1);
+.kpi-odometer-char,
+.kpi-odometer {
+  display: inline-block;
 }
-@keyframes kpi-value-rise {
+.kpi-odometer {
+  position: relative;
+  width: .61em;
+  height: 1.08em;
+  overflow: hidden;
+  vertical-align: -.12em;
+}
+.kpi-odometer__strip {
+  display: grid;
+  grid-template-rows: repeat(10, 1.08em);
+  transform: translateY(var(--odometer-to-y));
+  will-change: transform, filter;
+}
+.kpi-odometer__strip span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.08em;
+}
+.kpi-odometer--spinning .kpi-odometer__strip {
+  animation: kpi-odometer-roll 820ms cubic-bezier(.16, .86, .2, 1);
+}
+.kpi-odometer__fallback {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+.kpi-pill--changed .kpi-odometer--spinning {
+  color: #52d6a9;
+  text-shadow: 0 0 14px rgba(82, 214, 169, .32);
+}
+.kpi-pill .kpi-pill__value span,
+.app-top-nav .kpi-pill .kpi-pill__value span {
+  overflow: visible;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-overflow: clip;
+  text-transform: none;
+  white-space: nowrap;
+}
+@keyframes kpi-odometer-roll {
   0% {
-    color: #52d6a9;
-    text-shadow: 0 0 0 rgba(82, 214, 169, 0);
-    transform: translateY(3px) scale(.96);
+    filter: blur(0);
+    transform: translateY(var(--odometer-from-y));
   }
-  42% {
-    color: #ffffff;
-    text-shadow: 0 0 18px rgba(82, 214, 169, .42);
-    transform: translateY(-1px) scale(1.08);
+  34% {
+    filter: blur(.8px);
+    transform: translateY(var(--odometer-spin-y));
+  }
+  74% {
+    filter: blur(.18px);
+    transform: translateY(var(--odometer-settle-y));
   }
   100% {
-    text-shadow: 0 0 0 rgba(82, 214, 169, 0);
-    transform: translateY(0) scale(1);
+    filter: blur(0);
+    transform: translateY(var(--odometer-to-y));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kpi-odometer--spinning .kpi-odometer__strip {
+    animation: none;
   }
 }
 .workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr) 216px; min-height: calc(100vh - var(--app-top-nav-height)); }
