@@ -2025,6 +2025,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [renameTarget, setRenameTarget] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
+  const [showOverrideColumns, setShowOverrideColumns] = useState(false);
+  const [showTaxColumns, setShowTaxColumns] = useState(false);
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
@@ -2252,6 +2254,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     return acc;
   }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
   const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--total">{formatCurrencyDetailed(value)}</div></td>;
+  const tableClassName = [
+    "sheet-table",
+    "sheet-table--compact",
+    "sheet-table--workbook",
+    !showOverrideColumns ? "sheet-table--hide-override" : "",
+    !showTaxColumns ? "sheet-table--hide-tax-breakdown" : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
@@ -2259,6 +2268,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveAllRows} aria-label="Delete all rows" title="Delete all rows"><RowActionIcon name="delete" /></button>
+        <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
+          <button className={`ghost-button ghost-button--compact column-toggle ${showOverrideColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showOverrideColumns} onClick={() => setShowOverrideColumns((current) => !current)}>
+            {showOverrideColumns ? "- Override" : "+ Override"}
+          </button>
+          <button className={`ghost-button ghost-button--compact column-toggle ${showTaxColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showTaxColumns} onClick={() => setShowTaxColumns((current) => !current)}>
+            {showTaxColumns ? "- Tax categories" : "+ Tax categories"}
+          </button>
+        </div>
       </div>
       {hasViewState && (
         <div className="view-state-strip" role="status">
@@ -2351,7 +2368,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         </div>
       )}
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
-        <table className="sheet-table sheet-table--compact sheet-table--workbook">
+        <table className={tableClassName}>
           <thead>
             <tr>
               <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th />

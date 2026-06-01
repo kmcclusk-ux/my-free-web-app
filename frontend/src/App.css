@@ -2043,6 +2043,45 @@
   color: #b42318;
 }
 
+.column-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.column-toggle {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 750;
+  letter-spacing: .03em;
+}
+
+.column-toggle--open {
+  border-color: rgba(31, 109, 106, .22);
+  background: rgba(31, 109, 106, .10);
+  color: var(--poly-blue);
+}
+
+.sheet-table--workbook.sheet-table--hide-override {
+  min-width: 2860px;
+}
+
+.sheet-table--workbook.sheet-table--hide-tax-breakdown {
+  min-width: 1800px;
+}
+
+.sheet-table--workbook.sheet-table--hide-override.sheet-table--hide-tax-breakdown {
+  min-width: 1180px;
+}
+
+.sheet-table--hide-override :is(th, td):nth-child(n+10):nth-child(-n+17),
+.sheet-table--hide-tax-breakdown :is(th, td):nth-child(n+20):nth-child(-n+36) {
+  display: none;
+}
+
 .tax-panel-show-tab {
   display: inline-flex;
   align-items: center;
