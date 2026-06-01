@@ -938,6 +938,10 @@ function parseWorkbookSettings(settings: unknown) {
 function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
 function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
 function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
+function formatSignedCurrency(value: number) {
+  if (Math.abs(value) < 0.5) return "$0";
+  return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
+}
 function fedTaxAdjust(amount: number, taxTreatment: string, extraData: number, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; case "real estate": return pref ? 0 : Math.max(amount - extraData, 0); default: return pref ? 0 : amount; } }
 function stateTaxAdjust(amount: number, taxTreatment: string, extraData: number) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "state tax free": case "ss-85-fed": return 0; case "real estate": return Math.max(amount - extraData, 0); default: return amount; } }
 async function postTaxCalculation(payload: Record<string, number | string>) {
@@ -1525,7 +1529,7 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
   );
 }
 
-function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, footerValue, bandThresholds, collapsed, onToggle }: { title: string; subtitle: string; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; bandThresholds: { greenEnd: number; yellowEnd: number }; collapsed: boolean; onToggle: () => void }) {
+function TaxThermometer({ title, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, bandThresholds, collapsed, onToggle }: { title: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; bandThresholds: { greenEnd: number; yellowEnd: number }; collapsed: boolean; onToggle: () => void }) {
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
   const bandStyle = {
@@ -1555,9 +1559,13 @@ function TaxThermometer({ title, subtitle, values, markers, stats, footerLabel, 
                 key={`${marker.label}-${marker.amount}`}
                 className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
                 style={positionStyle(marker.amount)}
-                title={`${marker.detail}: ${formatCurrency(marker.amount)}`}
+                title={`${marker.detail}: ${formatCurrency(marker.amount)} (${formatSignedCurrency(taxableIncome - marker.amount)} vs current taxable income)`}
               >
-                <span>{marker.label}</span>
+                <span className="tax-thermometer__tick-label">
+                  <strong>{marker.label}</strong>
+                  <em>{formatCurrency(marker.amount)}</em>
+                  <small className={taxableIncome >= marker.amount ? "tax-thermometer__distance tax-thermometer__distance--past" : "tax-thermometer__distance tax-thermometer__distance--away"}>{formatSignedCurrency(taxableIncome - marker.amount)}</small>
+                </span>
               </div>
             ))}
             {values.map((value) => (
@@ -1631,8 +1639,8 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
 
   return (
     <div className="tax-thermometer-panel">
-      <TaxThermometer title="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
-      <TaxThermometer title="California Tax" subtitle="Green <4%, yellow <6%, red above 6%" values={stateValues} markers={caTaxRateMarkers} stats={stateStats} footerLabel="CA taxable income" footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={{ greenEnd: ca4Threshold, yellowEnd: ca6Threshold }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
+      <TaxThermometer title="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
+      <TaxThermometer title="California Tax" subtitle="Green <4%, yellow <6%, red above 6%" taxableIncome={stateTaxable} values={stateValues} markers={caTaxRateMarkers} stats={stateStats} footerLabel="CA taxable income" footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={{ greenEnd: ca4Threshold, yellowEnd: ca6Threshold }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
       <div className={`tax-thermometer-panel__summary ${collapsedSections.summary ? "tax-thermometer-panel__summary--collapsed" : ""}`}>
         <div className="tax-thermometer-panel__summary-heading">
           <div>
