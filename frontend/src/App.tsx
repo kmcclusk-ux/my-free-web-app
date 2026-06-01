@@ -1271,44 +1271,8 @@ type KpiMetricConfig = {
   tone?: "default" | "accent" | "warning" | "sync";
 };
 
-function getDigitQueue(value: string) {
-  return value.match(/\d/g) || [];
-}
-
-function SlotMachineValue({ value, previousValue, spinning }: { value: string; previousValue: string; spinning: boolean }) {
-  const previousDigits = getDigitQueue(previousValue);
-  const nextDigits = getDigitQueue(value);
-  let digitIndex = 0;
-
-  return (
-    <strong className="kpi-pill__value" aria-label={value}>
-      {value.split("").map((character, index) => {
-        if (!/\d/.test(character)) {
-          return <span className="kpi-slot-char" key={`${character}-${index}`}>{character}</span>;
-        }
-
-        const fromDigit = previousDigits[digitIndex] || character;
-        const toDigit = nextDigits[digitIndex] || character;
-        digitIndex += 1;
-
-        return (
-          <span className={`kpi-slot ${spinning ? "kpi-slot--spinning" : ""}`} key={`${index}-${fromDigit}-${toDigit}`}>
-            <span className="kpi-slot__reel" aria-hidden="true">
-              <span>{fromDigit}</span>
-              <span>{toDigit}</span>
-            </span>
-            <span className="kpi-slot__fallback">{toDigit}</span>
-          </span>
-        );
-      })}
-    </strong>
-  );
-}
-
 function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
-  const previousDisplayValue = useRef(value);
-  const [slotValue, setSlotValue] = useState({ previous: value, current: value });
   const [delta, setDelta] = useState<number | null>(null);
   const [isAnimatingValue, setIsAnimatingValue] = useState(false);
   const isPrimaryMetric = label.toLowerCase() === "after-tax income";
@@ -1318,15 +1282,11 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
     const previous = previousValue.current;
     if (previous !== null && Math.abs(numericValue - previous) > 0.005) {
       setDelta(numericValue - previous);
-      setSlotValue({ previous: previousDisplayValue.current, current: value });
       setIsAnimatingValue(false);
       window.requestAnimationFrame(() => setIsAnimatingValue(true));
-    } else if (previous === null) {
-      setSlotValue({ previous: value, current: value });
     }
     previousValue.current = numericValue;
-    previousDisplayValue.current = value;
-  }, [numericValue, value]);
+  }, [numericValue]);
 
   useEffect(() => {
     if (!isAnimatingValue) return;
@@ -1345,7 +1305,7 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
   return (
     <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}>
       <span>{label}</span>
-      <SlotMachineValue value={slotValue.current} previousValue={slotValue.previous} spinning={isAnimatingValue} />
+      <strong className="kpi-pill__value">{value}</strong>
       {secondaryValue && <small>{secondaryValue}</small>}
       {formattedDelta && deltaValue !== null && (
         <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
