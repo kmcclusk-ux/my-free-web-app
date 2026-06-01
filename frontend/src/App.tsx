@@ -1979,7 +1979,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   return <Section title={title} subtitle={subtitle}><div className="actions-row"><button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button></div><div className="table-wrap table-wrap--tall"><table className="sheet-table sheet-table--compact"><thead><tr>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}<td><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td></tr>)}</tbody></table></div></Section>;
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onClear, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onClear: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -2019,6 +2019,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const selectedRows = selectedAssetIds.map((id) => rows.find((row) => row.id === id)).filter((row): row is InvestmentRow => Boolean(row));
   const hasViewState = Boolean(filters.account || filters.category || filters.asset || sort.column || selectedRows.length > 0);
+  const includedRowCount = rows.filter((row) => row.includeIncome).length;
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
   const [newFavoriteName, setNewFavoriteName] = useState("");
   const [selectedFavoriteName, setSelectedFavoriteName] = useState("");
@@ -2105,10 +2106,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     setIsFavoritesPanelOpen(false);
   };
   const handleRemoveAllRows = () => {
+    if (includedRowCount === 0) return;
     setIsRemoveConfirmOpen(true);
   };
   const confirmRemoveAllRows = () => {
-    onClear();
+    onRemoveIncluded();
     setIsRemoveConfirmOpen(false);
   };
   const handleSaveFavorite = () => {
@@ -2267,7 +2269,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
       <div className="actions-row">
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
-        <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveAllRows} aria-label="Delete all rows" title="Delete all rows"><RowActionIcon name="delete" /></button>
+        <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveAllRows} aria-label="Delete included rows" title="Delete included rows" disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`ghost-button ghost-button--compact column-toggle ${showOverrideColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showOverrideColumns} onClick={() => setShowOverrideColumns((current) => !current)}>
             {showOverrideColumns ? "- Override" : "+ Override"}
@@ -2296,7 +2298,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </div>
           <div className="confirm-panel__actions">
             <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsRemoveConfirmOpen(false)}>Cancel</button>
-            <button className="primary-button ghost-button--compact" type="button" onClick={confirmRemoveAllRows}>Remove all rows</button>
+            <button className="primary-button ghost-button--compact" type="button" onClick={confirmRemoveAllRows}>Remove included rows</button>
           </div>
         </div>
       )}
@@ -3668,7 +3670,11 @@ export default function App() {
             onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })}
             onRemove={removeRow(setInvestments)}
             onReorder={reorderInvestments}
-            onClear={() => setInvestments([])}
+            onRemoveIncluded={() => {
+              const removedIds = new Set(investments.filter((row) => row.includeIncome).map((row) => row.id));
+              setInvestments((current) => current.filter((row) => !row.includeIncome));
+              setSelectedInvestmentIds((current) => current.filter((id) => !removedIds.has(id)));
+            }}
             onClearViewState={() => {
               setInvestmentFilters({ account: "", category: "", asset: "" });
               setInvestmentSort({ tableId: "investments", column: "", direction: "asc" });
