@@ -2105,11 +2105,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     onClearAllInc();
     setIsFavoritesPanelOpen(false);
   };
-  const handleRemoveAllRows = () => {
+  const includedRowsLabel = `${includedRowCount} included row${includedRowCount === 1 ? "" : "s"}`;
+  const handleRemoveIncludedRows = () => {
     if (includedRowCount === 0) return;
     setIsRemoveConfirmOpen(true);
   };
-  const confirmRemoveAllRows = () => {
+  const confirmRemoveIncludedRows = () => {
     onRemoveIncluded();
     setIsRemoveConfirmOpen(false);
   };
@@ -2269,7 +2270,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
       <div className="actions-row">
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
-        <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveAllRows} aria-label="Delete included rows" title="Delete included rows" disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
+        <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`ghost-button ghost-button--compact column-toggle ${showOverrideColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showOverrideColumns} onClick={() => setShowOverrideColumns((current) => !current)}>
             {showOverrideColumns ? "- Override" : "+ Override"}
@@ -2298,7 +2299,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </div>
           <div className="confirm-panel__actions">
             <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsRemoveConfirmOpen(false)}>Cancel</button>
-            <button className="primary-button ghost-button--compact" type="button" onClick={confirmRemoveAllRows}>Remove included rows</button>
+            <button className="primary-button ghost-button--compact" type="button" onClick={confirmRemoveIncludedRows}>Remove {includedRowsLabel}</button>
           </div>
         </div>
       )}
