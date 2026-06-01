@@ -2226,6 +2226,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     return classes.join(" ");
   };
   const totals = displayedDerivedRows.reduce((acc, row) => {
+    if (!row.includeIncome) return acc;
+
     acc.totalInvestment += toNumber(row.totalInvestment);
     acc.yearlyIncome += toNumber(row.yearlyIncome);
     acc.monthlyIncome += row.monthlyIncome;
@@ -2409,7 +2411,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </tbody>
           <tfoot>
             <tr className="investment-total-row">
-              <td /><td /><th scope="row">Totals</th><td /><td />
+              <td /><td /><th scope="row">Included totals</th><td /><td />
               {renderTotalCell(totals.totalInvestment)}
               {renderTotalCell(totals.yearlyIncome)}
               {renderTotalCell(totals.monthlyIncome)}
