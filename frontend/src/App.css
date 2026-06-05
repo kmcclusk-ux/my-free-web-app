@@ -2123,9 +2123,8 @@
   min-width: 1180px;
 }
 
-.sheet-table--hide-override :is(th, td):nth-child(10),
-.sheet-table--hide-override :is(th, td):nth-child(n+13):nth-child(-n+17),
-.sheet-table--hide-tax-breakdown :is(th, td):nth-child(n+20):nth-child(-n+36) {
+.sheet-table--hide-override :is(th, td):nth-child(n+31):nth-child(-n+36),
+.sheet-table--hide-tax-breakdown :is(th, td):nth-child(n+14):nth-child(-n+30) {
   display: none;
 }
 
@@ -2135,15 +2134,15 @@
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-override {
-  min-width: 2044px;
+  min-width: 2172px;
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-tax-breakdown {
-  min-width: 1320px;
+  min-width: 1260px;
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-override.sheet-table--hide-tax-breakdown {
-  min-width: 874px;
+  min-width: 910px;
 }
 
 .investments-workspace .sheet-table--workbook th,
@@ -2195,33 +2194,33 @@
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(7) { width: 74px; min-width: 74px; max-width: 74px; }
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(8) { width: 70px; min-width: 70px; max-width: 70px; }
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(9) { width: 70px; min-width: 70px; max-width: 70px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(10) { width: 32px; min-width: 32px; max-width: 32px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(11) { width: 72px; min-width: 72px; max-width: 72px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(12) { width: 42px; min-width: 42px; max-width: 42px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(10) { width: 72px; min-width: 72px; max-width: 72px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(11) { width: 42px; min-width: 42px; max-width: 42px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(12),
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(13) { width: 76px; min-width: 76px; max-width: 76px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(14) { width: 50px; min-width: 50px; max-width: 50px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(15) { width: 50px; min-width: 50px; max-width: 50px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(16) { width: 72px; min-width: 72px; max-width: 72px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(17) { width: 68px; min-width: 68px; max-width: 68px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(18) { width: 76px; min-width: 76px; max-width: 76px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(19) { width: 76px; min-width: 76px; max-width: 76px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(20) { width: 78px; min-width: 78px; max-width: 78px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(14) { width: 78px; min-width: 78px; max-width: 78px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(15),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(16),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(17),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(18) { width: 72px; min-width: 72px; max-width: 72px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(19),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(20) { width: 82px; min-width: 82px; max-width: 82px; }
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(21),
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(22),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(23),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(24) { width: 72px; min-width: 72px; max-width: 72px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(25),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(26) { width: 82px; min-width: 82px; max-width: 82px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(24),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(26),
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(27),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(30) { width: 70px; min-width: 70px; max-width: 70px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(23),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(25),
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(28),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(30),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(32),
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(29) { width: 78px; min-width: 78px; max-width: 78px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(31) { width: 32px; min-width: 32px; max-width: 32px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(32) { width: 76px; min-width: 76px; max-width: 76px; }
 .investments-workspace .sheet-table--workbook :is(th, td):nth-child(33),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(36) { width: 70px; min-width: 70px; max-width: 70px; }
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(29),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(31),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(34),
-.investments-workspace .sheet-table--workbook :is(th, td):nth-child(35) { width: 78px; min-width: 78px; max-width: 78px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(34) { width: 50px; min-width: 50px; max-width: 50px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(35) { width: 72px; min-width: 72px; max-width: 72px; }
+.investments-workspace .sheet-table--workbook :is(th, td):nth-child(36) { width: 68px; min-width: 68px; max-width: 68px; }
 
 .investments-workspace .sheet-table--workbook th:nth-child(1),
 .investments-workspace .sheet-table--workbook td:nth-child(1) { left: 0; }
@@ -2234,20 +2233,16 @@
 .investments-workspace .sheet-table--workbook th:nth-child(5),
 .investments-workspace .sheet-table--workbook td:nth-child(5) { left: 212px; }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(10),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(n+13):nth-child(-n+17) {
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(n+31):nth-child(-n+36) {
   background: #fff5df;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(10),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+13):nth-child(-n+17),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(10),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(n+13):nth-child(-n+17) {
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+31):nth-child(-n+36),
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(n+31):nth-child(-n+36) {
   background: rgba(255, 244, 218, .82) !important;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(10) :is(input, select, .readonly-cell),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+13):nth-child(-n+17) :is(input, select, .readonly-cell) {
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+31):nth-child(-n+36) :is(input, select, .readonly-cell) {
   background-color: rgba(255, 250, 238, .96);
   box-shadow: inset 0 -1px 0 rgba(196, 139, 58, .22);
 }

@@ -2382,7 +2382,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <table className={tableClassName}>
           <thead>
             <tr>
-              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Override</th><th>Symbol</th><th>%</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th>
+              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Symbol</th><th>%</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th>
             </tr>
           </thead>
           <tbody>
@@ -2405,14 +2405,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td>
                   <td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td>
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.monthlyIncome || 0)}</div></td>
-                  <td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>
                   <td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
                   <td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>
-                  <td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
-                  <td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
-                  <td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.extraData || 0)}</div></td>
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.filteredIncome || 0)}</div></td>
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.includedTotal || 0)}</div></td>
                   <td><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td>
@@ -2432,6 +2426,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.coveredCall || 0)}</div></td>
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.realEstate || 0)}</div></td>
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bitcoin || 0)}</div></td>
+                  <td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>
+                  <td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
+                  <td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
+                  <td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>
+                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.extraData || 0)}</div></td>
                 </tr>
               );
             })}
@@ -2442,8 +2442,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               {renderTotalCell(totals.totalInvestment)}
               {renderTotalCell(totals.yearlyIncome)}
               {renderTotalCell(totals.monthlyIncome)}
-              <td /><td /><td /><td /><td /><td /><td /><td />
-              {renderTotalCell(totals.extraData)}
+              <td /><td />
               {renderTotalCell(totals.filteredIncome)}
               {renderTotalCell(totals.includedTotal)}
               <td />
@@ -2463,6 +2462,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               {renderTotalCell(totals.coveredCall)}
               {renderTotalCell(totals.realEstate)}
               {renderTotalCell(totals.bitcoin)}
+              <td /><td /><td /><td /><td />
+              {renderTotalCell(totals.extraData)}
             </tr>
           </tfoot>
         </table>
