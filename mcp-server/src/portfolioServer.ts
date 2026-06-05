@@ -224,18 +224,36 @@ function getInvestmentIncome(row: WorkbookRow) {
   return rowNumber(row, "yearlyIncome", "yr_inc", "yearly_income", "yearinc", "yearly_income_amount", "yr");
 }
 
+function getInvestmentIncluded(row: WorkbookRow) {
+  const value = rowValue(row, "includeIncome", "inc", "include_income", "income", "include_investment_income", "use");
+  if (value === undefined) return true;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const text = String(value).trim().toLowerCase();
+  return text === "1" || text === "true" || text === "yes" || text === "y";
+}
+
 function summarizeInvestments(investments: InvestmentRow[]) {
-  const totalInvestment = investments.reduce(
+  const totalInvestmentAllRows = investments.reduce(
     (sum, row) => sum + getInvestmentTotal(row),
     0
   );
-  const totalIncome = investments.reduce(
+  const totalIncomeAllRows = investments.reduce(
+    (sum, row) => sum + getInvestmentIncome(row),
+    0
+  );
+  const includedInvestments = investments.filter(getInvestmentIncluded);
+  const includedInvestment = includedInvestments.reduce(
+    (sum, row) => sum + getInvestmentTotal(row),
+    0
+  );
+  const includedIncome = includedInvestments.reduce(
     (sum, row) => sum + getInvestmentIncome(row),
     0
   );
 
   const byAccount = Object.entries(
-    investments.reduce<Record<string, number>>((acc, row) => {
+    includedInvestments.reduce<Record<string, number>>((acc, row) => {
       const key = getInvestmentAccount(row) || "Unassigned";
       acc[key] = (acc[key] ?? 0) + getInvestmentTotal(row);
       return acc;
@@ -245,7 +263,7 @@ function summarizeInvestments(investments: InvestmentRow[]) {
     .sort((a, b) => b.marketValue - a.marketValue);
 
   const bySymbol = Object.entries(
-    investments.reduce<Record<string, number>>((acc, row) => {
+    includedInvestments.reduce<Record<string, number>>((acc, row) => {
       const key = getInvestmentSymbol(row) || rowText(row, "description", "desc") || "Unknown";
       acc[key] = (acc[key] ?? 0) + getInvestmentTotal(row);
       return acc;
@@ -257,9 +275,15 @@ function summarizeInvestments(investments: InvestmentRow[]) {
 
   return {
     positions: investments.length,
-    totalInvestment,
-    totalIncome,
-    yield: totalInvestment > 0 ? totalIncome / totalInvestment : 0,
+    includedPositions: includedInvestments.length,
+    totalInvestment: includedInvestment,
+    totalIncome: includedIncome,
+    yield: includedInvestment > 0 ? includedIncome / includedInvestment : 0,
+    includedInvestment,
+    includedIncome,
+    totalInvestmentAllRows,
+    totalIncomeAllRows,
+    allRowsYield: totalInvestmentAllRows > 0 ? totalIncomeAllRows / totalInvestmentAllRows : 0,
     byAccount,
     topHoldings: bySymbol,
   };
