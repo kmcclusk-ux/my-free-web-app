@@ -2123,7 +2123,8 @@
   min-width: 1180px;
 }
 
-.sheet-table--hide-override :is(th, td):nth-child(n+10):nth-child(-n+17),
+.sheet-table--hide-override :is(th, td):nth-child(10),
+.sheet-table--hide-override :is(th, td):nth-child(n+15):nth-child(-n+17),
 .sheet-table--hide-tax-breakdown :is(th, td):nth-child(n+20):nth-child(-n+36) {
   display: none;
 }
@@ -2134,7 +2135,7 @@
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-override {
-  min-width: 1930px;
+  min-width: 2170px;
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-tax-breakdown {
@@ -2142,7 +2143,7 @@
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-override.sheet-table--hide-tax-breakdown {
-  min-width: 760px;
+  min-width: 1000px;
 }
 
 .investments-workspace .sheet-table--workbook th,
@@ -2233,16 +2234,20 @@
 .investments-workspace .sheet-table--workbook th:nth-child(5),
 .investments-workspace .sheet-table--workbook td:nth-child(5) { left: 212px; }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(n+10):nth-child(-n+17) {
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(10),
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(n+15):nth-child(-n+17) {
   background: #fff5df;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+10):nth-child(-n+17),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(n+10):nth-child(-n+17) {
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(10),
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+15):nth-child(-n+17),
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(10),
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(n+15):nth-child(-n+17) {
   background: rgba(255, 244, 218, .82) !important;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+10):nth-child(-n+17) :is(input, select, .readonly-cell) {
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(10) :is(input, select, .readonly-cell),
+.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+15):nth-child(-n+17) :is(input, select, .readonly-cell) {
   background-color: rgba(255, 250, 238, .96);
   box-shadow: inset 0 -1px 0 rgba(196, 139, 58, .22);
 }
