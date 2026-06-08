@@ -406,10 +406,10 @@ function authHeaders(idToken?: string): HeadersInit {
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
+  { key: "tickers", label: "Tickers", meta: "symbol lookups" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "CA worksheet" },
   { key: "calculator", label: "Tax Calculator", meta: "summary" },
-  { key: "tickers", label: "Tickers", meta: "symbol lookups" },
   { key: "categories", label: "Categories", meta: "ticker categories" },
   { key: "taxTreatment", label: "Tax Treatment", meta: "sheet labels" },
   { key: "accounts", label: "Accounts", meta: "tax status" },
