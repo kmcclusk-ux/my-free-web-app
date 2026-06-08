@@ -1400,8 +1400,12 @@ function IncomeSnapshotControl({
 
   return (
     <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
-      <button className="income-snapshot__button" type="button" onClick={onCapture}>
-        Snapshot
+      <button className="income-snapshot__button" type="button" onClick={onCapture} aria-label="Snapshot income baseline" title="Snapshot">
+        <svg className="income-snapshot__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6.5 7.5 8.25 5h7.5l1.75 2.5H20a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5V9A1.5 1.5 0 0 1 4 7.5h2.5Z" />
+          <path d="M12 10a3.25 3.25 0 1 0 0 6.5 3.25 3.25 0 0 0 0-6.5Z" />
+        </svg>
+        <span>Snapshot</span>
       </button>
       <div className="income-snapshot__body" aria-live="polite">
         <div className="income-snapshot__line">
@@ -3680,12 +3684,6 @@ export default function App() {
             <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
           </div>
           <div className="topbar-stack">
-            <IncomeSnapshotControl
-              snapshot={incomeSnapshot}
-              deltas={incomeSnapshotDeltas}
-              onCapture={captureIncomeSnapshot}
-              className="income-snapshot--inline"
-            />
             {authEnabled ? (
               authState.status === "signedIn" ? (
                 <>
@@ -3698,6 +3696,12 @@ export default function App() {
             ) : (
               <div className="topbar-chip">Auth: legacy</div>
             )}
+            <IncomeSnapshotControl
+              snapshot={incomeSnapshot}
+              deltas={incomeSnapshotDeltas}
+              onCapture={captureIncomeSnapshot}
+              className="income-snapshot--inline"
+            />
           </div>
         </div>
         {isAssistantOpen && (
