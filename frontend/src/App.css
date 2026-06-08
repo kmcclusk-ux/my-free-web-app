@@ -1644,6 +1644,27 @@
   flex: 0 0 auto;
 }
 
+.topbar-menu__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar-menu__label small {
+  overflow: hidden;
+  color: var(--poly-muted);
+  font-size: .68rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-menu__item:hover .topbar-menu__label small {
+  color: inherit;
+  opacity: .78;
+}
+
 .app-splash {
   display: grid;
   min-height: 100vh;

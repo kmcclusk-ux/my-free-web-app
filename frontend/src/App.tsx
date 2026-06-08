@@ -3055,7 +3055,10 @@ export default function App() {
               <>
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); signOutCognito(); }}>
                   <TopbarActionIcon name="signOut" />
-                  <span>Sign out</span>
+                  <span className="topbar-menu__label">
+                    <span>Sign out</span>
+                    <small>{authState.user.email || authState.user.sub.slice(0, 8)}</small>
+                  </span>
                 </button>
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copyChatGptConnectorUrl(); }} disabled={isCreatingMcpToken}>
                   <TopbarActionIcon name="copy" />
@@ -3686,10 +3689,7 @@ export default function App() {
           <div className="topbar-stack">
             {authEnabled ? (
               authState.status === "signedIn" ? (
-                <>
-                  <div className="topbar-chip">Signed in: {authState.user.email || authState.user.sub.slice(0, 8)}</div>
-                  {mcpTokenMessage && <div className="topbar-chip">{mcpTokenMessage}</div>}
-                </>
+                mcpTokenMessage ? <div className="topbar-chip">{mcpTokenMessage}</div> : null
               ) : (
                 <div className="topbar-chip">{authState.status === "loading" ? "Auth: loading" : "Signed out"}</div>
               )
