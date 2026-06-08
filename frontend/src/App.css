@@ -151,11 +151,11 @@
 .income-snapshot__body {
   display: grid;
   gap: 2px;
-  min-width: 218px;
+  min-width: 300px;
 }
 .income-snapshot__line {
   display: grid;
-  grid-template-columns: 46px 1fr 1fr;
+  grid-template-columns: 46px minmax(104px, 1fr) minmax(104px, 1fr);
   align-items: center;
   gap: 6px;
   font-size: .56rem;
@@ -173,6 +173,29 @@
   font-size: .58rem;
   font-weight: 850;
   letter-spacing: -.015em;
+}
+.income-snapshot__value {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  color: inherit;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: -.02em;
+}
+.income-snapshot__value span {
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.income-snapshot__value em {
+  overflow: hidden;
+  font-size: .52rem;
+  font-style: normal;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .income-snapshot__delta--up {
   color: #52d6a9;
@@ -203,6 +226,9 @@
 }
 .income-snapshot--inline .income-snapshot__line span {
   color: var(--pm-muted, #667085);
+}
+.income-snapshot--inline .income-snapshot__value span {
+  color: var(--pm-text, #142126);
 }
 .income-snapshot--inline .income-snapshot__delta--up {
   color: var(--pm-positive, #1f9d68);

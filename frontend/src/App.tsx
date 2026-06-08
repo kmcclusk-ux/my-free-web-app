@@ -1383,6 +1383,15 @@ function incomeDeltaClassName(value: number) {
   return `income-snapshot__delta ${value >= 0 ? "income-snapshot__delta--up" : "income-snapshot__delta--down"}`;
 }
 
+function SnapshotValue({ label, value, delta }: { label: string; value: number; delta?: number }) {
+  return (
+    <strong className="income-snapshot__value">
+      <span>{label} {formatCurrency(value)}</span>
+      {typeof delta === "number" && <em className={incomeDeltaClassName(delta)}>{formatSignedCurrency(delta)}</em>}
+    </strong>
+  );
+}
+
 function IncomeSnapshotControl({
   snapshot,
   deltas,
@@ -1410,10 +1419,10 @@ function IncomeSnapshotControl({
       <div className="income-snapshot__body" aria-live="polite">
         <div className="income-snapshot__line">
           <span>Annual</span>
-          {deltas ? (
+          {snapshot ? (
             <>
-              <strong className={incomeDeltaClassName(deltas.beforeTaxAnnual)}>BT {formatSignedCurrency(deltas.beforeTaxAnnual)}</strong>
-              <strong className={incomeDeltaClassName(deltas.afterTaxAnnual)}>AT {formatSignedCurrency(deltas.afterTaxAnnual)}</strong>
+              <SnapshotValue label="BT" value={snapshot.beforeTaxAnnual} delta={deltas?.beforeTaxAnnual} />
+              <SnapshotValue label="AT" value={snapshot.afterTaxAnnual} delta={deltas?.afterTaxAnnual} />
             </>
           ) : (
             <strong className="income-snapshot__empty">Set baseline</strong>
@@ -1421,10 +1430,10 @@ function IncomeSnapshotControl({
         </div>
         <div className="income-snapshot__line">
           <span>Monthly</span>
-          {deltas ? (
+          {snapshot ? (
             <>
-              <strong className={incomeDeltaClassName(deltas.beforeTaxMonthly)}>BT {formatSignedCurrency(deltas.beforeTaxMonthly)}</strong>
-              <strong className={incomeDeltaClassName(deltas.afterTaxMonthly)}>AT {formatSignedCurrency(deltas.afterTaxMonthly)}</strong>
+              <SnapshotValue label="BT" value={snapshot.beforeTaxMonthly} delta={deltas?.beforeTaxMonthly} />
+              <SnapshotValue label="AT" value={snapshot.afterTaxMonthly} delta={deltas?.afterTaxMonthly} />
             </>
           ) : (
             <strong className="income-snapshot__empty">{capturedLabel}</strong>
