@@ -2060,6 +2060,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
+  const dropHandledRef = useRef(false);
   const stopAutoScroll = () => {
     if (autoScrollFrameRef.current !== null) {
       window.cancelAnimationFrame(autoScrollFrameRef.current);
@@ -2103,6 +2104,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   useEffect(() => () => stopAutoScroll(), []);
   const handleDragStart = (event: DragEvent<HTMLButtonElement>, rowId: number) => {
     setDraggingRowId(rowId);
+    dropHandledRef.current = false;
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", String(rowId));
   };
@@ -2128,6 +2130,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     event.preventDefault();
     const sourceId = Number(event.dataTransfer.getData("text/plain")) || draggingRowId;
     if (sourceId && sourceId !== targetId) {
+      dropHandledRef.current = true;
       onReorder(sourceId, targetId);
     }
     stopAutoScroll();
@@ -2135,6 +2138,10 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     setDragOverRowId(null);
   };
   const handleDragEnd = () => {
+    if (!dropHandledRef.current && draggingRowId !== null && dragOverRowId !== null && draggingRowId !== dragOverRowId) {
+      onReorder(draggingRowId, dragOverRowId);
+    }
+    dropHandledRef.current = false;
     stopAutoScroll();
     setDraggingRowId(null);
     setDragOverRowId(null);

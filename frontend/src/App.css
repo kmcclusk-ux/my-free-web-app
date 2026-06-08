@@ -2509,7 +2509,7 @@
 }
 
 .sheet-table--lookup tr.lookup-row--drag-over td {
-  box-shadow: inset 0 2px 0 rgba(29, 93, 108, .85);
+  box-shadow: inset 0 2px 0 rgba(11, 99, 246, .72);
 }
 
 @media (max-width: 1180px) {

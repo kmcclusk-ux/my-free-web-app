@@ -669,6 +669,7 @@ function sheetToRowObjects_(sheet) {
     for (var c = 0; c < headers.length; c++) {
       setExportRecordCell_(record, headers[c], c + 1, row[c]);
     }
+    record.id = r + 1;
     record.spreadsheet_row_number = r + 1;
     record.spreadsheetRowNumber = r + 1;
     rows.push(record);
