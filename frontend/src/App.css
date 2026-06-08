@@ -2418,6 +2418,10 @@
   writing-mode: horizontal-tb;
 }
 
+.content-panel > .sheet-section > .section-heading {
+  display: none;
+}
+
 @media (max-width: 1180px) {
   .workspace-shell--tax-collapsed { grid-template-columns: 124px minmax(0, 1fr) 44px; }
 }
