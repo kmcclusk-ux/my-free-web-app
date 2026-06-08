@@ -1387,17 +1387,19 @@ function IncomeSnapshotControl({
   snapshot,
   deltas,
   onCapture,
+  className = "",
 }: {
   snapshot: IncomeSnapshot | null;
   deltas: IncomeSnapshotValues | null;
   onCapture: () => void;
+  className?: string;
 }) {
   const capturedLabel = snapshot
     ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "No baseline";
 
   return (
-    <div className="income-snapshot" aria-label="Income snapshot comparison">
+    <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
       <button className="income-snapshot__button" type="button" onClick={onCapture}>
         Snapshot
       </button>
@@ -3664,13 +3666,7 @@ export default function App() {
           {actionMenu}
           <CompactKpiHeader
             metrics={kpiMetrics}
-          >
-            <IncomeSnapshotControl
-              snapshot={incomeSnapshot}
-              deltas={incomeSnapshotDeltas}
-              onCapture={captureIncomeSnapshot}
-            />
-          </CompactKpiHeader>
+          />
         </div>
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
@@ -3684,6 +3680,12 @@ export default function App() {
             <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
           </div>
           <div className="topbar-stack">
+            <IncomeSnapshotControl
+              snapshot={incomeSnapshot}
+              deltas={incomeSnapshotDeltas}
+              onCapture={captureIncomeSnapshot}
+              className="income-snapshot--inline"
+            />
             {authEnabled ? (
               authState.status === "signedIn" ? (
                 <>

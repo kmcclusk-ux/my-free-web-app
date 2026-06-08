@@ -153,6 +153,33 @@
   grid-column: span 2;
   color: rgba(255, 255, 255, .6);
 }
+.income-snapshot--inline {
+  border-color: rgba(20, 33, 38, .12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(247, 250, 249, .88));
+  color: var(--pm-text, #142126);
+  box-shadow: 0 8px 18px rgba(16, 38, 43, .07);
+}
+.income-snapshot--inline .income-snapshot__button {
+  border-color: rgba(31, 109, 106, .26);
+  background: linear-gradient(135deg, #174f52, #1f6d6a);
+  color: #fff;
+}
+.income-snapshot--inline .income-snapshot__button:hover {
+  border-color: rgba(31, 109, 106, .42);
+  background: linear-gradient(135deg, #123f42, #1f6d6a);
+}
+.income-snapshot--inline .income-snapshot__line span {
+  color: var(--pm-muted, #667085);
+}
+.income-snapshot--inline .income-snapshot__delta--up {
+  color: var(--pm-positive, #1f9d68);
+}
+.income-snapshot--inline .income-snapshot__delta--down {
+  color: var(--pm-negative, #d05a5a);
+}
+.income-snapshot--inline .income-snapshot__empty {
+  color: var(--pm-muted, #667085);
+}
 .kpi-pill__value {
   display: inline-flex;
   align-items: baseline;
