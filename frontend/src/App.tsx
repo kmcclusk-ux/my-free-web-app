@@ -1275,6 +1275,17 @@ type KpiMetricConfig = {
   tone?: "default" | "accent" | "warning" | "sync";
 };
 
+type IncomeSnapshotValues = {
+  beforeTaxAnnual: number;
+  beforeTaxMonthly: number;
+  afterTaxAnnual: number;
+  afterTaxMonthly: number;
+};
+
+type IncomeSnapshot = IncomeSnapshotValues & {
+  capturedAt: string;
+};
+
 const ODOMETER_DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 function getValueDigits(value: string) {
@@ -1368,16 +1379,69 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
   );
 }
 
+function incomeDeltaClassName(value: number) {
+  return `income-snapshot__delta ${value >= 0 ? "income-snapshot__delta--up" : "income-snapshot__delta--down"}`;
+}
+
+function IncomeSnapshotControl({
+  snapshot,
+  deltas,
+  onCapture,
+}: {
+  snapshot: IncomeSnapshot | null;
+  deltas: IncomeSnapshotValues | null;
+  onCapture: () => void;
+}) {
+  const capturedLabel = snapshot
+    ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "No baseline";
+
+  return (
+    <div className="income-snapshot" aria-label="Income snapshot comparison">
+      <button className="income-snapshot__button" type="button" onClick={onCapture}>
+        Snapshot
+      </button>
+      <div className="income-snapshot__body" aria-live="polite">
+        <div className="income-snapshot__line">
+          <span>Annual</span>
+          {deltas ? (
+            <>
+              <strong className={incomeDeltaClassName(deltas.beforeTaxAnnual)}>BT {formatSignedCurrency(deltas.beforeTaxAnnual)}</strong>
+              <strong className={incomeDeltaClassName(deltas.afterTaxAnnual)}>AT {formatSignedCurrency(deltas.afterTaxAnnual)}</strong>
+            </>
+          ) : (
+            <strong className="income-snapshot__empty">Set baseline</strong>
+          )}
+        </div>
+        <div className="income-snapshot__line">
+          <span>Monthly</span>
+          {deltas ? (
+            <>
+              <strong className={incomeDeltaClassName(deltas.beforeTaxMonthly)}>BT {formatSignedCurrency(deltas.beforeTaxMonthly)}</strong>
+              <strong className={incomeDeltaClassName(deltas.afterTaxMonthly)}>AT {formatSignedCurrency(deltas.afterTaxMonthly)}</strong>
+            </>
+          ) : (
+            <strong className="income-snapshot__empty">{capturedLabel}</strong>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CompactKpiHeader({
   metrics,
+  children,
 }: {
   metrics: KpiMetricConfig[];
+  children?: React.ReactNode;
 }) {
   return (
     <div className="kpi-header">
       <div className="kpi-header__metrics">
         {metrics.map((metric) => <KpiPill key={metric.label} {...metric} />)}
       </div>
+      {children && <div className="kpi-header__actions">{children}</div>}
     </div>
   );
 }
@@ -2569,6 +2633,7 @@ export default function App() {
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
+  const [incomeSnapshot, setIncomeSnapshot] = useState<IncomeSnapshot | null>(null);
   const saveTimeout = useRef<number | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedStorage = useRef(false);
@@ -2951,7 +3016,25 @@ export default function App() {
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
   const monthlyIncome = flows.totalIncome / 12;
+  const afterTaxMonthlyIncome = afterTaxIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0;
+  const currentIncomeSnapshot: IncomeSnapshotValues = {
+    beforeTaxAnnual: flows.totalIncome,
+    beforeTaxMonthly: monthlyIncome,
+    afterTaxAnnual: afterTaxIncome,
+    afterTaxMonthly: afterTaxMonthlyIncome,
+  };
+  const incomeSnapshotDeltas: IncomeSnapshotValues | null = incomeSnapshot
+    ? {
+      beforeTaxAnnual: currentIncomeSnapshot.beforeTaxAnnual - incomeSnapshot.beforeTaxAnnual,
+      beforeTaxMonthly: currentIncomeSnapshot.beforeTaxMonthly - incomeSnapshot.beforeTaxMonthly,
+      afterTaxAnnual: currentIncomeSnapshot.afterTaxAnnual - incomeSnapshot.afterTaxAnnual,
+      afterTaxMonthly: currentIncomeSnapshot.afterTaxMonthly - incomeSnapshot.afterTaxMonthly,
+    }
+    : null;
+  const captureIncomeSnapshot = () => {
+    setIncomeSnapshot({ ...currentIncomeSnapshot, capturedAt: new Date().toISOString() });
+  };
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
       <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
@@ -3581,7 +3664,13 @@ export default function App() {
           {actionMenu}
           <CompactKpiHeader
             metrics={kpiMetrics}
-          />
+          >
+            <IncomeSnapshotControl
+              snapshot={incomeSnapshot}
+              deltas={incomeSnapshotDeltas}
+              onCapture={captureIncomeSnapshot}
+            />
+          </CompactKpiHeader>
         </div>
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
