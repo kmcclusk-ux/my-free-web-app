@@ -2490,12 +2490,18 @@
 .sheet-table--lookup .lookup-drag-cell .drag-handle {
   width: 34px;
   height: 24px;
-  border-color: rgba(31, 109, 106, .28);
-  background: rgba(31, 109, 106, .08);
-  color: #174f52;
+  border-color: rgba(102, 112, 133, .28);
+  background: rgba(248, 250, 252, .96);
+  color: #667085;
   font-size: .84rem;
   font-weight: 900;
   letter-spacing: -.08em;
+}
+
+.sheet-table--lookup .lookup-drag-cell .drag-handle:hover {
+  border-color: rgba(11, 99, 246, .28);
+  background: rgba(239, 246, 255, .96);
+  color: #0b63f6;
 }
 
 .sheet-table--lookup tr.lookup-row--dragging td {

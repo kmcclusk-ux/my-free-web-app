@@ -1109,7 +1109,7 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
   const percentValue = workbookField(row, "percent_return", "percentReturn", "percent_return_rate", "percent");
   const extraDataValue = workbookField(row, "extra_data", "extraData");
   return {
-    id: Number(workbookField(row, "id")) || base.id,
+    id: Number(workbookField(row, "id")) || index + 1,
     symbol: workbookField(row, "symbol", "ticker") ?? base.symbol,
     percentReturn: percentValue !== undefined ? toNumber(percentValue) : base.percentReturn,
     category: workbookField(row, "category") ?? base.category,
@@ -1123,14 +1123,14 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
 function workbookToCategoryRow(row: Record<string, unknown>, index: number, fallback?: CategoryRow): CategoryRow {
   const base = fallback || initialCategories[index] || initialCategories[0];
   return {
-    id: Number(workbookField(row, "id")) || base.id,
+    id: Number(workbookField(row, "id")) || index + 1,
     name: workbookField(row, "name", "category", "label") ?? base.name,
   };
 }
 function workbookToAccountRow(row: Record<string, unknown>, index: number, fallback?: AccountRow): AccountRow {
   const base = fallback || initialAccounts[index] || initialAccounts[0];
   return {
-    id: Number(workbookField(row, "id")) || base.id,
+    id: Number(workbookField(row, "id")) || index + 1,
     account: workbookField(row, "account", "account_name", "account_names") ?? base.account,
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_treatment") ?? base.taxStatus,
     dividendAccrued: workbookField(row, "dividend_accrued", "dividendAccrued") ?? base.dividendAccrued,
@@ -1140,21 +1140,21 @@ function workbookToAccountRow(row: Record<string, unknown>, index: number, fallb
 function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number, fallback?: TaxTreatmentRow): TaxTreatmentRow {
   const base = fallback || initialTaxTreatments[index] || initialTaxTreatments[0];
   return {
-    id: Number(workbookField(row, "id")) || base.id,
+    id: Number(workbookField(row, "id")) || index + 1,
     label: workbookField(row, "label", "tax_treatment") ?? base.label,
   };
 }
 function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number, fallback?: AccountTaxTypeRow): AccountTaxTypeRow {
   const base = fallback || initialAccountTaxTypes[index] || initialAccountTaxTypes[0];
   return {
-    id: Number(workbookField(row, "id")) || base.id,
+    id: Number(workbookField(row, "id")) || index + 1,
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_status") ?? base.taxStatus,
   };
 }
 function workbookToInvestmentTypeRow(row: Record<string, unknown>, index: number, fallback?: InvestmentTypeRow): InvestmentTypeRow {
   const base = fallback || initialInvestmentTypes[index] || initialInvestmentTypes[0];
   return {
-    id: Number(workbookField(row, "id")) || base.id,
+    id: Number(workbookField(row, "id")) || index + 1,
     name: workbookField(row, "name", "investment_type", "inv_type") ?? base.name,
   };
 }
@@ -3385,7 +3385,8 @@ export default function App() {
 
         const next = [...current];
         const [movedRow] = next.splice(sourceIndex, 1);
-        next.splice(targetIndex, 0, movedRow);
+        const adjustedTargetIndex = next.findIndex((row) => row.id === targetId);
+        next.splice(adjustedTargetIndex < 0 ? next.length : adjustedTargetIndex, 0, movedRow);
         return next;
       });
       setStorageState("ready");
