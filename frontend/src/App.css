@@ -319,7 +319,17 @@
 
 @media (max-width: 1220px) {
   .income-snapshot__body {
-    display: none;
+    min-width: 236px;
+  }
+  .income-snapshot__line {
+    grid-template-columns: 40px minmax(86px, 1fr) minmax(86px, 1fr);
+    gap: 4px;
+  }
+  .income-snapshot__value {
+    font-size: .56rem;
+  }
+  .income-snapshot__value em {
+    font-size: .48rem;
   }
 }
 .workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr) 216px; min-height: calc(100vh - var(--app-top-nav-height)); }
