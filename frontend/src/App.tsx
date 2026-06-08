@@ -409,10 +409,10 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "accounts", label: "Accounts", meta: "tax status" },
   { key: "accountTaxType", label: "Account Tax Type", meta: "status list" },
   { key: "tickers", label: "Tickers", meta: "symbol lookups" },
+  { key: "categories", label: "Categories", meta: "ticker categories" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "CA worksheet" },
   { key: "calculator", label: "Tax Calculator", meta: "summary" },
-  { key: "categories", label: "Categories", meta: "ticker categories" },
   { key: "taxTreatment", label: "Tax Treatment", meta: "sheet labels" },
   { key: "investmentType", label: "Investment Type", meta: "asset classes" },
 ];
