@@ -2148,7 +2148,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
       <div className="table-wrap table-wrap--tall lookup-table-wrap" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--lookup">
           <thead>
-            <tr><th className="drag-handle-heading lookup-drag-heading" aria-label="Move row" />{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr>
+            <tr><th className="drag-handle-heading lookup-drag-heading" aria-label="Move row">Move</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr>
           </thead>
           <tbody>
             {rows.map((row) => (
@@ -2158,7 +2158,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
                 onDragOver={(event) => handleDragOver(event, row.id)}
                 onDrop={(event) => handleDrop(event, row.id)}
               >
-                <td className="drag-handle-cell lookup-drag-cell"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
+                <td className="drag-handle-cell lookup-drag-cell"><button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
                 {columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}
                 <td className="lookup-table__actions"><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td>
               </tr>

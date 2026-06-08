@@ -2469,9 +2469,9 @@
   position: sticky;
   left: 0;
   z-index: 3;
-  width: 32px;
-  min-width: 32px;
-  max-width: 32px;
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
   padding-right: 4px;
   padding-left: 4px;
   text-align: center;
@@ -2482,11 +2482,20 @@
 .sheet-table--lookup thead .lookup-drag-heading {
   z-index: 5;
   background: #f8fafc;
+  color: #475467;
+  font-size: .58rem;
+  letter-spacing: .05em;
 }
 
 .sheet-table--lookup .lookup-drag-cell .drag-handle {
-  width: 24px;
-  height: 22px;
+  width: 34px;
+  height: 24px;
+  border-color: rgba(31, 109, 106, .28);
+  background: rgba(31, 109, 106, .08);
+  color: #174f52;
+  font-size: .84rem;
+  font-weight: 900;
+  letter-spacing: -.08em;
 }
 
 .sheet-table--lookup tr.lookup-row--dragging td {
