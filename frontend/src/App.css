@@ -2422,6 +2422,48 @@
   display: none;
 }
 
+.lookup-table-wrap {
+  max-width: 100%;
+}
+
+.sheet-table--lookup {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.sheet-table--lookup th,
+.sheet-table--lookup td {
+  padding: 5px 6px;
+}
+
+.sheet-table--lookup input,
+.sheet-table--lookup select {
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 8px;
+  font-size: .78rem;
+}
+
+.sheet-table--lookup th:last-child,
+.sheet-table--lookup .lookup-table__actions {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  width: 42px;
+  min-width: 42px;
+  max-width: 42px;
+  padding-right: 4px;
+  padding-left: 4px;
+  text-align: center;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: -10px 0 16px rgba(17, 24, 39, .08);
+}
+
+.sheet-table--lookup thead th:last-child {
+  z-index: 5;
+  background: #f8fafc;
+}
+
 @media (max-width: 1180px) {
   .workspace-shell--tax-collapsed { grid-template-columns: 124px minmax(0, 1fr) 44px; }
 }
