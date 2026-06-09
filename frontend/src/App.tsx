@@ -2728,7 +2728,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <table className={tableClassName}>
           <thead>
             <tr>
-              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Desc</th><th>Accnt</th><th>Category</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Symbol</th><th>%</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th>
+              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Accnt</th><th>Total inv.</th><th>Yr inc.</th><th>Mnth inc</th><th>Symbol</th><th>%</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th>
             </tr>
           </thead>
           <tbody>
@@ -2745,9 +2745,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td className="drag-handle-cell"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
                   <td className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>
                   <td className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>
-                  <td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td>
                   <td><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>
-                  <td><input value={row.category} onChange={(event) => onChange(row.id, "category", event.target.value)} /></td>
                   <td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td>
                   <td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td>
                   <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.monthlyIncome || 0)}</div></td>
@@ -2784,7 +2782,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </tbody>
           <tfoot>
             <tr className="investment-total-row">
-              <td /><td /><td /><th scope="row">Included totals</th><td /><td />
+              <td /><td /><td /><th scope="row">Included totals</th>
               {renderTotalCell(totals.totalInvestment)}
               {renderTotalCell(totals.yearlyIncome)}
               {renderTotalCell(totals.monthlyIncome)}
