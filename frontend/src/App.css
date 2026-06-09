@@ -280,34 +280,28 @@
   text-align: left;
 }
 .account-picker__trigger::after {
-  content: "\2304";
+  content: "";
   position: absolute;
   top: 1px;
   right: 1px;
   bottom: 1px;
   width: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-left: 1px solid rgba(17, 24, 39, .06);
   border-radius: 0 7px 7px 0;
-  background: linear-gradient(90deg, rgba(248, 250, 252, .58), rgba(248, 250, 252, .98) 42%, rgba(248, 250, 252, .98));
-  color: #667085;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1;
+  background:
+    linear-gradient(90deg, rgba(248, 250, 252, .42), #f2f4f7 44%, #f2f4f7),
+    url("data:image/svg+xml,%3Csvg width='11' height='7' viewBox='0 0 11 7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1.5 1.5L5.5 5.5L9.5 1.5' stroke='%23475467' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, 11px 7px;
+  background-position: right center, center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 140ms ease, color 140ms ease;
+  transition: opacity 140ms ease;
 }
 .account-picker__trigger:hover::after,
 .account-picker__trigger:focus::after,
 .account-picker__trigger[aria-expanded="true"]::after {
   opacity: 1;
-}
-.account-picker__trigger:focus::after,
-.account-picker__trigger[aria-expanded="true"]::after {
-  color: #0b63f6;
 }
 .account-picker__trigger span,
 .account-picker__option span {
@@ -2484,9 +2478,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   background-image: none;
-  background-repeat: no-repeat, no-repeat, no-repeat;
-  background-size: 5px 5px, 5px 5px, 34px 100%;
-  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%, right center;
+  background-repeat: no-repeat, no-repeat;
+  background-size: 34px 100%, 11px 7px;
+  background-position: right center, calc(100% - 11px) center;
 }
 
 .sheet-table select:hover,
@@ -2494,9 +2488,8 @@
 .sheet-table select:focus,
 .form-grid select:focus {
   background-image:
-    linear-gradient(45deg, transparent 50%, #0b63f6 50%),
-    linear-gradient(135deg, #0b63f6 50%, transparent 50%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0), #fff 38%, #fff);
+    linear-gradient(90deg, rgba(255, 255, 255, 0), #f2f4f7 38%, #f2f4f7),
+    url("data:image/svg+xml,%3Csvg width='11' height='7' viewBox='0 0 11 7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1.5 1.5L5.5 5.5L9.5 1.5' stroke='%23475467' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 .sheet-table select::-ms-expand,
