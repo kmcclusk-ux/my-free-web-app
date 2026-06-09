@@ -2639,10 +2639,25 @@
 }
 
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) {
-  --row-bg: rgba(244, 246, 248, .74);
   --status-color: rgba(102, 112, 133, .38);
   --status-bg: rgba(102, 112, 133, .08);
   --status-text: #667085;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--deferred:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--non-taxable:not(.investment-row--selected) {
+  --row-bg: rgba(232, 248, 238, .82);
+  --status-color: rgba(31, 157, 104, .46);
+  --status-bg: rgba(31, 157, 104, .08);
+  --status-text: #497b62;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--taxable:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--partial:not(.investment-row--selected) {
+  --row-bg: rgba(255, 238, 238, .84);
+  --status-color: rgba(208, 90, 90, .46);
+  --status-bg: rgba(208, 90, 90, .08);
+  --status-text: #9f5b5b;
 }
 
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) td {
@@ -2657,7 +2672,7 @@
 }
 
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) :is(input, select, .readonly-cell, .account-picker__trigger) {
-  background-color: rgba(248, 250, 252, .72);
+  background-color: rgba(255, 255, 255, .54);
   box-shadow: inset 0 0 0 1px rgba(17, 24, 39, .035);
 }
 
