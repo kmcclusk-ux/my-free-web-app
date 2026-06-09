@@ -280,21 +280,34 @@
   text-align: left;
 }
 .account-picker__trigger::after {
-  content: "";
+  content: "\2304";
   position: absolute;
   top: 1px;
   right: 1px;
   bottom: 1px;
   width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-left: 1px solid rgba(17, 24, 39, .06);
   border-radius: 0 7px 7px 0;
-  background:
-    linear-gradient(90deg, rgba(248, 250, 252, .58), rgba(248, 250, 252, .98) 42%, rgba(248, 250, 252, .98)),
-    url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23667085' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: 100% 100%, 10px 6px;
-  background-position: right center, center;
+  background: linear-gradient(90deg, rgba(248, 250, 252, .58), rgba(248, 250, 252, .98) 42%, rgba(248, 250, 252, .98));
+  color: #667085;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 140ms ease, color 140ms ease;
+}
+.account-picker__trigger:hover::after,
+.account-picker__trigger:focus::after,
+.account-picker__trigger[aria-expanded="true"]::after {
+  opacity: 1;
+}
+.account-picker__trigger:focus::after,
+.account-picker__trigger[aria-expanded="true"]::after {
+  color: #0b63f6;
 }
 .account-picker__trigger span,
 .account-picker__option span {
@@ -2465,15 +2478,15 @@
 .sheet-table select,
 .form-grid select {
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   padding-right: 32px !important;
   overflow: hidden;
   text-overflow: ellipsis;
-  background-image:
-    linear-gradient(90deg, rgba(248, 250, 252, 0), rgba(248, 250, 252, .98) 38%, rgba(248, 250, 252, .98)),
-    url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23667085' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-size: 34px 100%, 10px 6px;
-  background-position: right center, calc(100% - 11px) center;
+  background-image: none;
+  background-repeat: no-repeat, no-repeat, no-repeat;
+  background-size: 5px 5px, 5px 5px, 34px 100%;
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%, right center;
 }
 
 .sheet-table select:hover,
@@ -2481,8 +2494,14 @@
 .sheet-table select:focus,
 .form-grid select:focus {
   background-image:
-    linear-gradient(90deg, rgba(255, 255, 255, 0), #fff 38%, #fff),
-    url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%230b63f6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    linear-gradient(45deg, transparent 50%, #0b63f6 50%),
+    linear-gradient(135deg, #0b63f6 50%, transparent 50%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0), #fff 38%, #fff);
+}
+
+.sheet-table select::-ms-expand,
+.form-grid select::-ms-expand {
+  display: none;
 }
 
 .investments-workspace .sheet-table--workbook .money-input,
