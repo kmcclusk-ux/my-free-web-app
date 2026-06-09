@@ -2782,7 +2782,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </tbody>
           <tfoot>
             <tr className="investment-total-row">
-              <td /><td /><td /><th scope="row">Included totals</th>
+              <td /><td /><td /><th className="investment-total-row__label" scope="row" title="Included totals">Totals</th>
               {renderTotalCell(totals.totalInvestment)}
               {renderTotalCell(totals.yearlyIncome)}
               {renderTotalCell(totals.monthlyIncome)}
