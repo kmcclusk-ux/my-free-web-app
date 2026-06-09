@@ -651,6 +651,111 @@ function buildAccountTaxStatusMap(rows: AccountRow[]) {
   }
   return map;
 }
+
+const ACCOUNT_FAVICON_RULES: Array<{ terms: string[]; domain: string }> = [
+  { terms: ["interactive brokers", "ibkr", "interactivebrokers"], domain: "interactivebrokers.com" },
+  { terms: ["merrill edge", "merill edge", "merrill", "merill"], domain: "merrilledge.com" },
+  { terms: ["vanguard"], domain: "vanguard.com" },
+  { terms: ["schwab"], domain: "schwab.com" },
+  { terms: ["fidelity"], domain: "fidelity.com" },
+  { terms: ["etrade", "e trade", "e*trade"], domain: "etrade.com" },
+  { terms: ["robinhood"], domain: "robinhood.com" },
+  { terms: ["td ameritrade", "ameritrade"], domain: "tdameritrade.com" },
+  { terms: ["treasury direct", "treasurydirect"], domain: "treasurydirect.gov" },
+  { terms: ["social security"], domain: "ssa.gov" },
+  { terms: ["intuit"], domain: "intuit.com" },
+];
+
+function accountFaviconDomain(accountName: unknown) {
+  const key = normalizeLookupKey(String(accountName || ""));
+  if (!key) return "";
+  const match = ACCOUNT_FAVICON_RULES.find((rule) => rule.terms.some((term) => key.includes(normalizeLookupKey(term))));
+  return match?.domain || "";
+}
+
+function accountInitials(accountName: unknown) {
+  const parts = String(accountName || "")
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "-";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("");
+}
+
+function AccountFavicon({ accountName }: { accountName: string }) {
+  const [hasImageError, setHasImageError] = useState(false);
+  const domain = accountFaviconDomain(accountName);
+  const src = domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32` : "";
+
+  useEffect(() => setHasImageError(false), [src]);
+
+  if (!src || hasImageError) {
+    return <span className="account-favicon account-favicon--fallback" aria-hidden="true">{accountInitials(accountName)}</span>;
+  }
+
+  return <img className="account-favicon" src={src} alt="" aria-hidden="true" loading="lazy" onError={() => setHasImageError(true)} />;
+}
+
+function AccountSelect({ value, options, onChange, ariaLabel }: { value: string; options: string[]; onChange: (value: string) => void; ariaLabel: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (pickerRef.current?.contains(event.target as Node)) return;
+      setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="account-picker" ref={pickerRef}>
+      <button className="account-picker__trigger" type="button" onClick={() => setIsOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={isOpen} aria-label={ariaLabel}>
+        <AccountFavicon accountName={value} />
+        <span>{value || "Select account"}</span>
+      </button>
+      {isOpen && (
+        <div className="account-picker__menu" role="listbox" aria-label={ariaLabel}>
+          {options.map((option) => (
+            <button
+              className={`account-picker__option ${option === value ? "account-picker__option--selected" : ""}`.trim()}
+              key={option || "(blank)"}
+              type="button"
+              role="option"
+              aria-selected={option === value}
+              onClick={() => {
+                onChange(option);
+                setIsOpen(false);
+              }}
+            >
+              <AccountFavicon accountName={option} />
+              <span>{option || "Blank"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccountInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="account-input">
+      <AccountFavicon accountName={value} />
+      <input value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
 function normalizeFavoriteName(value: unknown) {
   return String(value || "").trim();
 }
@@ -2155,6 +2260,16 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     setDraggingRowId(null);
     setDragOverRowId(null);
   };
+  const renderCell = (row: T, column: { key: keyof T; label: string; type?: "text" | "number" | "select"; options?: string[] }) => {
+    const value = String(row[column.key] ?? "");
+    if (String(column.key) === "account") {
+      return <AccountInput value={value} onChange={(nextValue) => onChange(row.id, column.key, nextValue)} />;
+    }
+    if (column.type === "select") {
+      return <select value={value} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select>;
+    }
+    return <input type={column.type === "number" ? "number" : "text"} value={value} onChange={(event) => onChange(row.id, column.key, event.target.value)} />;
+  };
 
   return (
     <Section title={title} subtitle={subtitle} hideHeading>
@@ -2175,7 +2290,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
                 onDrop={(event) => handleDrop(event, row.id)}
               >
                 <td className="drag-handle-cell lookup-drag-cell"><button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
-                {columns.map((column) => <td key={String(column.key)}>{column.type === "select" ? <select value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={column.type === "number" ? "number" : "text"} value={String(row[column.key] ?? "")} onChange={(event) => onChange(row.id, column.key, event.target.value)} />}</td>)}
+                {columns.map((column) => <td key={String(column.key)}>{renderCell(row, column)}</td>)}
                 <td className="lookup-table__actions"><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td>
               </tr>
             ))}
@@ -2599,7 +2714,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>
                   <td className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>
                   <td><input value={row.description} onChange={(event) => onChange(row.id, "description", event.target.value)} /></td>
-                  <td><select value={row.account} onChange={(event) => onChange(row.id, "account", event.target.value)}>{accountOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
+                  <td><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>
                   <td><input value={row.category} onChange={(event) => onChange(row.id, "category", event.target.value)} /></td>
                   <td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td>
                   <td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td>

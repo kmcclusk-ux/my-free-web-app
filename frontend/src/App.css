@@ -239,6 +239,87 @@
 .income-snapshot--inline .income-snapshot__empty {
   color: var(--pm-muted, #667085);
 }
+.account-favicon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px rgba(17, 24, 39, .08);
+}
+.account-favicon--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(31, 109, 106, .12), rgba(196, 139, 58, .12));
+  color: #174f52;
+  font-size: .52rem;
+  font-weight: 900;
+  letter-spacing: -.04em;
+}
+.account-picker {
+  position: relative;
+  min-width: 0;
+}
+.account-picker__trigger,
+.account-picker__option,
+.account-input {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+}
+.account-picker__trigger {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid rgba(17, 24, 39, .08);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, .96);
+  color: #344054;
+  text-align: left;
+}
+.account-picker__trigger span,
+.account-picker__option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-picker__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 90;
+  display: grid;
+  gap: 2px;
+  width: max(100%, 240px);
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 44px rgba(16, 38, 43, .18);
+}
+.account-picker__option {
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #344054;
+  text-align: left;
+}
+.account-picker__option:hover,
+.account-picker__option--selected {
+  background: rgba(239, 246, 255, .98);
+  color: #0b63f6;
+}
+.account-input {
+  position: relative;
+}
+.account-input input {
+  min-width: 0;
+}
 .kpi-pill__value {
   display: inline-flex;
   align-items: baseline;
