@@ -2401,6 +2401,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     const taxStatus = String(accountTaxStatusByName[accountKey] || "").toLowerCase();
     const isDeferredStatus = taxStatus.includes("deferred");
     const isTaxFreeStatus = taxStatus.includes("tax-free") || taxStatus.includes("tax free");
+    const isNonTaxableStatus = taxStatus.includes("non-taxable") || taxStatus.includes("non taxable") || taxStatus.includes("nontaxable");
     const isDeductionStatus = taxStatus.includes("tax_deduction") || taxStatus.includes("tax-deduction");
     const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
     const isTaxableStatus = taxStatus === "taxable" || (taxStatus.includes("taxable") && !isPartiallyTaxableStatus);
@@ -2408,7 +2409,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (isDeferredStatus) {
       return "investment-row investment-row--deferred";
     }
-    if (isTaxFreeStatus || isDeductionStatus) {
+    if (isTaxFreeStatus || isNonTaxableStatus || isDeductionStatus) {
       return "investment-row investment-row--non-taxable";
     }
     if (isPartiallyTaxableStatus) {

@@ -2529,6 +2529,22 @@
   box-shadow: inset 0 -1px 0 rgba(196, 139, 58, .22);
 }
 
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--deferred:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--non-taxable:not(.investment-row--selected) {
+  --row-bg: rgba(216, 244, 225, .96);
+  --status-color: var(--poly-green);
+  --status-bg: var(--poly-green-soft);
+  --status-text: #067647;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--taxable:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--partial:not(.investment-row--selected) {
+  --row-bg: rgba(255, 224, 224, .96);
+  --status-color: var(--poly-red);
+  --status-bg: var(--poly-red-soft);
+  --status-text: #b42318;
+}
+
 .tax-panel-show-tab {
   display: inline-flex;
   align-items: center;
