@@ -2638,6 +2638,29 @@
   --status-text: #b42318;
 }
 
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) {
+  --row-bg: rgba(244, 246, 248, .74);
+  --status-color: rgba(102, 112, 133, .38);
+  --status-bg: rgba(102, 112, 133, .08);
+  --status-text: #667085;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) td {
+  color: #667085;
+  font-style: italic;
+  opacity: .72;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) :is(input, select, button, .readonly-cell) {
+  color: #667085;
+  font-style: italic;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) :is(input, select, .readonly-cell, .account-picker__trigger) {
+  background-color: rgba(248, 250, 252, .72);
+  box-shadow: inset 0 0 0 1px rgba(17, 24, 39, .035);
+}
+
 .tax-panel-show-tab {
   display: inline-flex;
   align-items: center;

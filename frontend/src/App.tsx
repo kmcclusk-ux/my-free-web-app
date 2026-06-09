@@ -2417,6 +2417,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     return () => window.cancelAnimationFrame(frame);
   }, [selectedAssetIds, displayedRows]);
   const getRowClassName = (row: InvestmentRow) => {
+    const classes = ["investment-row"];
+    if (!row.includeIncome) {
+      classes.push("investment-row--excluded");
+    }
     const accountKey = normalizeLookupKey(row.account);
     const taxStatus = String(accountTaxStatusByName[accountKey] || "").toLowerCase();
     const isDeferredStatus = taxStatus.includes("deferred");
@@ -2427,19 +2431,23 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     const isTaxableStatus = taxStatus === "taxable" || (taxStatus.includes("taxable") && !isPartiallyTaxableStatus);
 
     if (isDeferredStatus) {
-      return "investment-row investment-row--deferred";
+      classes.push("investment-row--deferred");
+      return classes.join(" ");
     }
     if (isTaxFreeStatus || isNonTaxableStatus || isDeductionStatus) {
-      return "investment-row investment-row--non-taxable";
+      classes.push("investment-row--non-taxable");
+      return classes.join(" ");
     }
     if (isPartiallyTaxableStatus) {
-      return "investment-row investment-row--partial";
+      classes.push("investment-row--partial");
+      return classes.join(" ");
     }
     if (isTaxableStatus) {
-      return "investment-row investment-row--taxable";
+      classes.push("investment-row--taxable");
+      return classes.join(" ");
     }
 
-    return "investment-row";
+    return classes.join(" ");
   };
   const filteredFavorites = useMemo(
     () => [...favorites].sort((a, b) => a.name.localeCompare(b.name)),
