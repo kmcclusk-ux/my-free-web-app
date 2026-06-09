@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import "./App.css";
 
 type TabKey =
@@ -698,12 +699,26 @@ function AccountFavicon({ accountName }: { accountName: string }) {
 
 function AccountSelect({ value, options, onChange, ariaLabel }: { value: string; options: string[]; onChange: (value: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const updateMenuPosition = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setMenuStyle({
+      left: rect.left,
+      top: rect.bottom + 4,
+      width: Math.max(rect.width, 240),
+    });
+  };
 
   useEffect(() => {
     if (!isOpen) return;
+    updateMenuPosition();
     const handlePointerDown = (event: PointerEvent) => {
       if (pickerRef.current?.contains(event.target as Node)) return;
+      if (menuRef.current?.contains(event.target as Node)) return;
       setIsOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -711,20 +726,35 @@ function AccountSelect({ value, options, onChange, ariaLabel }: { value: string;
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
     };
   }, [isOpen]);
 
   return (
     <div className="account-picker" ref={pickerRef}>
-      <button className="account-picker__trigger" type="button" onClick={() => setIsOpen((current) => !current)} aria-haspopup="listbox" aria-expanded={isOpen} aria-label={ariaLabel}>
+      <button
+        className="account-picker__trigger"
+        type="button"
+        ref={triggerRef}
+        onClick={() => {
+          if (!isOpen) updateMenuPosition();
+          setIsOpen((current) => !current);
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={ariaLabel}
+      >
         <AccountFavicon accountName={value} />
         <span>{value || "Select account"}</span>
       </button>
-      {isOpen && (
-        <div className="account-picker__menu" role="listbox" aria-label={ariaLabel}>
+      {isOpen && createPortal(
+        <div className="account-picker__menu account-picker__menu--portal" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
           {options.map((option) => (
             <button
               className={`account-picker__option ${option === value ? "account-picker__option--selected" : ""}`.trim()}
@@ -741,7 +771,8 @@ function AccountSelect({ value, options, onChange, ariaLabel }: { value: string;
               <span>{option || "Blank"}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
