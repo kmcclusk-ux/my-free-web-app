@@ -2444,6 +2444,23 @@
   font-size: .72rem;
 }
 
+.investments-workspace .sheet-table--workbook .money-input,
+.investments-workspace .sheet-table--workbook .readonly-cell--money {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.035em;
+}
+
+.investments-workspace .sheet-table--workbook tfoot .readonly-cell--total {
+  padding-right: 3px;
+  padding-left: 3px;
+  font-size: .66rem;
+  line-height: 1.1;
+}
+
 .investments-workspace .sheet-table--workbook .readonly-cell--text {
   min-width: 0;
   overflow: hidden;

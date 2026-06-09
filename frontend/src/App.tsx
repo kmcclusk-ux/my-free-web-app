@@ -787,6 +787,25 @@ function AccountInput({ value, onChange }: { value: string; onChange: (value: st
   );
 }
 
+function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: string) => void; ariaLabel: string }) {
+  const [isEditing, setIsEditing] = useState(false);
+  return (
+    <input
+      className="money-input"
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      value={isEditing ? String(value || "") : formatGridCurrency(value)}
+      onFocus={(event) => {
+        setIsEditing(true);
+        event.currentTarget.select();
+      }}
+      onBlur={() => setIsEditing(false)}
+      onChange={(event) => onChange(String(toNumber(event.target.value)))}
+    />
+  );
+}
+
 function normalizeFavoriteName(value: unknown) {
   return String(value || "").trim();
 }
@@ -1074,6 +1093,7 @@ function parseWorkbookSettings(settings: unknown) {
 function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
 function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
 function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
+function formatGridCurrency(value: number) { return formatCurrency(toNumber(value)); }
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
@@ -2610,7 +2630,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     acc.bitcoin += row.bitcoin;
     return acc;
   }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
-  const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--total">{formatCurrencyDetailed(value)}</div></td>;
+  const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
   const tableClassName = [
     "sheet-table",
     "sheet-table--compact",
@@ -2746,36 +2766,36 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>
                   <td className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>
                   <td><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>
-                  <td><input type="number" value={row.totalInvestment} onChange={(event) => onChange(row.id, "totalInvestment", event.target.value)} /></td>
-                  <td><input type="number" value={row.yearlyIncome} onChange={(event) => onChange(row.id, "yearlyIncome", event.target.value)} /></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.monthlyIncome || 0)}</div></td>
+                  <td><MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} /></td>
+                  <td><MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div></td>
                   <td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
                   <td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.filteredIncome || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.includedTotal || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.filteredIncome || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.includedTotal || 0)}</div></td>
                   <td><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.ordinaryMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.preferredMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.stateMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed((derived?.nonTaxableMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.ordinaryMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.preferredMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.stateMonthly || 0) * 12)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.nonTaxableMonthly || 0) * 12)}</div></td>
                   <td><div className="readonly-cell readonly-cell--text">{derived?.investmentType || ""}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.nonInvestmentIncome || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.cash || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.stocks || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.preferredStock || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bonds || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniBond || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.muniInterest || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.businessDevelopment || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.coveredCall || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.realEstate || 0)}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.bitcoin || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.nonInvestmentIncome || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.cash || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.stocks || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.preferredStock || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bonds || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.muniBond || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.muniInterest || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.businessDevelopment || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.coveredCall || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>
                   <td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>
                   <td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
                   <td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
                   <td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>
                   <td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>
-                  <td><div className="readonly-cell">{formatCurrencyDetailed(derived?.extraData || 0)}</div></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.extraData || 0)}</div></td>
                 </tr>
               );
             })}
