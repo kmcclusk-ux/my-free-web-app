@@ -239,6 +239,16 @@
   transform-origin: 50% 70%;
   white-space: nowrap;
 }
+.income-snapshot__value em small {
+  color: rgba(255, 255, 255, .58);
+  font-size: .58rem;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: .02em;
+}
+.income-snapshot--inline .income-snapshot__value em small {
+  color: var(--pm-muted, #667085);
+}
 .income-snapshot__value--tumble em {
   animation: snapshot-delta-tumble 620ms cubic-bezier(.18, .86, .26, 1);
 }

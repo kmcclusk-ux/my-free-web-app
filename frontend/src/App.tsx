@@ -1535,7 +1535,7 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
   );
 }
 
-function SnapshotValue({ label, delta }: { label: string; delta: number }) {
+function SnapshotValue({ label, delta, suffix }: { label: string; delta: number; suffix: string }) {
   const roundedDelta = Math.round(delta);
   const previousDelta = useRef<number | null>(null);
   const [isTumbling, setIsTumbling] = useState(false);
@@ -1566,7 +1566,7 @@ function SnapshotValue({ label, delta }: { label: string; delta: number }) {
         <b className="income-snapshot__label-delta" aria-hidden="true">{"\u0394"}</b>
         {labelWords.map((word) => <b key={word}>{word}</b>)}
       </span>
-      <em>{formatSignedCurrency(roundedDelta)}</em>
+      <em>{formatSignedCurrency(roundedDelta)} <small>{suffix}</small></em>
     </strong>
   );
 }
@@ -1598,6 +1598,7 @@ function IncomeSnapshotControl({
       };
   const selectedDelta = snapshotBasis === "afterTax" ? viewDeltas.afterTax : viewDeltas.beforeTax;
   const selectedLabel = snapshotBasis === "afterTax" ? "After tax" : "Before tax";
+  const selectedSuffix = snapshotView === "monthly" ? "/ month" : "/ year";
 
   return (
     <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
@@ -1611,7 +1612,7 @@ function IncomeSnapshotControl({
       <div className="income-snapshot__body" aria-live="polite">
         {snapshot ? (
           <div className="income-snapshot__single-line">
-            <SnapshotValue label={selectedLabel} delta={selectedDelta} />
+            <SnapshotValue label={selectedLabel} delta={selectedDelta} suffix={selectedSuffix} />
           </div>
         ) : (
           <div className="income-snapshot__single-line income-snapshot__single-line--empty">
