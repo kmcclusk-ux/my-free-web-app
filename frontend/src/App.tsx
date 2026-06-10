@@ -42,6 +42,7 @@ type DerivedInvestmentRow = InvestmentRow & {
   currentPercent: number;
   effectiveSymbol: string;
   effectivePercent: number;
+  incomeItem: boolean;
   extraData: number;
   filteredIncome: number;
   includedTotal: number;
@@ -466,8 +467,8 @@ function isDefaultIncomeTicker(row: Pick<TickerRow, "category" | "taxTreatment">
   const category = normalizeLookupKey(row.category);
   const taxTreatment = normalizeLookupKey(row.taxTreatment);
   return (
-    ["cash", "bond", "treasurybond", "munibond", "preferredstock", "coveredcall", "socialsecurity", "noninvestmentincome", "realestate"].includes(category) ||
-    ["income", "nonqualifieddiv", "qualifieddiv", "statetaxfree", "taxfree", "ss85fed", "realestate"].includes(taxTreatment)
+    ["socialsecurity", "noninvestmentincome"].includes(category) ||
+    ["ss85fed"].includes(taxTreatment)
   );
 }
 
@@ -828,7 +829,6 @@ function buildInvestmentFavoriteKey(row: InvestmentRow) {
   const symbol = normalizeLookupKey(row.symbol);
   const newSymbol = normalizeLookupKey(row.newSymbol);
   const category = normalizeLookupKey(row.category);
-  const totalInvestment = toNumber(row.totalInvestment);
   const newPercent = toNumber(row.newPercent);
 
   return [
@@ -839,7 +839,6 @@ function buildInvestmentFavoriteKey(row: InvestmentRow) {
     `cat:${category}`,
     `sym:${symbol}`,
     `new:${newSymbol}`,
-    `total:${totalInvestment}`,
     `override:${row.overrideProposal ? "1" : "0"}`,
     `newpct:${newPercent}`,
   ].join("|");
@@ -1378,6 +1377,7 @@ function buildPortfolioSnapshot({
     filteredIncome: row.filteredIncome,
     includeIncome: row.includeIncome,
     overrideProposal: row.overrideProposal,
+    incomeItem: row.incomeItem,
     taxStatus: row.taxStatus,
     taxTreatment: row.taxTreatment,
     investmentType: row.investmentType,
@@ -1419,7 +1419,7 @@ function buildPortfolioSnapshot({
     },
     editableTables: {
       tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType", "investmentType"],
-      investmentFields: ["description", "account", "category", "totalInvestment", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+      investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
       tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
       accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
     },
@@ -2460,6 +2460,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           case "includedTotal": return derived?.includedTotal || 0;
           case "filteredIncome": return derived?.filteredIncome || 0;
           case "yearlyIncome": return derived?.yearlyIncome || 0;
+          case "totalInvestment": return derived?.incomeItem ? 0 : row.totalInvestment;
           case "symbol": return row.symbol;
           default: return row[sortColumn] as string | number;
         }
@@ -2699,7 +2700,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const totals = displayedDerivedRows.reduce((acc, row) => {
     if (!row.includeIncome) return acc;
 
-    acc.totalInvestment += toNumber(row.totalInvestment);
+    acc.totalInvestment += row.includedTotal;
     acc.yearlyIncome += toNumber(row.yearlyIncome);
     acc.monthlyIncome += row.monthlyIncome;
     acc.extraData += row.extraData;
@@ -2858,8 +2859,16 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>
                   <td className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>
                   <td><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>
-                  <td><MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} /></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div></td>
+                  <td>
+                    {derived?.incomeItem
+                      ? <div className="readonly-cell readonly-cell--text">N.A.</div>
+                      : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}
+                  </td>
+                  <td>
+                    {derived?.incomeItem
+                      ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} />
+                      : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}
+                  </td>
                   <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div></td>
                   <td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
                   <td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>
@@ -3133,12 +3142,11 @@ export default function App() {
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
     const proposedPercent = normalizeRate(row.newPercent);
     const effectivePercent = row.overrideProposal ? proposedPercent || currentPercent : currentPercent;
-    const effectiveIncomeItem = Boolean(effectiveTicker?.incomeItem);
-    const incomePercent = effectiveIncomeItem ? effectivePercent : 0;
-    const yearlyIncome = totalInvestment * incomePercent;
+    const incomeItem = Boolean(effectiveTicker?.incomeItem);
+    const yearlyIncome = incomeItem ? toNumber(row.yearlyIncome) : totalInvestment * effectivePercent;
     const monthlyIncome = yearlyIncome / 12;
     const filteredIncome = row.includeIncome ? yearlyIncome : 0;
-    const includedTotal = row.includeIncome ? totalInvestment : 0;
+    const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
     const account = accountMap[normalizeLookupKey(row.account)];
     const taxStatus = String(account?.taxStatus || "taxable").toLowerCase();
     const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
@@ -3155,6 +3163,7 @@ export default function App() {
       currentPercent,
       effectiveSymbol,
       effectivePercent,
+      incomeItem,
       extraData,
       filteredIncome,
       includedTotal,
@@ -3202,7 +3211,13 @@ export default function App() {
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
-      return derived ? { ...row, yearlyIncome: derived.yearlyIncome } : row;
+      return derived
+        ? {
+            ...row,
+            totalInvestment: derived.incomeItem ? 0 : row.totalInvestment,
+            yearlyIncome: derived.yearlyIncome,
+          }
+        : row;
     }),
     [investments, derivedRows]
   );
@@ -3797,8 +3812,8 @@ export default function App() {
           tab: "investments",
           rows: asEditable(investments),
           setRows: wrapSetter(setInvestments),
-          allowedFields: ["description", "account", "category", "totalInvestment", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
-          numericFields: ["totalInvestment", "newPercent"],
+          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+          numericFields: ["totalInvestment", "yearlyIncome", "newPercent"],
           booleanFields: ["includeIncome", "overrideProposal"],
           defaultRow: (id) => ({ id, description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 }),
         };
@@ -4191,7 +4206,7 @@ export default function App() {
             onApplyFavorite={applyFavorite}
             onDeleteFavorite={deleteFavorite}
             onRenameFavorite={renameFavorite}
-            onChange={updateCollection(setInvestments, ["totalInvestment", "newPercent"], ["includeIncome", "overrideProposal"])}
+            onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])}
             onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })}
             onReorder={reorderInvestments}
             onRemoveIncluded={() => {
