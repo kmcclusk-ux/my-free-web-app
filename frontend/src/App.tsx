@@ -1536,10 +1536,33 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
 }
 
 function SnapshotValue({ label, delta }: { label: string; delta: number }) {
-  const deltaClassName = delta >= 0 ? "income-snapshot__value--up" : "income-snapshot__value--down";
+  const roundedDelta = Math.round(delta);
+  const previousDelta = useRef<number | null>(null);
+  const [isTumbling, setIsTumbling] = useState(false);
+  const deltaClassName = roundedDelta >= 0 ? "income-snapshot__value--up" : "income-snapshot__value--down";
+
+  useEffect(() => {
+    if (previousDelta.current === null) {
+      previousDelta.current = roundedDelta;
+      return;
+    }
+    if (previousDelta.current === roundedDelta) return;
+
+    previousDelta.current = roundedDelta;
+    setIsTumbling(false);
+    const animationFrame = window.requestAnimationFrame(() => setIsTumbling(true));
+    const timeoutId = window.setTimeout(() => setIsTumbling(false), 620);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.clearTimeout(timeoutId);
+    };
+  }, [roundedDelta]);
+
   return (
-    <strong className={`income-snapshot__value ${deltaClassName}`}>
-      <span>{label} {formatSignedCurrency(delta)}</span>
+    <strong className={`income-snapshot__value ${deltaClassName} ${isTumbling ? "income-snapshot__value--tumble" : ""}`.trim()}>
+      <span>{label}</span>
+      <em>Δ {formatSignedCurrency(roundedDelta)}</em>
     </strong>
   );
 }
@@ -1569,28 +1592,21 @@ function IncomeSnapshotControl({
         <span>Snapshot</span>
       </button>
       <div className="income-snapshot__body" aria-live="polite">
-        <div className="income-snapshot__line">
-          <span>Annual</span>
-          {snapshot ? (
-            <>
-              <SnapshotValue label="BT" delta={deltas?.beforeTaxAnnual ?? 0} />
-              <SnapshotValue label="AT" delta={deltas?.afterTaxAnnual ?? 0} />
-            </>
-          ) : (
+        {snapshot ? (
+          <div className="income-snapshot__single-line">
+            <span className="income-snapshot__period">Annual</span>
+            <SnapshotValue label="BT" delta={deltas?.beforeTaxAnnual ?? 0} />
+            <SnapshotValue label="AT" delta={deltas?.afterTaxAnnual ?? 0} />
+            <span className="income-snapshot__period">Monthly</span>
+            <SnapshotValue label="BT" delta={deltas?.beforeTaxMonthly ?? 0} />
+            <SnapshotValue label="AT" delta={deltas?.afterTaxMonthly ?? 0} />
+          </div>
+        ) : (
+          <div className="income-snapshot__single-line income-snapshot__single-line--empty">
             <strong className="income-snapshot__empty">Set baseline</strong>
-          )}
-        </div>
-        <div className="income-snapshot__line">
-          <span>Monthly</span>
-          {snapshot ? (
-            <>
-              <SnapshotValue label="BT" delta={deltas?.beforeTaxMonthly ?? 0} />
-              <SnapshotValue label="AT" delta={deltas?.afterTaxMonthly ?? 0} />
-            </>
-          ) : (
-            <strong className="income-snapshot__empty">{capturedLabel}</strong>
-          )}
-        </div>
+            <span className="income-snapshot__captured">{capturedLabel}</span>
+          </div>
+        )}
       </div>
     </div>
   );
