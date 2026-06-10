@@ -65,7 +65,7 @@ type DerivedInvestmentRow = InvestmentRow & {
   bitcoin: number;
 };
 
-type TickerRow = { id: number; symbol: string; percentReturn: number; category: string; taxTreatment: string; extraData: number; description: string; exDividend: string; divPayout: string };
+type TickerRow = { id: number; symbol: string; percentReturn: number; category: string; taxTreatment: string; incomeItem: boolean; extraData: number; description: string; exDividend: string; divPayout: string };
 type CategoryRow = { id: number; name: string };
 type TaxTreatmentRow = { id: number; label: string };
 type AccountRow = { id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
@@ -462,7 +462,16 @@ const initialInvestments: InvestmentRow[] = [
   { id: 9, description: "deferred comp", account: "Deffered comp - Intuit", category: "core", totalInvestment: 2000, yearlyIncome: 38.8, includeIncome: false, overrideProposal: false, symbol: "ST Cash - Deferred", newSymbol: "ST Cash - Deferred", newPercent: 0 },
 ];
 
-const initialTickers: TickerRow[] = [
+function isDefaultIncomeTicker(row: Pick<TickerRow, "category" | "taxTreatment">) {
+  const category = normalizeLookupKey(row.category);
+  const taxTreatment = normalizeLookupKey(row.taxTreatment);
+  return (
+    ["cash", "bond", "treasurybond", "munibond", "preferredstock", "coveredcall", "socialsecurity", "noninvestmentincome", "realestate"].includes(category) ||
+    ["income", "nonqualifieddiv", "qualifieddiv", "statetaxfree", "taxfree", "ss85fed", "realestate"].includes(taxTreatment)
+  );
+}
+
+const initialTickers: TickerRow[] = ([
   { id: 1, symbol: "SS", percentReturn: 0, category: "social-security", taxTreatment: "ss-85-fed", extraData: 0, description: "social security", exDividend: "", divPayout: "" },
   { id: 2, symbol: "AUX-SS", percentReturn: 0, category: "social-security", taxTreatment: "tax free", extraData: 0, description: "aux SS", exDividend: "", divPayout: "" },
   { id: 3, symbol: "BIL", percentReturn: 0.0401, category: "cash", taxTreatment: "state tax free", extraData: 0, description: "short term treasury ETF", exDividend: "", divPayout: "" },
@@ -487,7 +496,7 @@ const initialTickers: TickerRow[] = [
   { id: 22, symbol: "BND", percentReturn: 0.04, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "total bond market ETF", exDividend: "", divPayout: "" },
   { id: 23, symbol: "SGOV", percentReturn: 0.04, category: "treasury bond", taxTreatment: "state tax free", extraData: 0, description: "short-term treasury ETF", exDividend: "", divPayout: "" },
   { id: 24, symbol: "VNQ", percentReturn: 0.035, category: "real estate", taxTreatment: "non-qualified-div", extraData: 0, description: "real estate ETF", exDividend: "", divPayout: "" },
-];
+] as Array<Omit<TickerRow, "incomeItem">>).map((row) => ({ ...row, incomeItem: isDefaultIncomeTicker(row) }));
 
 const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
 const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label }));
@@ -1266,12 +1275,16 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
   const base = fallback || initialTickers[index] || initialTickers[0];
   const percentValue = workbookField(row, "percent_return", "percentReturn", "percent_return_rate", "percent");
   const extraDataValue = workbookField(row, "extra_data", "extraData");
+  const category = workbookField(row, "category") ?? base.category;
+  const taxTreatment = workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment;
+  const incomeItemValue = workbookField(row, "incomeItem", "income_item", "is_income_item", "income_ticker", "income");
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     symbol: workbookField(row, "symbol", "ticker") ?? base.symbol,
     percentReturn: percentValue !== undefined ? normalizeRate(percentValue) : normalizeRate(base.percentReturn),
-    category: workbookField(row, "category") ?? base.category,
-    taxTreatment: workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment,
+    category,
+    taxTreatment,
+    incomeItem: incomeItemValue !== undefined ? normalizeBoolean(incomeItemValue) : isDefaultIncomeTicker({ category, taxTreatment }),
     extraData: extraDataValue !== undefined ? toNumber(extraDataValue) : base.extraData,
     description: workbookField(row, "description", "desc") ?? base.description,
     exDividend: workbookField(row, "ex_dividend", "exDividend") ?? base.exDividend,
@@ -1407,7 +1420,7 @@ function buildPortfolioSnapshot({
     editableTables: {
       tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType", "investmentType"],
       investmentFields: ["description", "account", "category", "totalInvestment", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
-      tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "extraData", "description", "exDividend", "divPayout"],
+      tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
       accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
     },
     assetClasses,
@@ -2277,7 +2290,7 @@ function AssistantPanel({
   );
 }
 
-function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onReorder }: { title: string; subtitle: string; rows: T[]; columns: Array<{ key: keyof T; label: string; type?: "text" | "number" | "select"; options?: string[] }>; onChange: (id: number, field: keyof T, value: string) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; }) {
+function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onReorder }: { title: string; subtitle: string; rows: T[]; columns: Array<{ key: keyof T; label: string; type?: "text" | "number" | "select" | "checkbox"; options?: string[] }>; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; }) {
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
@@ -2369,7 +2382,19 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     setDraggingRowId(null);
     setDragOverRowId(null);
   };
-  const renderCell = (row: T, column: { key: keyof T; label: string; type?: "text" | "number" | "select"; options?: string[] }) => {
+  const renderCell = (row: T, column: { key: keyof T; label: string; type?: "text" | "number" | "select" | "checkbox"; options?: string[] }) => {
+    if (column.type === "checkbox") {
+      return (
+        <div className="checkbox-cell">
+          <input
+            type="checkbox"
+            checked={normalizeBoolean(row[column.key])}
+            onChange={(event) => onChange(row.id, column.key, event.target.checked)}
+            aria-label={`${column.label} for ${title} row`}
+          />
+        </div>
+      );
+    }
     const value = String(row[column.key] ?? "");
     if (String(column.key) === "account") {
       return <AccountInput value={value} onChange={(nextValue) => onChange(row.id, column.key, nextValue)} />;
@@ -3108,7 +3133,9 @@ export default function App() {
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
     const proposedPercent = normalizeRate(row.newPercent);
     const effectivePercent = row.overrideProposal ? proposedPercent || currentPercent : currentPercent;
-    const yearlyIncome = totalInvestment * effectivePercent;
+    const effectiveIncomeItem = Boolean(effectiveTicker?.incomeItem);
+    const incomePercent = effectiveIncomeItem ? effectivePercent : 0;
+    const yearlyIncome = totalInvestment * incomePercent;
     const monthlyIncome = yearlyIncome / 12;
     const filteredIncome = row.includeIncome ? yearlyIncome : 0;
     const includedTotal = row.includeIncome ? totalInvestment : 0;
@@ -3706,6 +3733,10 @@ export default function App() {
         category: "category",
         taxtreatment: "taxTreatment",
         taxstatus: "taxTreatment",
+        incomeitem: "incomeItem",
+        isincomeitem: "incomeItem",
+        incometicker: "incomeItem",
+        income: "incomeItem",
         extradata: "extraData",
         description: "description",
         exdividend: "exDividend",
@@ -3778,10 +3809,10 @@ export default function App() {
           tab: "tickers",
           rows: asEditable(tickers),
           setRows: wrapSetter(setTickers),
-          allowedFields: ["symbol", "percentReturn", "category", "taxTreatment", "extraData", "description", "exDividend", "divPayout"],
+          allowedFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
           numericFields: ["percentReturn", "extraData"],
-          booleanFields: [],
-          defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" }),
+          booleanFields: ["incomeItem"],
+          defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" }),
         };
       case "accounts":
         return {
@@ -4177,7 +4208,7 @@ export default function App() {
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />
         )}
-        {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "category", label: "Category", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onReorder={reorderCollection(setTickers)} />}
+        {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "number" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Category", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onReorder={reorderCollection(setTickers)} />}
         {activeTab === "categories" && <LookupTable title="Categories" subtitle="Reference list used by the Tickers tab category dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Category" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Include in free cashflow" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onReorder={reorderCollection(setAccounts)} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} />}
