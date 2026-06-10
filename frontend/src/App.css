@@ -223,6 +223,9 @@
   font: inherit;
   line-height: .86;
 }
+.income-snapshot__label-delta {
+  margin-bottom: 1px;
+}
 .income-snapshot__value em {
   display: inline-block;
   overflow: hidden;

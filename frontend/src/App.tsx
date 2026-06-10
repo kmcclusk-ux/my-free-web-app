@@ -1563,9 +1563,10 @@ function SnapshotValue({ label, delta }: { label: string; delta: number }) {
   return (
     <strong className={`income-snapshot__value ${deltaClassName} ${isTumbling ? "income-snapshot__value--tumble" : ""}`.trim()}>
       <span className="income-snapshot__label" aria-label={label}>
+        <b className="income-snapshot__label-delta" aria-hidden="true">{"\u0394"}</b>
         {labelWords.map((word) => <b key={word}>{word}</b>)}
       </span>
-      <em>Δ {formatSignedCurrency(roundedDelta)}</em>
+      <em>{formatSignedCurrency(roundedDelta)}</em>
     </strong>
   );
 }
