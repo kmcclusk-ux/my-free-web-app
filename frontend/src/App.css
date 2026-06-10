@@ -151,7 +151,7 @@
 .income-snapshot__body {
   display: flex;
   align-items: center;
-  min-width: 420px;
+  min-width: 220px;
 }
 .income-snapshot__single-line {
   display: flex;
@@ -287,6 +287,9 @@
 .income-snapshot__toggle-button--active {
   background: rgba(82, 214, 169, .22);
   color: #fff;
+}
+.income-snapshot__toggle--basis .income-snapshot__toggle-button {
+  padding-inline: 7px;
 }
 .income-snapshot--inline {
   order: 99;
@@ -555,7 +558,7 @@
 
 @media (max-width: 1220px) {
   .income-snapshot__body {
-    min-width: 340px;
+    min-width: 190px;
   }
   .income-snapshot__single-line {
     gap: 7px;

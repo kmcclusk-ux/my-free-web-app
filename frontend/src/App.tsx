@@ -1582,6 +1582,7 @@ function IncomeSnapshotControl({
   className?: string;
 }) {
   const [snapshotView, setSnapshotView] = useState<"monthly" | "yearly">("monthly");
+  const [snapshotBasis, setSnapshotBasis] = useState<"afterTax" | "beforeTax">("afterTax");
   const capturedLabel = snapshot
     ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "No baseline";
@@ -1594,6 +1595,8 @@ function IncomeSnapshotControl({
         afterTax: deltas?.afterTaxAnnual ?? 0,
         beforeTax: deltas?.beforeTaxAnnual ?? 0,
       };
+  const selectedDelta = snapshotBasis === "afterTax" ? viewDeltas.afterTax : viewDeltas.beforeTax;
+  const selectedLabel = snapshotBasis === "afterTax" ? "After tax" : "Before tax";
 
   return (
     <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
@@ -1607,8 +1610,7 @@ function IncomeSnapshotControl({
       <div className="income-snapshot__body" aria-live="polite">
         {snapshot ? (
           <div className="income-snapshot__single-line">
-            <SnapshotValue label="After tax" delta={viewDeltas.afterTax} />
-            <SnapshotValue label="Before tax" delta={viewDeltas.beforeTax} />
+            <SnapshotValue label={selectedLabel} delta={selectedDelta} />
           </div>
         ) : (
           <div className="income-snapshot__single-line income-snapshot__single-line--empty">
@@ -1616,6 +1618,22 @@ function IncomeSnapshotControl({
             <span className="income-snapshot__captured">{capturedLabel}</span>
           </div>
         )}
+      </div>
+      <div className="income-snapshot__toggle income-snapshot__toggle--basis" role="group" aria-label="Snapshot tax basis">
+        <button
+          className={`income-snapshot__toggle-button ${snapshotBasis === "afterTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+          type="button"
+          onClick={() => setSnapshotBasis("afterTax")}
+        >
+          After Tax
+        </button>
+        <button
+          className={`income-snapshot__toggle-button ${snapshotBasis === "beforeTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+          type="button"
+          onClick={() => setSnapshotBasis("beforeTax")}
+        >
+          Before Tax
+        </button>
       </div>
       <div className="income-snapshot__toggle" role="group" aria-label="Snapshot period">
         <button
