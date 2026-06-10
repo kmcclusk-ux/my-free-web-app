@@ -2841,7 +2841,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <table className={tableClassName}>
           <thead>
             <tr>
-              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Accnt</th><th>Symbol</th><th>Total inv.</th><th>Year</th><th>Month</th><th>%</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th>
+              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Accnt</th><th>Symbol</th><th>Amount</th><th>Year</th><th>Month</th><th>%</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th>
             </tr>
           </thead>
           <tbody>
