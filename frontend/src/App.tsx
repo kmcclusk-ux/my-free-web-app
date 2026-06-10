@@ -1535,15 +1535,11 @@ function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "curr
   );
 }
 
-function incomeDeltaClassName(value: number) {
-  return `income-snapshot__delta ${value >= 0 ? "income-snapshot__delta--up" : "income-snapshot__delta--down"}`;
-}
-
-function SnapshotValue({ label, value, delta }: { label: string; value: number; delta?: number }) {
+function SnapshotValue({ label, delta }: { label: string; delta: number }) {
+  const deltaClassName = delta >= 0 ? "income-snapshot__value--up" : "income-snapshot__value--down";
   return (
-    <strong className="income-snapshot__value">
-      <span>{label} {formatCurrency(value)}</span>
-      {typeof delta === "number" && <em className={incomeDeltaClassName(delta)}>{formatSignedCurrency(delta)}</em>}
+    <strong className={`income-snapshot__value ${deltaClassName}`}>
+      <span>{label} {formatSignedCurrency(delta)}</span>
     </strong>
   );
 }
@@ -1577,8 +1573,8 @@ function IncomeSnapshotControl({
           <span>Annual</span>
           {snapshot ? (
             <>
-              <SnapshotValue label="BT" value={snapshot.beforeTaxAnnual} delta={deltas?.beforeTaxAnnual} />
-              <SnapshotValue label="AT" value={snapshot.afterTaxAnnual} delta={deltas?.afterTaxAnnual} />
+              <SnapshotValue label="BT" delta={deltas?.beforeTaxAnnual ?? 0} />
+              <SnapshotValue label="AT" delta={deltas?.afterTaxAnnual ?? 0} />
             </>
           ) : (
             <strong className="income-snapshot__empty">Set baseline</strong>
@@ -1588,8 +1584,8 @@ function IncomeSnapshotControl({
           <span>Monthly</span>
           {snapshot ? (
             <>
-              <SnapshotValue label="BT" value={snapshot.beforeTaxMonthly} delta={deltas?.beforeTaxMonthly} />
-              <SnapshotValue label="AT" value={snapshot.afterTaxMonthly} delta={deltas?.afterTaxMonthly} />
+              <SnapshotValue label="BT" delta={deltas?.beforeTaxMonthly ?? 0} />
+              <SnapshotValue label="AT" delta={deltas?.afterTaxMonthly ?? 0} />
             </>
           ) : (
             <strong className="income-snapshot__empty">{capturedLabel}</strong>

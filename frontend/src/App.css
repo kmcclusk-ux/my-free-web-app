@@ -197,6 +197,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.income-snapshot__value--up {
+  color: #52d6a9;
+}
+.income-snapshot__value--down {
+  color: #ff8a8a;
+}
 .income-snapshot__delta--up {
   color: #52d6a9;
 }
