@@ -151,12 +151,12 @@
 .income-snapshot__body {
   display: flex;
   align-items: center;
-  min-width: 570px;
+  min-width: 420px;
 }
 .income-snapshot__single-line {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 14px;
   min-width: 0;
   white-space: nowrap;
 }
@@ -196,7 +196,7 @@
 .income-snapshot__value {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   color: inherit;
   font-weight: 850;
@@ -205,7 +205,7 @@
 .income-snapshot__value span {
   overflow: hidden;
   color: rgba(255, 255, 255, .62);
-  font-size: .56rem;
+  font-size: .58rem;
   letter-spacing: .06em;
   text-transform: uppercase;
   text-overflow: ellipsis;
@@ -214,7 +214,7 @@
 .income-snapshot__value em {
   display: inline-block;
   overflow: hidden;
-  font-size: .9rem;
+  font-size: 1.18rem;
   font-style: normal;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
@@ -243,6 +243,39 @@
   grid-column: span 2;
   color: rgba(255, 255, 255, .6);
 }
+.income-snapshot__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .06);
+}
+.income-snapshot__toggle-button {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, .62);
+  cursor: pointer;
+  font-size: .58rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: background 140ms ease, color 140ms ease;
+}
+.income-snapshot__toggle-button:hover,
+.income-snapshot__toggle-button:focus-visible {
+  background: rgba(255, 255, 255, .1);
+  color: rgba(255, 255, 255, .9);
+  outline: none;
+}
+.income-snapshot__toggle-button--active {
+  background: rgba(82, 214, 169, .22);
+  color: #fff;
+}
 .income-snapshot--inline {
   order: 99;
   margin-left: auto;
@@ -269,6 +302,22 @@
 .income-snapshot--inline .income-snapshot__period,
 .income-snapshot--inline .income-snapshot__captured {
   color: var(--pm-muted, #667085);
+}
+.income-snapshot--inline .income-snapshot__toggle {
+  border-color: rgba(20, 33, 38, .12);
+  background: rgba(20, 33, 38, .04);
+}
+.income-snapshot--inline .income-snapshot__toggle-button {
+  color: var(--pm-muted, #667085);
+}
+.income-snapshot--inline .income-snapshot__toggle-button:hover,
+.income-snapshot--inline .income-snapshot__toggle-button:focus-visible {
+  background: rgba(20, 33, 38, .07);
+  color: var(--pm-text, #142126);
+}
+.income-snapshot--inline .income-snapshot__toggle-button--active {
+  background: #17313a;
+  color: #fff;
 }
 .income-snapshot--inline .income-snapshot__delta--up {
   color: var(--pm-positive, #1f9d68);
@@ -494,7 +543,7 @@
 
 @media (max-width: 1220px) {
   .income-snapshot__body {
-    min-width: 470px;
+    min-width: 340px;
   }
   .income-snapshot__single-line {
     gap: 7px;
@@ -507,7 +556,11 @@
     gap: 3px;
   }
   .income-snapshot__value em {
-    font-size: .78rem;
+    font-size: 1rem;
+  }
+  .income-snapshot__toggle-button {
+    padding-inline: 6px;
+    font-size: .52rem;
   }
 }
 .workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr) 216px; min-height: calc(100vh - var(--app-top-nav-height)); }

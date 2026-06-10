@@ -1578,9 +1578,19 @@ function IncomeSnapshotControl({
   onCapture: () => void;
   className?: string;
 }) {
+  const [snapshotView, setSnapshotView] = useState<"monthly" | "yearly">("monthly");
   const capturedLabel = snapshot
     ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "No baseline";
+  const viewDeltas = snapshotView === "monthly"
+    ? {
+        afterTax: deltas?.afterTaxMonthly ?? 0,
+        beforeTax: deltas?.beforeTaxMonthly ?? 0,
+      }
+    : {
+        afterTax: deltas?.afterTaxAnnual ?? 0,
+        beforeTax: deltas?.beforeTaxAnnual ?? 0,
+      };
 
   return (
     <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
@@ -1594,12 +1604,8 @@ function IncomeSnapshotControl({
       <div className="income-snapshot__body" aria-live="polite">
         {snapshot ? (
           <div className="income-snapshot__single-line">
-            <span className="income-snapshot__period">Annual</span>
-            <SnapshotValue label="BT" delta={deltas?.beforeTaxAnnual ?? 0} />
-            <SnapshotValue label="AT" delta={deltas?.afterTaxAnnual ?? 0} />
-            <span className="income-snapshot__period">Monthly</span>
-            <SnapshotValue label="BT" delta={deltas?.beforeTaxMonthly ?? 0} />
-            <SnapshotValue label="AT" delta={deltas?.afterTaxMonthly ?? 0} />
+            <SnapshotValue label="After tax" delta={viewDeltas.afterTax} />
+            <SnapshotValue label="Before tax" delta={viewDeltas.beforeTax} />
           </div>
         ) : (
           <div className="income-snapshot__single-line income-snapshot__single-line--empty">
@@ -1607,6 +1613,22 @@ function IncomeSnapshotControl({
             <span className="income-snapshot__captured">{capturedLabel}</span>
           </div>
         )}
+      </div>
+      <div className="income-snapshot__toggle" role="group" aria-label="Snapshot period">
+        <button
+          className={`income-snapshot__toggle-button ${snapshotView === "monthly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+          type="button"
+          onClick={() => setSnapshotView("monthly")}
+        >
+          Monthly
+        </button>
+        <button
+          className={`income-snapshot__toggle-button ${snapshotView === "yearly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+          type="button"
+          onClick={() => setSnapshotView("yearly")}
+        >
+          Yearly
+        </button>
       </div>
     </div>
   );
