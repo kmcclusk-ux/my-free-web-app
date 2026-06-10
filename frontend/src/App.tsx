@@ -1540,7 +1540,7 @@ function SnapshotValue({ label, delta, suffix }: { label: string; delta: number;
   const previousDelta = useRef<number | null>(null);
   const [isTumbling, setIsTumbling] = useState(false);
   const deltaClassName = roundedDelta >= 0 ? "income-snapshot__value--up" : "income-snapshot__value--down";
-  const labelWords = label.split(/\s+/).filter(Boolean);
+  const displayLabel = label.toLowerCase();
 
   useEffect(() => {
     if (previousDelta.current === null) {
@@ -1562,11 +1562,10 @@ function SnapshotValue({ label, delta, suffix }: { label: string; delta: number;
 
   return (
     <strong className={`income-snapshot__value ${deltaClassName} ${isTumbling ? "income-snapshot__value--tumble" : ""}`.trim()}>
-      <span className="income-snapshot__label" aria-label={label}>
-        <b className="income-snapshot__label-delta" aria-hidden="true">{"\u0394"}</b>
-        {labelWords.map((word) => <b key={word}>{word}</b>)}
-      </span>
-      <em>{formatSignedCurrency(roundedDelta)} <small>{suffix}</small></em>
+      <em>
+        <span className="income-snapshot__delta-marker" aria-hidden="true">{"\u0394"}</span>
+        {formatSignedCurrency(roundedDelta)} <small>{suffix} {displayLabel}</small>
+      </em>
     </strong>
   );
 }
