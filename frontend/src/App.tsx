@@ -533,6 +533,10 @@ function toNumber(value: number | string | boolean | null | undefined) {
   const parsed = Number(str);
   return Number.isFinite(parsed) ? parsed : 0;
 }
+function normalizeRate(value: number | string | boolean | null | undefined) {
+  const numeric = toNumber(value);
+  return Math.abs(numeric) > 1 ? numeric / 100 : numeric;
+}
 function normalizeBoolean(value: unknown) { if (typeof value === "boolean") return value; if (typeof value === "number") return value !== 0; const text = String(value || "").trim().toLowerCase(); return text === "1" || text === "true" || text === "yes" || text === "y"; }
 function normalizeYesNo(value: unknown) { return normalizeBoolean(value) ? "yes" : "no"; }
 function normalizeLookupKey(value: unknown) {
@@ -816,7 +820,6 @@ function buildInvestmentFavoriteKey(row: InvestmentRow) {
   const newSymbol = normalizeLookupKey(row.newSymbol);
   const category = normalizeLookupKey(row.category);
   const totalInvestment = toNumber(row.totalInvestment);
-  const yearlyIncome = toNumber(row.yearlyIncome);
   const newPercent = toNumber(row.newPercent);
 
   return [
@@ -828,7 +831,6 @@ function buildInvestmentFavoriteKey(row: InvestmentRow) {
     `sym:${symbol}`,
     `new:${newSymbol}`,
     `total:${totalInvestment}`,
-    `income:${yearlyIncome}`,
     `override:${row.overrideProposal ? "1" : "0"}`,
     `newpct:${newPercent}`,
   ].join("|");
@@ -1267,7 +1269,7 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     symbol: workbookField(row, "symbol", "ticker") ?? base.symbol,
-    percentReturn: percentValue !== undefined ? toNumber(percentValue) : base.percentReturn,
+    percentReturn: percentValue !== undefined ? normalizeRate(percentValue) : normalizeRate(base.percentReturn),
     category: workbookField(row, "category") ?? base.category,
     taxTreatment: workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment,
     extraData: extraDataValue !== undefined ? toNumber(extraDataValue) : base.extraData,
@@ -1404,7 +1406,7 @@ function buildPortfolioSnapshot({
     },
     editableTables: {
       tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType", "investmentType"],
-      investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+      investmentFields: ["description", "account", "category", "totalInvestment", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
       tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "extraData", "description", "exDividend", "divPayout"],
       accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
     },
@@ -2432,6 +2434,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         switch (sortColumn) {
           case "includedTotal": return derived?.includedTotal || 0;
           case "filteredIncome": return derived?.filteredIncome || 0;
+          case "yearlyIncome": return derived?.yearlyIncome || 0;
           case "symbol": return row.symbol;
           default: return row[sortColumn] as string | number;
         }
@@ -2831,7 +2834,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>
                   <td><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>
                   <td><MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} /></td>
-                  <td><MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /></td>
+                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div></td>
                   <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div></td>
                   <td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
                   <td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>
@@ -3101,11 +3104,14 @@ export default function App() {
     const currentTicker = tickerMap[row.symbol];
     const effectiveSymbol = row.overrideProposal && row.newSymbol ? row.newSymbol : row.symbol;
     const effectiveTicker = tickerMap[effectiveSymbol] || currentTicker;
-    const currentPercent = currentTicker?.percentReturn || 0;
-    const effectivePercent = row.overrideProposal ? toNumber(row.newPercent) || currentPercent : currentPercent;
-    const monthlyIncome = toNumber(row.yearlyIncome) / 12;
-    const filteredIncome = row.includeIncome ? toNumber(row.yearlyIncome) : 0;
-    const includedTotal = row.includeIncome ? toNumber(row.totalInvestment) : 0;
+    const totalInvestment = toNumber(row.totalInvestment);
+    const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
+    const proposedPercent = normalizeRate(row.newPercent);
+    const effectivePercent = row.overrideProposal ? proposedPercent || currentPercent : currentPercent;
+    const yearlyIncome = totalInvestment * effectivePercent;
+    const monthlyIncome = yearlyIncome / 12;
+    const filteredIncome = row.includeIncome ? yearlyIncome : 0;
+    const includedTotal = row.includeIncome ? totalInvestment : 0;
     const account = accountMap[normalizeLookupKey(row.account)];
     const taxStatus = String(account?.taxStatus || "taxable").toLowerCase();
     const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
@@ -3117,6 +3123,7 @@ export default function App() {
     const taxableMonthlyBase = isTaxableAccount && row.includeIncome ? filteredIncome / 12 : 0;
     return {
       ...row,
+      yearlyIncome,
       monthlyIncome,
       currentPercent,
       effectiveSymbol,
@@ -3165,6 +3172,13 @@ export default function App() {
     acc.bitcoin += row.bitcoin;
     return acc;
   }, { totalInvestmentAmount: 0, totalIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
+  const persistedInvestments = useMemo<InvestmentRow[]>(
+    () => investments.map((row) => {
+      const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
+      return derived ? { ...row, yearlyIncome: derived.yearlyIncome } : row;
+    }),
+    [investments, derivedRows]
+  );
 
   const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome;
   const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraPreferredIncome;
@@ -3366,7 +3380,7 @@ export default function App() {
     setStorageState("saving");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, investmentType: investmentTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
         if (!cancelled) { setStorageState("saved"); }
       }).catch((error: Error) => {
         console.error(error);
@@ -3375,7 +3389,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, investmentTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
 
   const totalTax = (federalResult?.tax || 0) + (stateResult?.tax || 0);
   const afterTaxIncome = flows.totalIncome - totalTax;
@@ -3708,7 +3722,8 @@ export default function App() {
         includeinfreecashflow: "includeInFreeCashflow",
       },
     };
-    return commonAliases[config.tableId]?.[normalized] || null;
+    const alias = commonAliases[config.tableId]?.[normalized] || null;
+    return alias && config.allowedFields.includes(alias) ? alias : null;
   }
   function assistantRawValues(payload: Record<string, unknown>) {
     const nested = payload.row || payload.values;
@@ -3751,8 +3766,8 @@ export default function App() {
           tab: "investments",
           rows: asEditable(investments),
           setRows: wrapSetter(setInvestments),
-          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
-          numericFields: ["totalInvestment", "yearlyIncome", "newPercent"],
+          allowedFields: ["description", "account", "category", "totalInvestment", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+          numericFields: ["totalInvestment", "newPercent"],
           booleanFields: ["includeIncome", "overrideProposal"],
           defaultRow: (id) => ({ id, description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 }),
         };
@@ -4145,7 +4160,7 @@ export default function App() {
             onApplyFavorite={applyFavorite}
             onDeleteFavorite={deleteFavorite}
             onRenameFavorite={renameFavorite}
-            onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])}
+            onChange={updateCollection(setInvestments, ["totalInvestment", "newPercent"], ["includeIncome", "overrideProposal"])}
             onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })}
             onReorder={reorderInvestments}
             onRemoveIncluded={() => {
