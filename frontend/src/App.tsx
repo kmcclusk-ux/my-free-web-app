@@ -2850,7 +2850,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <table className={tableClassName}>
           <thead>
             <tr>
-              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Accnt</th><th>Symbol</th><th>%</th><th>Amount</th><th>Year</th><th>Month</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>New symbol</th><th>New %</th><th>Use %</th><th>Use symbol</th><th>$</th>
+              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Accnt</th><th>Symbol</th><th>Normal %</th><th>Amount</th><th>Year</th><th>Month</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>Override symbol</th><th>Override %</th><th>Use %</th><th>Use symbol</th><th>$</th>
             </tr>
           </thead>
           <tbody>
@@ -2901,8 +2901,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>
                   <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>
                   <td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>
-                  <td><select value={row.newSymbol} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
-                  <td><input type="number" value={row.newPercent} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
+                  <td><select value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
+                  <td><input type="number" value={row.newPercent} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
                   <td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>
                   <td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>
                   <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.extraData || 0)}</div></td>
