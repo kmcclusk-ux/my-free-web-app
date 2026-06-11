@@ -29,6 +29,24 @@ type WorkbookResponse = {
 };
 
 type WorkbookRow = Record<string, unknown>;
+type ReferenceTableName =
+  | "tickers"
+  | "accounts"
+  | "categories"
+  | "taxTreatment"
+  | "accountTaxType"
+  | "investmentType";
+
+const referenceTableNameSchema = z.enum([
+  "tickers",
+  "accounts",
+  "categories",
+  "taxTreatment",
+  "accountTaxType",
+  "investmentType",
+]);
+const referenceValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const referenceRowSchema = z.record(referenceValueSchema);
 
 type InvestmentRow = {
   id?: string | number;
@@ -165,6 +183,172 @@ function rowNumber(row: WorkbookRow, ...keys: string[]) {
 function rowMatchesQuery(row: WorkbookRow, query?: string) {
   if (!query) return true;
   return JSON.stringify(row).toLowerCase().includes(query.toLowerCase());
+}
+
+function normalizeReferenceKey(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const referenceTableConfigs: Record<
+  ReferenceTableName,
+  {
+    label: string;
+    primaryField: string;
+    allowedFields: string[];
+    numericFields?: string[];
+    booleanFields?: string[];
+    defaultRow: (id: number) => WorkbookRow;
+    aliases?: Record<string, string>;
+  }
+> = {
+  tickers: {
+    label: "tickers",
+    primaryField: "symbol",
+    allowedFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
+    numericFields: ["percentReturn", "extraData"],
+    booleanFields: ["incomeItem"],
+    defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, category: "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" }),
+    aliases: {
+      ticker: "symbol",
+      percentreturn: "percentReturn",
+      pctreturn: "percentReturn",
+      return: "percentReturn",
+      taxtreatment: "taxTreatment",
+      taxstatus: "taxTreatment",
+      incomeitem: "incomeItem",
+      isincomeitem: "incomeItem",
+      incometicker: "incomeItem",
+      income: "incomeItem",
+      extradata: "extraData",
+      desc: "description",
+      exdividend: "exDividend",
+      divpayout: "divPayout",
+    },
+  },
+  accounts: {
+    label: "accounts",
+    primaryField: "account",
+    allowedFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
+    defaultRow: (id) => ({ id, account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }),
+    aliases: {
+      accountname: "account",
+      accountnames: "account",
+      taxstatus: "taxStatus",
+      taxtreatment: "taxStatus",
+      dividendaccrued: "dividendAccrued",
+      dividendacrued: "dividendAccrued",
+      includeinfreecashflow: "includeInFreeCashflow",
+    },
+  },
+  categories: {
+    label: "categories",
+    primaryField: "name",
+    allowedFields: ["name"],
+    defaultRow: (id) => ({ id, name: "" }),
+    aliases: { category: "name", label: "name" },
+  },
+  taxTreatment: {
+    label: "tax treatment",
+    primaryField: "label",
+    allowedFields: ["label"],
+    defaultRow: (id) => ({ id, label: "" }),
+    aliases: { taxtreatment: "label", taxstatus: "label", treatment: "label", name: "label" },
+  },
+  accountTaxType: {
+    label: "account tax type",
+    primaryField: "taxStatus",
+    allowedFields: ["taxStatus"],
+    defaultRow: (id) => ({ id, taxStatus: "" }),
+    aliases: { taxstatus: "taxStatus", taxtreatment: "taxStatus", status: "taxStatus", label: "taxStatus", name: "taxStatus" },
+  },
+  investmentType: {
+    label: "investment type",
+    primaryField: "name",
+    allowedFields: ["name"],
+    defaultRow: (id) => ({ id, name: "" }),
+    aliases: { investmenttype: "name", type: "name", assetclass: "name", category: "name", label: "name" },
+  },
+};
+
+function normalizeBooleanValue(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const text = String(value ?? "").trim().toLowerCase();
+  return ["1", "true", "yes", "y", "on", "checked"].includes(text);
+}
+
+function normalizeNumberValue(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value ?? "").replace(/[\$,]/g, "").replace(/%/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function referenceFieldAlias(tabName: ReferenceTableName, field: string) {
+  const config = referenceTableConfigs[tabName];
+  const normalized = normalizeReferenceKey(field);
+  const direct = config.allowedFields.find((allowedField) => normalizeReferenceKey(allowedField) === normalized);
+  if (direct) return direct;
+  const alias = config.aliases?.[normalized];
+  return alias && config.allowedFields.includes(alias) ? alias : null;
+}
+
+function coerceReferenceValue(tabName: ReferenceTableName, field: string, value: unknown) {
+  const config = referenceTableConfigs[tabName];
+  if (config.booleanFields?.includes(field)) return normalizeBooleanValue(value);
+  if (config.numericFields?.includes(field)) return normalizeNumberValue(value);
+  return String(value ?? "");
+}
+
+function sanitizeReferenceValues(tabName: ReferenceTableName, values: WorkbookRow) {
+  const sanitized: WorkbookRow = {};
+  const rejected: string[] = [];
+  for (const [field, value] of Object.entries(values)) {
+    if (["id", "query", "selector", "matchField", "tableName", "tabName", "workspaceId"].includes(field)) continue;
+    const allowedField = referenceFieldAlias(tabName, field);
+    if (!allowedField) {
+      rejected.push(field);
+      continue;
+    }
+    sanitized[allowedField] = coerceReferenceValue(tabName, allowedField, value);
+  }
+  return { sanitized, rejected };
+}
+
+function nextWorkbookRowId(rows: WorkbookRow[], preferredId?: unknown) {
+  const usedIds = new Set(rows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0));
+  const preferred = Number(preferredId);
+  if (Number.isFinite(preferred) && preferred > 0 && !usedIds.has(preferred)) return preferred;
+  let id = 1;
+  while (usedIds.has(id)) id += 1;
+  return id;
+}
+
+function referenceRows(workbook: WorkbookResponse, tabName: ReferenceTableName) {
+  return toWorkbookRows(workbook.tabs[tabName]);
+}
+
+function findReferenceRowIndex(rows: WorkbookRow[], tabName: ReferenceTableName, values: WorkbookRow, id?: number, query?: string, matchField?: string) {
+  if (id !== undefined) {
+    const index = rows.findIndex((row) => Number(row.id) === id);
+    if (index >= 0) return index;
+  }
+  if (query) {
+    const matches = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => rowMatchesQuery(row, query));
+    if (matches.length === 1) return matches[0].index;
+    if (matches.length > 1) return -2;
+  }
+
+  const config = referenceTableConfigs[tabName];
+  const field = matchField ? referenceFieldAlias(tabName, matchField) : config.primaryField;
+  if (!field || values[field] === undefined) return -1;
+  const matchKey = normalizeReferenceKey(values[field]);
+  if (!matchKey) return -1;
+  return rows.findIndex((row) => normalizeReferenceKey(row[field]) === matchKey);
 }
 
 function collectColumns(rows: WorkbookRow[]) {
@@ -651,6 +835,169 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   );
 
   server.tool(
+    "update_reference_row",
+    "Update one row in a reference table such as tickers, accounts, categories, tax treatment, account tax type, or investment type.",
+    {
+      workspaceId: z.string().optional(),
+      tableName: referenceTableNameSchema,
+      id: z.number().optional().describe("Exact row id to update."),
+      query: z.string().optional().describe("Free-text query that must match exactly one row if id is not supplied."),
+      values: referenceRowSchema.describe("Allowed fields depend on the table. Unknown fields are rejected."),
+    },
+    async ({ workspaceId, tableName, id, query, values }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const rows = referenceRows(workbook, tableName);
+      const { sanitized, rejected } = sanitizeReferenceValues(tableName, values);
+      if (rejected.length) {
+        throw new Error(`Unsupported field(s) for ${tableName}: ${rejected.join(", ")}.`);
+      }
+      if (Object.keys(sanitized).length === 0) {
+        throw new Error(`update_reference_row received no valid fields for ${tableName}.`);
+      }
+
+      const index = findReferenceRowIndex(rows, tableName, sanitized, id, query);
+      if (index === -2) {
+        throw new Error("update_reference_row query matched more than one row. Use id or a more specific query.");
+      }
+      if (index < 0) {
+        throw new Error("update_reference_row requires a valid id, exact query match, or primary-field match.");
+      }
+
+      const updatedRows = rows.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...sanitized } : row
+      );
+      workbook.tabs[tableName] = updatedRows;
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        tableName,
+        row: updatedRows[index],
+      });
+    }
+  );
+
+  server.tool(
+    "upsert_reference_rows",
+    "Update existing reference-table rows by id/query/primary field and add rows that do not already exist.",
+    {
+      workspaceId: z.string().optional(),
+      tableName: referenceTableNameSchema,
+      rows: z.array(referenceRowSchema).min(1),
+      matchField: z
+        .string()
+        .optional()
+        .describe("Optional allowed field to match on. Defaults to symbol, account, label, taxStatus, or name depending on the table."),
+    },
+    async ({ workspaceId, tableName, rows: inputRows, matchField }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const existingRows = referenceRows(workbook, tableName);
+      const matchFieldName = matchField ? referenceFieldAlias(tableName, matchField) ?? undefined : undefined;
+      if (matchField !== undefined && !matchFieldName) {
+        throw new Error(`${matchField} is not a valid match field for ${tableName}.`);
+      }
+
+      const sanitizedRows = inputRows.map((row) => ({
+        raw: row,
+        ...sanitizeReferenceValues(tableName, row),
+      }));
+      const rejected = sanitizedRows.flatMap((row) => row.rejected);
+      if (rejected.length) {
+        throw new Error(`Unsupported field(s) for ${tableName}: ${[...new Set(rejected)].join(", ")}.`);
+      }
+      if (sanitizedRows.some((row) => Object.keys(row.sanitized).length === 0)) {
+        throw new Error(`Every ${tableName} row must include at least one valid field.`);
+      }
+
+      const nextRows = [...existingRows];
+      let updated = 0;
+      let added = 0;
+      for (const row of sanitizedRows) {
+        const rawId = row.raw.id === null ? undefined : row.raw.id;
+        const id = rawId === undefined ? undefined : Number(rawId);
+        const query: string | undefined =
+          row.raw.query === null || row.raw.query === undefined ? undefined : String(row.raw.query);
+        const index = findReferenceRowIndex(
+          nextRows,
+          tableName,
+          row.sanitized,
+          Number.isFinite(id) ? id : undefined,
+          query,
+          matchFieldName
+        );
+        if (index === -2) {
+          throw new Error(`A ${tableName} row query matched more than one row. Use id or a more specific query.`);
+        }
+        if (index >= 0) {
+          nextRows[index] = { ...nextRows[index], ...row.sanitized };
+          updated += 1;
+        } else {
+          nextRows.push({
+            ...referenceTableConfigs[tableName].defaultRow(nextWorkbookRowId(nextRows, rawId)),
+            ...row.sanitized,
+          });
+          added += 1;
+        }
+      }
+
+      workbook.tabs[tableName] = nextRows;
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        tableName,
+        updated,
+        added,
+        totalRows: nextRows.length,
+      });
+    }
+  );
+
+  server.tool(
+    "replace_reference_table",
+    "Replace an entire reference table. Use only when the user explicitly wants the full tickers/accounts/categories/tax-treatment/account-tax-type/investment-type table replaced.",
+    {
+      workspaceId: z.string().optional(),
+      tableName: referenceTableNameSchema,
+      rows: z.array(referenceRowSchema).min(1),
+    },
+    async ({ workspaceId, tableName, rows: inputRows }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const nextRows: WorkbookRow[] = [];
+      const sanitizedRows = inputRows.map((row) => ({
+        raw: row,
+        ...sanitizeReferenceValues(tableName, row),
+      }));
+      const rejected = sanitizedRows.flatMap((row) => row.rejected);
+      if (rejected.length) {
+        throw new Error(`Unsupported field(s) for ${tableName}: ${[...new Set(rejected)].join(", ")}.`);
+      }
+      if (sanitizedRows.some((row) => Object.keys(row.sanitized).length === 0)) {
+        throw new Error(`Every replacement ${tableName} row must include at least one valid field.`);
+      }
+
+      for (const row of sanitizedRows) {
+        nextRows.push({
+          ...referenceTableConfigs[tableName].defaultRow(nextWorkbookRowId(nextRows, row.raw.id)),
+          ...row.sanitized,
+        });
+      }
+
+      workbook.tabs[tableName] = nextRows;
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        tableName,
+        totalRows: nextRows.length,
+      });
+    }
+  );
+
+  server.tool(
     "get_reference_tables",
     "Return workbook reference tables like tickers, accounts, tax treatment, account tax type, and investment type.",
     {
@@ -662,6 +1009,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         workspaceId: workbook.workspaceId,
         tickers: workbook.tabs.tickers ?? [],
         accounts: workbook.tabs.accounts ?? [],
+        categories: workbook.tabs.categories ?? [],
         taxTreatment: workbook.tabs.taxTreatment ?? [],
         accountTaxType: workbook.tabs.accountTaxType ?? [],
         investmentType: workbook.tabs.investmentType ?? [],

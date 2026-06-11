@@ -160,8 +160,10 @@ type AssistantAction =
   | { type: "sortTable"; payload: { tableId: "investments"; column: InvestmentSortColumn; direction: "asc" | "desc" }; requiresConfirmation?: boolean }
   | { type: "setView"; payload: { viewName: string }; requiresConfirmation?: boolean }
   | { type: "addRow"; payload: { tableId: WorkbookTableId; row?: Record<string, unknown>; values?: Record<string, unknown> }; requiresConfirmation?: boolean }
-  | { type: "updateRow"; payload: { tableId: WorkbookTableId; id?: number | string; selector?: string; values: Record<string, unknown> }; requiresConfirmation?: boolean }
-  | { type: "deleteRows"; payload: { tableId: WorkbookTableId; id?: number | string; ids?: Array<number | string>; selector?: string }; requiresConfirmation?: boolean };
+  | { type: "updateRow"; payload: { tableId: WorkbookTableId; id?: number | string; selector?: string; all?: boolean; values: Record<string, unknown> }; requiresConfirmation?: boolean }
+  | { type: "upsertRows"; payload: { tableId: WorkbookTableId; rows?: Array<Record<string, unknown>>; row?: Record<string, unknown>; values?: Array<Record<string, unknown>>; matchField?: string }; requiresConfirmation?: boolean }
+  | { type: "replaceRows"; payload: { tableId: WorkbookTableId; rows?: Array<Record<string, unknown>>; values?: Array<Record<string, unknown>> }; requiresConfirmation?: boolean }
+  | { type: "deleteRows"; payload: { tableId: WorkbookTableId; id?: number | string; ids?: Array<number | string>; selector?: string; all?: boolean }; requiresConfirmation?: boolean };
 type ChatResponse = { message: string; actions?: AssistantAction[]; model?: string; usage?: unknown; error?: string };
 type InvestmentFilters = { account: string; category: string; asset: string };
 type InvestmentSortColumn = "description" | "account" | "category" | "totalInvestment" | "yearlyIncome" | "symbol" | "includedTotal" | "filteredIncome";
@@ -2166,6 +2168,8 @@ function AssistantPanel({
           action.type === "setView" ||
           action.type === "addRow" ||
           action.type === "updateRow" ||
+          action.type === "upsertRows" ||
+          action.type === "replaceRows" ||
           action.type === "deleteRows";
         if (needsConfirmation && !window.confirm("Apply this assistant-requested workbook/UI change?")) {
           return { ok: false, message: `Skipped ${action.type}: user cancelled confirmation.` };
@@ -3768,6 +3772,33 @@ export default function App() {
         dividendacrued: "dividendAccrued",
         includeinfreecashflow: "includeInFreeCashflow",
       },
+      categories: {
+        category: "name",
+        label: "name",
+        name: "name",
+      },
+      taxTreatment: {
+        taxtreatment: "label",
+        taxstatus: "label",
+        treatment: "label",
+        label: "label",
+        name: "label",
+      },
+      accountTaxType: {
+        taxstatus: "taxStatus",
+        taxtreatment: "taxStatus",
+        status: "taxStatus",
+        label: "taxStatus",
+        name: "taxStatus",
+      },
+      investmentType: {
+        investmenttype: "name",
+        type: "name",
+        assetclass: "name",
+        category: "name",
+        label: "name",
+        name: "name",
+      },
     };
     const alias = commonAliases[config.tableId]?.[normalized] || null;
     return alias && config.allowedFields.includes(alias) ? alias : null;
@@ -3783,7 +3814,7 @@ export default function App() {
     const values: Record<string, unknown> = {};
     const rejected: string[] = [];
     Object.entries(source).forEach(([field, value]) => {
-      if (field === "id") return;
+      if (["id", "selector", "tableId", "matchField", "requiresConfirmation", "all"].includes(field)) return;
       const allowedField = assistantFieldAlias(config, field);
       if (!allowedField) {
         rejected.push(field);
@@ -3799,8 +3830,36 @@ export default function App() {
     if (normalizeLookupKey(String(row.id)) === selectorKey) return true;
     return Object.entries(row).some(([field, value]) => field !== "id" && valueMatchesAssetSelector(value, selectorKey));
   }
+  function normalizeAssistantTableId(tableId: unknown): WorkbookTableId | null {
+    const normalized = normalizeAssistantFieldName(String(tableId || ""));
+    const tableAliases: Record<string, WorkbookTableId> = {
+      investment: "investments",
+      investments: "investments",
+      holding: "investments",
+      holdings: "investments",
+      ticker: "tickers",
+      tickers: "tickers",
+      symbol: "tickers",
+      symbols: "tickers",
+      account: "accounts",
+      accounts: "accounts",
+      category: "categories",
+      categories: "categories",
+      taxtreatment: "taxTreatment",
+      taxtreatments: "taxTreatment",
+      taxstatus: "taxTreatment",
+      accounttaxtype: "accountTaxType",
+      accounttaxtypes: "accountTaxType",
+      investmenttype: "investmentType",
+      investmenttypes: "investmentType",
+      assetclass: "investmentType",
+      assetclasses: "investmentType",
+    };
+    return tableAliases[normalized] || null;
+  }
   function getAssistantTableConfig(tableId: unknown): AssistantTableConfig | null {
-    const id = String(tableId || "") as WorkbookTableId;
+    const id = normalizeAssistantTableId(tableId);
+    if (!id) return null;
     const asEditable = <T extends { id: number }>(rows: T[]) => rows as unknown as AssistantEditableRow[];
     const wrapSetter = <T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) =>
       (updater: (current: AssistantEditableRow[]) => AssistantEditableRow[]) => setter((current) => updater(asEditable(current)) as unknown as T[]);
@@ -3895,6 +3954,15 @@ export default function App() {
     }
   }
   function resolveAssistantRows(config: AssistantTableConfig, payload: Record<string, unknown>) {
+    if (
+      payload.all === true ||
+      normalizeLookupKey(payload.all) === "true" ||
+      normalizeLookupKey(payload.id) === "all" ||
+      normalizeLookupKey(payload.selector) === "all"
+    ) {
+      return config.rows;
+    }
+
     const ids = new Set<string>();
     if (payload.id !== undefined) ids.add(normalizeLookupKey(String(payload.id)));
     if (Array.isArray(payload.ids)) {
@@ -3902,6 +3970,70 @@ export default function App() {
     }
     const selector = payload.selector;
     return config.rows.filter((row) => ids.has(normalizeLookupKey(String(row.id))) || (selector !== undefined && rowMatchesAssistantSelector(row, selector)));
+  }
+  function assistantRowsPayload(payload: Record<string, unknown>) {
+    const candidate = payload.rows ?? payload.values ?? payload.row;
+    if (Array.isArray(candidate)) {
+      return candidate.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row));
+    }
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      return [candidate as Record<string, unknown>];
+    }
+    return [];
+  }
+  function assistantPrimaryField(config: AssistantTableConfig) {
+    const primaryByTable: Partial<Record<WorkbookTableId, string>> = {
+      investments: "id",
+      tickers: "symbol",
+      accounts: "account",
+      categories: "name",
+      taxTreatment: "label",
+      accountTaxType: "taxStatus",
+      investmentType: "name",
+    };
+    return primaryByTable[config.tableId] || "id";
+  }
+  function assistantMatchField(config: AssistantTableConfig, payload: Record<string, unknown>) {
+    if (payload.matchField !== undefined) {
+      const field = assistantFieldAlias(config, String(payload.matchField));
+      return field || null;
+    }
+    const primary = assistantPrimaryField(config);
+    return primary === "id" ? null : primary;
+  }
+  function nextUnusedAssistantRowId(usedIds: Set<number>, preferredId?: unknown) {
+    const preferred = Number(preferredId);
+    if (Number.isFinite(preferred) && preferred > 0 && !usedIds.has(preferred)) {
+      usedIds.add(preferred);
+      return preferred;
+    }
+
+    let nextId = 1;
+    while (usedIds.has(nextId)) nextId += 1;
+    usedIds.add(nextId);
+    return nextId;
+  }
+  function matchAssistantRowIndex(rows: AssistantEditableRow[], raw: Record<string, unknown>, values: Record<string, unknown>, matchField: string | null) {
+    const rawId = raw.id;
+    if (rawId !== undefined) {
+      const idKey = normalizeLookupKey(String(rawId));
+      const idIndex = rows.findIndex((row) => normalizeLookupKey(String(row.id)) === idKey);
+      if (idIndex >= 0) return idIndex;
+    }
+
+    if (raw.selector !== undefined) {
+      const selectorIndex = rows.findIndex((row) => rowMatchesAssistantSelector(row, raw.selector));
+      if (selectorIndex >= 0) return selectorIndex;
+    }
+
+    if (matchField && values[matchField] !== undefined) {
+      const matchKey = normalizeLookupKey(values[matchField]);
+      if (matchKey) {
+        return rows.findIndex((row) => normalizeLookupKey(row[matchField]) === matchKey);
+      }
+    }
+
+    return -1;
   }
   function highlightInvestmentMatches(matches: DerivedInvestmentRow[], label: string) {
     const ids = [...new Set(matches.map((row) => row.id))];
@@ -4074,6 +4206,63 @@ export default function App() {
       config.setRows((current) => current.map((row) => matchIds.has(row.id) ? { ...row, ...values } : row));
       setActiveTab(config.tab);
       return { ok: true, message: `Updated ${matches.length} row${matches.length === 1 ? "" : "s"} in ${config.label}.` };
+    }
+
+    if (actionType === "upsertRows") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      const config = getAssistantTableConfig(payload.tableId);
+      if (!config) return { ok: false, message: `Rejected upsertRows: ${String(payload.tableId || "(blank)")} is not an editable table.` };
+      const rowInputs = assistantRowsPayload(payload);
+      if (rowInputs.length === 0) return { ok: false, message: "Rejected upsertRows: no rows were supplied." };
+      const matchField = assistantMatchField(config, payload);
+      if (payload.matchField !== undefined && !matchField) return { ok: false, message: `Rejected upsertRows: ${String(payload.matchField)} is not a valid match field for ${config.tableId}.` };
+
+      const sanitizedRows = rowInputs.map((row) => ({ raw: row, ...sanitizeAssistantValues(config, row) }));
+      const rejected = sanitizedRows.flatMap((row) => row.rejected);
+      if (rejected.length) return { ok: false, message: `Rejected upsertRows: unsupported field(s) ${[...new Set(rejected)].join(", ")} for ${config.tableId}.` };
+      if (sanitizedRows.some((row) => Object.keys(row.values).length === 0)) return { ok: false, message: "Rejected upsertRows: each row must include at least one valid field." };
+
+      let updatedCount = 0;
+      let addedCount = 0;
+      const nextRows = [...config.rows];
+      const usedIds = new Set(nextRows.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0));
+      sanitizedRows.forEach(({ raw, values }) => {
+        const matchIndex = matchAssistantRowIndex(nextRows, raw, values, matchField);
+        if (matchIndex >= 0) {
+          nextRows[matchIndex] = { ...nextRows[matchIndex], ...values };
+          updatedCount += 1;
+          return;
+        }
+
+        const id = nextUnusedAssistantRowId(usedIds, raw.id);
+        nextRows.push({ ...config.defaultRow(id), ...values, id });
+        addedCount += 1;
+      });
+      config.setRows(() => nextRows);
+      setActiveTab(config.tab);
+      return { ok: true, message: `Upserted ${rowInputs.length} row${rowInputs.length === 1 ? "" : "s"} in ${config.label}: ${updatedCount} updated, ${addedCount} added.` };
+    }
+
+    if (actionType === "replaceRows") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      const config = getAssistantTableConfig(payload.tableId);
+      if (!config) return { ok: false, message: `Rejected replaceRows: ${String(payload.tableId || "(blank)")} is not an editable table.` };
+      const rowInputs = assistantRowsPayload(payload);
+      if (rowInputs.length === 0) return { ok: false, message: "Rejected replaceRows: no replacement rows were supplied." };
+
+      const sanitizedRows = rowInputs.map((row) => ({ raw: row, ...sanitizeAssistantValues(config, row) }));
+      const rejected = sanitizedRows.flatMap((row) => row.rejected);
+      if (rejected.length) return { ok: false, message: `Rejected replaceRows: unsupported field(s) ${[...new Set(rejected)].join(", ")} for ${config.tableId}.` };
+      if (sanitizedRows.some((row) => Object.keys(row.values).length === 0)) return { ok: false, message: "Rejected replaceRows: each replacement row must include at least one valid field." };
+
+      const usedIds = new Set<number>();
+      const replacementRows = sanitizedRows.map(({ raw, values }) => {
+        const id = nextUnusedAssistantRowId(usedIds, raw.id);
+        return { ...config.defaultRow(id), ...values, id };
+      });
+      config.setRows(() => replacementRows);
+      setActiveTab(config.tab);
+      return { ok: true, message: `Replaced ${config.label} with ${replacementRows.length} row${replacementRows.length === 1 ? "" : "s"}.` };
     }
 
     if (actionType === "deleteRows") {
