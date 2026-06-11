@@ -2490,6 +2490,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [showOverrideColumns, setShowOverrideColumns] = useState(false);
   const [showTaxColumns, setShowTaxColumns] = useState(false);
+  const [showDebugColumns, setShowDebugColumns] = useState(false);
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
@@ -2734,6 +2735,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     "sheet-table--workbook",
     !showOverrideColumns ? "sheet-table--hide-override" : "",
     !showTaxColumns ? "sheet-table--hide-tax-breakdown" : "",
+    !showDebugColumns ? "sheet-table--hide-debug" : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -2748,6 +2750,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </button>
           <button className={`ghost-button ghost-button--compact column-toggle ${showTaxColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showTaxColumns} onClick={() => setShowTaxColumns((current) => !current)}>
             {showTaxColumns ? "- Tax categories" : "+ Tax categories"}
+          </button>
+          <button className={`ghost-button ghost-button--compact column-toggle ${showDebugColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showDebugColumns} onClick={() => setShowDebugColumns((current) => !current)}>
+            {showDebugColumns ? "- Debug" : "+ Debug"}
           </button>
         </div>
       </div>

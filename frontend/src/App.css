@@ -2574,7 +2574,12 @@
   min-width: 1180px;
 }
 
-.sheet-table--hide-override :is(th, td):nth-child(n+29):nth-child(-n+34),
+.sheet-table--hide-override :is(th, td):nth-child(29),
+.sheet-table--hide-override :is(th, td):nth-child(31),
+.sheet-table--hide-debug :is(th, td):nth-child(30),
+.sheet-table--hide-debug :is(th, td):nth-child(32),
+.sheet-table--hide-debug :is(th, td):nth-child(33),
+.sheet-table--hide-debug :is(th, td):nth-child(34),
 .sheet-table--hide-tax-breakdown :is(th, td):nth-child(n+12):nth-child(-n+28) {
   display: none;
 }
