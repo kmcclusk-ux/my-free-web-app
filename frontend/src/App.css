@@ -2575,6 +2575,7 @@
 }
 
 .sheet-table--hide-override :is(th, td):nth-child(n+29):nth-child(-n+31),
+.sheet-table--hide-debug :is(th, td):nth-child(n+10):nth-child(-n+11),
 .sheet-table--hide-debug :is(th, td):nth-child(n+32):nth-child(-n+34),
 .sheet-table--hide-tax-breakdown :is(th, td):nth-child(n+12):nth-child(-n+28) {
   display: none;
