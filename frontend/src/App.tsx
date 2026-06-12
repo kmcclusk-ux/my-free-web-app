@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import "./App.css";
 
@@ -259,6 +259,54 @@ const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
+const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths";
+const INVESTMENT_COLUMN_DEFS = [
+  { id: "move", label: "", ariaLabel: "Move row", className: "drag-handle-heading", defaultWidth: 30, minWidth: 26 },
+  { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
+  { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
+  { id: "account", label: "Accnt", defaultWidth: 150, minWidth: 96 },
+  { id: "symbol", label: "Symbol", defaultWidth: 70, minWidth: 58 },
+  { id: "normalPercent", label: "Normal %", defaultWidth: 58, minWidth: 48 },
+  { id: "amount", label: "Amount", defaultWidth: 70, minWidth: 58 },
+  { id: "year", label: "Year", defaultWidth: 82, minWidth: 62 },
+  { id: "month", label: "Month", defaultWidth: 54, minWidth: 46 },
+  { id: "filtered", label: "Filtered", defaultWidth: 72, minWidth: 58, group: "debug" },
+  { id: "total", label: "Total", defaultWidth: 72, minWidth: 58, group: "debug" },
+  { id: "taxStatus", label: "Tax Status", defaultWidth: 78, minWidth: 62, group: "tax" },
+  { id: "ordinary", label: "Ordinary", defaultWidth: 66, minWidth: 54, group: "tax" },
+  { id: "preferred", label: "Preferred", defaultWidth: 70, minWidth: 54, group: "tax" },
+  { id: "state", label: "State", defaultWidth: 58, minWidth: 48, group: "tax" },
+  { id: "nonTaxable", label: "Non taxable", defaultWidth: 78, minWidth: 58, group: "tax" },
+  { id: "investmentType", label: "Inv. type", defaultWidth: 78, minWidth: 60, group: "tax" },
+  { id: "nonInvestmentIncome", label: "Non-invest income", defaultWidth: 82, minWidth: 62, group: "tax" },
+  { id: "cash", label: "Cash", defaultWidth: 58, minWidth: 48, group: "tax" },
+  { id: "stocks", label: "Stocks", defaultWidth: 62, minWidth: 48, group: "tax" },
+  { id: "preferredStock", label: "Preferred stock", defaultWidth: 78, minWidth: 58, group: "tax" },
+  { id: "bonds", label: "Bonds", defaultWidth: 62, minWidth: 48, group: "tax" },
+  { id: "muniBond", label: "Muni-bond", defaultWidth: 70, minWidth: 52, group: "tax" },
+  { id: "muniInterest", label: "Muni-int", defaultWidth: 66, minWidth: 52, group: "tax" },
+  { id: "businessDevelopment", label: "Bus dev", defaultWidth: 66, minWidth: 52, group: "tax" },
+  { id: "coveredCall", label: "Covered call", defaultWidth: 78, minWidth: 58, group: "tax" },
+  { id: "realEstate", label: "Real estate", defaultWidth: 76, minWidth: 56, group: "tax" },
+  { id: "bitcoin", label: "Bitcoin", defaultWidth: 62, minWidth: 48, group: "tax" },
+  { id: "override", label: "Override", defaultWidth: 34, minWidth: 30, group: "override" },
+  { id: "overrideSymbol", label: "Override symbol", defaultWidth: 110, minWidth: 76, group: "override" },
+  { id: "overridePercent", label: "Override %", defaultWidth: 58, minWidth: 48, group: "override" },
+  { id: "usePercent", label: "Use %", defaultWidth: 52, minWidth: 44, group: "debug" },
+  { id: "useSymbol", label: "Use symbol", defaultWidth: 72, minWidth: 58, group: "debug" },
+  { id: "extraData", label: "$", defaultWidth: 62, minWidth: 48, group: "debug" },
+] as const;
+type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
+type InvestmentColumnWidths = Record<InvestmentColumnId, number>;
+const DEFAULT_INVESTMENT_COLUMN_WIDTHS = INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
+  acc[column.id] = column.defaultWidth;
+  return acc;
+}, {} as InvestmentColumnWidths);
+const INVESTMENT_COLUMN_MIN_WIDTHS = INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
+  acc[column.id] = column.minWidth;
+  return acc;
+}, {} as InvestmentColumnWidths);
+const INVESTMENT_COLUMN_MAX_WIDTH = 360;
 
 function isCognitoEnabled() {
   return Boolean(COGNITO_DOMAIN && COGNITO_CLIENT_ID && COGNITO_REDIRECT_URI);
@@ -2491,11 +2539,29 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [showOverrideColumns, setShowOverrideColumns] = useState(false);
   const [showTaxColumns, setShowTaxColumns] = useState(false);
   const [showDebugColumns, setShowDebugColumns] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<InvestmentColumnWidths>(() => {
+    if (typeof window === "undefined") return DEFAULT_INVESTMENT_COLUMN_WIDTHS;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(INVESTMENT_COLUMN_WIDTH_STORAGE_KEY) || "{}") as Partial<Record<InvestmentColumnId, number>>;
+      return INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
+        const storedWidth = stored[column.id];
+        acc[column.id] = Number.isFinite(storedWidth)
+          ? Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(column.minWidth, Number(storedWidth)))
+          : column.defaultWidth;
+        return acc;
+      }, {} as InvestmentColumnWidths);
+    } catch {
+      return DEFAULT_INVESTMENT_COLUMN_WIDTHS;
+    }
+  });
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
+  useEffect(() => {
+    window.localStorage.setItem(INVESTMENT_COLUMN_WIDTH_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
   useEffect(() => {
     if (selectedAssetIds.length === 0) return;
     const container = tableScrollRef.current;
@@ -2729,6 +2795,56 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     return acc;
   }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
   const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
+  const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
+    const group = "group" in column ? column.group : undefined;
+    if (group === "override") return showOverrideColumns;
+    if (group === "tax") return showTaxColumns;
+    if (group === "debug") return showDebugColumns;
+    return true;
+  };
+  const visibleTableWidth = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => sum + (isColumnVisible(column) ? columnWidths[column.id] : 0), 0);
+  const tableStyle = {
+    width: visibleTableWidth,
+    minWidth: visibleTableWidth,
+    "--investment-col-2-left": `${columnWidths.move}px`,
+    "--investment-col-3-left": `${columnWidths.move + columnWidths.row}px`,
+    "--investment-col-4-left": `${columnWidths.move + columnWidths.row + columnWidths.included}px`,
+  } as CSSProperties;
+  const handleColumnResizeStart = (event: ReactPointerEvent<HTMLButtonElement>, columnId: InvestmentColumnId) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = columnWidths[columnId];
+    const minWidth = INVESTMENT_COLUMN_MIN_WIDTHS[columnId];
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextWidth = Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(minWidth, startWidth + moveEvent.clientX - startX));
+      setColumnWidths((current) => ({ ...current, [columnId]: nextWidth }));
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+  };
+  const renderInvestmentHeader = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => (
+    <th
+      key={column.id}
+      className={"className" in column ? column.className : undefined}
+      title={"title" in column ? column.title : undefined}
+      aria-label={"ariaLabel" in column ? column.ariaLabel : undefined}
+    >
+      <span className="resizable-header__label">{column.label}</span>
+      <button
+        type="button"
+        className="column-resizer"
+        aria-label={`Resize ${("ariaLabel" in column ? column.ariaLabel : undefined) || column.label || "column"} column`}
+        onPointerDown={(event) => handleColumnResizeStart(event, column.id)}
+      />
+    </th>
+  );
   const tableClassName = [
     "sheet-table",
     "sheet-table--compact",
@@ -2847,10 +2963,15 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         </div>
       )}
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
-        <table className={tableClassName}>
+        <table className={tableClassName} style={tableStyle}>
+          <colgroup>
+            {INVESTMENT_COLUMN_DEFS.map((column) => (
+              <col key={column.id} style={{ width: isColumnVisible(column) ? columnWidths[column.id] : 0 }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th className="drag-handle-heading" aria-label="Move row" /><th className="sheet-row-heading">Row</th><th className="included-heading" title="Included" aria-label="Included">Included</th><th>Accnt</th><th>Symbol</th><th>Normal %</th><th>Amount</th><th>Year</th><th>Month</th><th>Filtered</th><th>Total</th><th>Tax Status</th><th>Ordinary</th><th>Preferred</th><th>State</th><th>Non taxable</th><th>Inv. type</th><th>Non-invest income</th><th>Cash</th><th>Stocks</th><th>Preferred stock</th><th>Bonds</th><th>Muni-bond</th><th>Muni-int</th><th>Bus dev</th><th>Covered call</th><th>Real estate</th><th>Bitcoin</th><th>Override</th><th>Override symbol</th><th>Override %</th><th>Use %</th><th>Use symbol</th><th>$</th>
+              {INVESTMENT_COLUMN_DEFS.map(renderInvestmentHeader)}
             </tr>
           </thead>
           <tbody>
