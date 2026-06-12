@@ -266,8 +266,8 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
   { id: "account", label: "Accnt", defaultWidth: 150, minWidth: 96 },
   { id: "symbol", label: "Symbol", defaultWidth: 70, minWidth: 58 },
-  { id: "normalPercent", label: "Normal %", defaultWidth: 58, minWidth: 48 },
-  { id: "amount", label: "Amount", defaultWidth: 70, minWidth: 58 },
+  { id: "normalPercent", label: "Dividend", defaultWidth: 58, minWidth: 48 },
+  { id: "amount", label: "Investment", defaultWidth: 70, minWidth: 58 },
   { id: "year", label: "Year", defaultWidth: 82, minWidth: 62 },
   { id: "month", label: "Month", defaultWidth: 54, minWidth: 46 },
   { id: "filtered", label: "Filtered", defaultWidth: 72, minWidth: 58, group: "debug" },
@@ -298,12 +298,24 @@ const INVESTMENT_COLUMN_DEFS = [
 ] as const;
 type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
 type InvestmentColumnWidths = Record<InvestmentColumnId, number>;
+function investmentColumnLabelWidth(label: string) {
+  return label ? Math.ceil(label.length * 6.8) + 24 : 26;
+}
+
+function investmentColumnMinWidth(column: typeof INVESTMENT_COLUMN_DEFS[number]) {
+  return Math.max(column.minWidth, investmentColumnLabelWidth(column.label));
+}
+
+function investmentColumnDefaultWidth(column: typeof INVESTMENT_COLUMN_DEFS[number]) {
+  return Math.max(column.defaultWidth, investmentColumnMinWidth(column));
+}
+
 const DEFAULT_INVESTMENT_COLUMN_WIDTHS = INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
-  acc[column.id] = column.defaultWidth;
+  acc[column.id] = investmentColumnDefaultWidth(column);
   return acc;
 }, {} as InvestmentColumnWidths);
 const INVESTMENT_COLUMN_MIN_WIDTHS = INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
-  acc[column.id] = column.minWidth;
+  acc[column.id] = investmentColumnMinWidth(column);
   return acc;
 }, {} as InvestmentColumnWidths);
 const INVESTMENT_COLUMN_MAX_WIDTH = 360;
@@ -2546,8 +2558,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
       return INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
         const storedWidth = stored[column.id];
         acc[column.id] = Number.isFinite(storedWidth)
-          ? Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(column.minWidth, Number(storedWidth)))
-          : column.defaultWidth;
+          ? Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(INVESTMENT_COLUMN_MIN_WIDTHS[column.id], Number(storedWidth)))
+          : DEFAULT_INVESTMENT_COLUMN_WIDTHS[column.id];
         return acc;
       }, {} as InvestmentColumnWidths);
     } catch {
