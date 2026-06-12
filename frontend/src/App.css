@@ -2613,13 +2613,16 @@
 .investments-workspace .sheet-table--workbook th {
   position: sticky;
   overflow: visible;
+  font-size: .64rem;
+  text-align: center;
 }
 
 .resizable-header__label {
   display: block;
   min-width: 0;
   overflow: hidden;
-  padding-right: 6px;
+  padding: 0 8px;
+  text-align: center;
   text-overflow: ellipsis;
 }
 
