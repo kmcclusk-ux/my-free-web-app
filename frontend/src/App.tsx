@@ -2471,7 +2471,12 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     if (column.type === "percent") {
       const rawNumberValue = Number(row[column.key]);
       const percentValue = Number.isFinite(rawNumberValue) ? String(toNumber(rawNumberValue) * 100) : "";
-      return <input type="number" value={percentValue} step="0.01" onChange={(event) => onChange(row.id, column.key, String(toNumber(event.target.value) / 100))} />;
+      return (
+        <div className="percent-input">
+          <input type="number" value={percentValue} step="0.01" onChange={(event) => onChange(row.id, column.key, String(toNumber(event.target.value) / 100))} />
+          <span>%</span>
+        </div>
+      );
     }
     return <input type={column.type === "number" ? "number" : "text"} value={value} onChange={(event) => onChange(row.id, column.key, event.target.value)} />;
   };

@@ -2872,6 +2872,19 @@
   font-size: .78rem;
 }
 
+.sheet-table--lookup .percent-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.sheet-table--lookup .percent-input span {
+  color: #51666d;
+  font-size: .76rem;
+  font-weight: 760;
+}
+
 .sheet-table--lookup select {
   padding-right: 32px !important;
 }
