@@ -264,7 +264,7 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "move", label: "", ariaLabel: "Move row", className: "drag-handle-heading", defaultWidth: 30, minWidth: 26 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
-  { id: "account", label: "Accnt", defaultWidth: 150, minWidth: 96 },
+  { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
   { id: "symbol", label: "Symbol", defaultWidth: 82, minWidth: 78 },
   { id: "normalPercent", label: "Dividend", defaultWidth: 58, minWidth: 48 },
   { id: "amount", label: "Investment", defaultWidth: 104, minWidth: 100 },
