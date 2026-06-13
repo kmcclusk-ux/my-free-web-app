@@ -2888,7 +2888,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`ghost-button ghost-button--compact column-toggle ${showOverrideColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showOverrideColumns} onClick={() => setShowOverrideColumns((current) => !current)}>
-            {showOverrideColumns ? "- Override" : "+ Override"}
+            {showOverrideColumns ? "- WhatIf" : "+ WhatIf"}
           </button>
           <button className={`ghost-button ghost-button--compact column-toggle ${showTaxColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showTaxColumns} onClick={() => setShowTaxColumns((current) => !current)}>
             {showTaxColumns ? "- Tax categories" : "+ Tax categories"}
