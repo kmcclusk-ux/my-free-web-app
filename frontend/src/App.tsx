@@ -45,6 +45,9 @@ type DerivedInvestmentRow = InvestmentRow & {
   incomeItem: boolean;
   extraData: number;
   filteredIncome: number;
+  displayYearlyIncome: number;
+  displayMonthlyIncome: number;
+  displayFilteredIncome: number;
   includedTotal: number;
   taxStatus: string;
   taxTreatment: string;
@@ -2354,7 +2357,7 @@ function AssistantPanel({
   );
 }
 
-type LookupColumn<T> = { key: keyof T; label: string; type?: "text" | "number" | "percent" | "select" | "checkbox" | "yesNoCheckbox"; options?: string[] };
+type LookupColumn<T> = { key: keyof T; label: string; type?: "text" | "number" | "percent" | "select" | "checkbox" | "yesNoCheckbox" | "invertedYesNoCheckbox"; options?: string[] };
 
 function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onReorder, showMoveHeaderLabel = true }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; showMoveHeaderLabel?: boolean; }) {
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
@@ -2449,16 +2452,19 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     setDragOverRowId(null);
   };
   const renderCell = (row: T, column: LookupColumn<T>) => {
-    if (column.type === "checkbox" || column.type === "yesNoCheckbox") {
+    if (column.type === "checkbox" || column.type === "yesNoCheckbox" || column.type === "invertedYesNoCheckbox") {
+      const normalizedYesNo = normalizeYesNo(row[column.key]);
       const checked = column.type === "yesNoCheckbox"
-        ? normalizeYesNo(row[column.key]) === "yes"
-        : normalizeBoolean(row[column.key]);
+        ? normalizedYesNo === "yes"
+        : column.type === "invertedYesNoCheckbox"
+          ? normalizedYesNo === "no"
+          : normalizeBoolean(row[column.key]);
       return (
         <div className="checkbox-cell">
           <input
             type="checkbox"
             checked={checked}
-            onChange={(event) => onChange(row.id, column.key, column.type === "yesNoCheckbox" ? (event.target.checked ? "yes" : "no") : event.target.checked)}
+            onChange={(event) => onChange(row.id, column.key, column.type === "yesNoCheckbox" ? (event.target.checked ? "yes" : "no") : column.type === "invertedYesNoCheckbox" ? (event.target.checked ? "no" : "yes") : event.target.checked)}
             aria-label={`${column.label} for ${title} row`}
           />
         </div>
@@ -2798,10 +2804,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (!row.includeIncome) return acc;
 
     acc.totalInvestment += row.includedTotal;
-    acc.yearlyIncome += toNumber(row.yearlyIncome);
-    acc.monthlyIncome += row.monthlyIncome;
+    acc.yearlyIncome += row.displayYearlyIncome;
+    acc.monthlyIncome += row.displayMonthlyIncome;
     acc.extraData += row.extraData;
-    acc.filteredIncome += row.filteredIncome;
+    acc.filteredIncome += row.displayFilteredIncome;
     acc.includedTotal += row.includedTotal;
     acc.ordinary += row.ordinaryMonthly * 12;
     acc.preferred += row.preferredMonthly * 12;
@@ -3385,6 +3391,10 @@ export default function App() {
     const filteredIncome = row.includeIncome ? yearlyIncome : 0;
     const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
     const account = accountMap[normalizeLookupKey(row.account)];
+    const includeInAfterTaxIncome = normalizeYesNo(account?.includeInFreeCashflow ?? "yes") === "yes";
+    const displayYearlyIncome = includeInAfterTaxIncome ? yearlyIncome : 0;
+    const displayMonthlyIncome = displayYearlyIncome / 12;
+    const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
     const taxStatus = String(account?.taxStatus || "taxable").toLowerCase();
     const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
     const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
@@ -3404,6 +3414,9 @@ export default function App() {
       incomeItem,
       extraData,
       filteredIncome,
+      displayYearlyIncome,
+      displayMonthlyIncome,
+      displayFilteredIncome,
       includedTotal,
       taxStatus,
       taxTreatment,
@@ -3428,7 +3441,7 @@ export default function App() {
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
-    acc.totalIncome += row.filteredIncome;
+    acc.totalIncome += row.displayFilteredIncome;
     acc.federalOrdinary += row.ordinaryMonthly * 12;
     acc.federalPreferred += row.preferredMonthly * 12;
     acc.stateTaxable += row.stateMonthly * 12;
@@ -4652,7 +4665,7 @@ export default function App() {
         )}
         {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Percent return, category, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "% Return", type: "percent" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Category", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onReorder={reorderCollection(setTickers)} showMoveHeaderLabel={false} />}
         {activeTab === "categories" && <LookupTable title="Categories" subtitle="Reference list used by the Tickers tab category dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Category" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} />}
-        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "yesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} />}
+        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Type" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} />}
         {activeTab === "investmentType" && <LookupTable title="Investment Type" subtitle="Reference list for the asset classes used by the workbook rollups." rows={investmentTypes} columns={[{ key: "name", label: "Investment type" }]} onChange={updateCollection(setInvestmentTypes)} onAdd={() => addRow(setInvestmentTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setInvestmentTypes)} onReorder={reorderCollection(setInvestmentTypes)} showMoveHeaderLabel={false} />}
