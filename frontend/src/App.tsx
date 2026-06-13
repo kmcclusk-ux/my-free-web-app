@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import "./App.css";
 
@@ -2818,7 +2818,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     acc.bitcoin += row.bitcoin;
     return acc;
   }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
-  const renderTotalCell = (value: number) => <td><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
+  const renderTotalCell = (key: InvestmentColumnId, value: number) => <td key={key}><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
+  const renderEmptyTotalCell = (key: InvestmentColumnId) => <td key={key} />;
   const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
     const group = "group" in column ? column.group : undefined;
     if (group === "override") return showOverrideColumns;
@@ -2826,6 +2827,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (group === "debug") return showDebugColumns;
     return true;
   };
+  const visibleInvestmentColumns = INVESTMENT_COLUMN_DEFS.filter(isColumnVisible);
   const visibleTableWidth = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => sum + (isColumnVisible(column) ? columnWidths[column.id] : 0), 0);
   const tableStyle = {
     width: visibleTableWidth,
@@ -2856,7 +2858,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const renderInvestmentHeader = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => (
     <th
       key={column.id}
-      className={"className" in column ? column.className : undefined}
+      className={[
+        "className" in column ? column.className : "",
+        "group" in column ? `investment-column--${column.group}` : "",
+      ].filter(Boolean).join(" ") || undefined}
       title={"title" in column ? column.title : undefined}
       aria-label={"ariaLabel" in column ? column.ariaLabel : undefined}
     >
@@ -2873,9 +2878,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     "sheet-table",
     "sheet-table--compact",
     "sheet-table--workbook",
-    !showOverrideColumns ? "sheet-table--hide-override" : "",
-    !showTaxColumns ? "sheet-table--hide-tax-breakdown" : "",
-    !showDebugColumns ? "sheet-table--hide-debug" : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -2989,18 +2991,54 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className={tableClassName} style={tableStyle}>
           <colgroup>
-            {INVESTMENT_COLUMN_DEFS.map((column) => (
-              <col key={column.id} style={{ width: isColumnVisible(column) ? columnWidths[column.id] : 0 }} />
+            {visibleInvestmentColumns.map((column) => (
+              <col key={column.id} style={{ width: columnWidths[column.id] }} />
             ))}
           </colgroup>
           <thead>
             <tr>
-              {INVESTMENT_COLUMN_DEFS.map(renderInvestmentHeader)}
+              {visibleInvestmentColumns.map(renderInvestmentHeader)}
             </tr>
           </thead>
           <tbody>
             {displayedRows.map((row) => {
               const derived = derivedMap[row.id];
+              const investmentCells = {
+                move: <td key="move" className="drag-handle-cell"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>,
+                row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
+                included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
+                account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
+                symbol: <td key="symbol"><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
+                normalPercent: <td key="normalPercent"><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>,
+                amount: <td key="amount">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}</td>,
+                year: <td key="year">{derived?.incomeItem ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /> : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}</td>,
+                month: <td key="month"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div></td>,
+                filtered: <td key="filtered"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.filteredIncome || 0)}</div></td>,
+                total: <td key="total"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.includedTotal || 0)}</div></td>,
+                taxStatus: <td key="taxStatus"><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td>,
+                ordinary: <td key="ordinary"><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.ordinaryMonthly || 0) * 12)}</div></td>,
+                preferred: <td key="preferred"><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.preferredMonthly || 0) * 12)}</div></td>,
+                state: <td key="state"><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.stateMonthly || 0) * 12)}</div></td>,
+                nonTaxable: <td key="nonTaxable"><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.nonTaxableMonthly || 0) * 12)}</div></td>,
+                investmentType: <td key="investmentType"><div className="readonly-cell readonly-cell--text">{derived?.investmentType || ""}</div></td>,
+                nonInvestmentIncome: <td key="nonInvestmentIncome"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.nonInvestmentIncome || 0)}</div></td>,
+                cash: <td key="cash"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.cash || 0)}</div></td>,
+                stocks: <td key="stocks"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.stocks || 0)}</div></td>,
+                preferredStock: <td key="preferredStock"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.preferredStock || 0)}</div></td>,
+                bonds: <td key="bonds"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bonds || 0)}</div></td>,
+                muniBond: <td key="muniBond"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.muniBond || 0)}</div></td>,
+                muniInterest: <td key="muniInterest"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.muniInterest || 0)}</div></td>,
+                businessDevelopment: <td key="businessDevelopment"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.businessDevelopment || 0)}</div></td>,
+                coveredCall: <td key="coveredCall"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.coveredCall || 0)}</div></td>,
+                realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
+                bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
+                override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
+                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><select value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
+                overridePercent: <td key="overridePercent" className="investment-column--override"><input type="number" value={row.newPercent} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>,
+                usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
+                useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
+                extraData: <td key="extraData"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.extraData || 0)}</div></td>,
+              } satisfies Record<InvestmentColumnId, ReactElement>;
               return (
                 <tr
                   key={row.id}
@@ -3009,80 +3047,49 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
                 >
-                  <td className="drag-handle-cell"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
-                  <td className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>
-                  <td className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>
-                  <td><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>
-                  <td><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
-                  <td><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>
-                  <td>
-                    {derived?.incomeItem
-                      ? <div className="readonly-cell readonly-cell--text">N.A.</div>
-                      : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}
-                  </td>
-                  <td>
-                    {derived?.incomeItem
-                      ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} />
-                      : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}
-                  </td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.filteredIncome || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.includedTotal || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.ordinaryMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.preferredMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.stateMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency((derived?.nonTaxableMonthly || 0) * 12)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--text">{derived?.investmentType || ""}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.nonInvestmentIncome || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.cash || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.stocks || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.preferredStock || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bonds || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.muniBond || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.muniInterest || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.businessDevelopment || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.coveredCall || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>
-                  <td className="checkbox-cell"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>
-                  <td><select value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>
-                  <td><input type="number" value={row.newPercent} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>
-                  <td><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>
-                  <td><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>
-                  <td><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.extraData || 0)}</div></td>
+                  {visibleInvestmentColumns.map((column) => investmentCells[column.id])}
                 </tr>
               );
             })}
           </tbody>
           <tfoot>
             <tr className="investment-total-row">
-              <td /><td /><td /><th className="investment-total-row__label" scope="row" title="Included totals">Totals</th>
-              <td /><td />
-              {renderTotalCell(totals.totalInvestment)}
-              {renderTotalCell(totals.yearlyIncome)}
-              {renderTotalCell(totals.monthlyIncome)}
-              {renderTotalCell(totals.filteredIncome)}
-              {renderTotalCell(totals.includedTotal)}
-              <td />
-              {renderTotalCell(totals.ordinary)}
-              {renderTotalCell(totals.preferred)}
-              {renderTotalCell(totals.state)}
-              {renderTotalCell(totals.nonTaxable)}
-              <td />
-              {renderTotalCell(totals.nonInvestmentIncome)}
-              {renderTotalCell(totals.cash)}
-              {renderTotalCell(totals.stocks)}
-              {renderTotalCell(totals.preferredStock)}
-              {renderTotalCell(totals.bonds)}
-              {renderTotalCell(totals.muniBond)}
-              {renderTotalCell(totals.muniInterest)}
-              {renderTotalCell(totals.businessDevelopment)}
-              {renderTotalCell(totals.coveredCall)}
-              {renderTotalCell(totals.realEstate)}
-              {renderTotalCell(totals.bitcoin)}
-              <td /><td /><td /><td /><td />
-              {renderTotalCell(totals.extraData)}
+              {visibleInvestmentColumns.map((column) => ({
+                move: renderEmptyTotalCell("move"),
+                row: renderEmptyTotalCell("row"),
+                included: renderEmptyTotalCell("included"),
+                account: <th key="account" className="investment-total-row__label" scope="row" title="Included totals">Totals</th>,
+                symbol: renderEmptyTotalCell("symbol"),
+                normalPercent: renderEmptyTotalCell("normalPercent"),
+                amount: renderTotalCell("amount", totals.totalInvestment),
+                year: renderTotalCell("year", totals.yearlyIncome),
+                month: renderTotalCell("month", totals.monthlyIncome),
+                filtered: renderTotalCell("filtered", totals.filteredIncome),
+                total: renderTotalCell("total", totals.includedTotal),
+                taxStatus: renderEmptyTotalCell("taxStatus"),
+                ordinary: renderTotalCell("ordinary", totals.ordinary),
+                preferred: renderTotalCell("preferred", totals.preferred),
+                state: renderTotalCell("state", totals.state),
+                nonTaxable: renderTotalCell("nonTaxable", totals.nonTaxable),
+                investmentType: renderEmptyTotalCell("investmentType"),
+                nonInvestmentIncome: renderTotalCell("nonInvestmentIncome", totals.nonInvestmentIncome),
+                cash: renderTotalCell("cash", totals.cash),
+                stocks: renderTotalCell("stocks", totals.stocks),
+                preferredStock: renderTotalCell("preferredStock", totals.preferredStock),
+                bonds: renderTotalCell("bonds", totals.bonds),
+                muniBond: renderTotalCell("muniBond", totals.muniBond),
+                muniInterest: renderTotalCell("muniInterest", totals.muniInterest),
+                businessDevelopment: renderTotalCell("businessDevelopment", totals.businessDevelopment),
+                coveredCall: renderTotalCell("coveredCall", totals.coveredCall),
+                realEstate: renderTotalCell("realEstate", totals.realEstate),
+                bitcoin: renderTotalCell("bitcoin", totals.bitcoin),
+                override: renderEmptyTotalCell("override"),
+                overrideSymbol: renderEmptyTotalCell("overrideSymbol"),
+                overridePercent: renderEmptyTotalCell("overridePercent"),
+                usePercent: renderEmptyTotalCell("usePercent"),
+                useSymbol: renderEmptyTotalCell("useSymbol"),
+                extraData: renderTotalCell("extraData", totals.extraData),
+              } satisfies Record<InvestmentColumnId, ReactElement>)[column.id])}
             </tr>
           </tfoot>
         </table>
