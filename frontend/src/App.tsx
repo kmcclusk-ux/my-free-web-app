@@ -3034,7 +3034,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
                 override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
                 overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><select value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
-                overridePercent: <td key="overridePercent" className="investment-column--override"><input type="number" value={row.newPercent} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newPercent", event.target.value)} /></td>,
+                overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{formatPercent(derived?.newPercent || 0)}</div></td>,
                 usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
                 extraData: <td key="extraData"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.extraData || 0)}</div></td>,
