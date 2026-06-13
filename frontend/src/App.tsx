@@ -3262,7 +3262,14 @@ export default function App() {
     }
   };
 
-  const tickerMap = useMemo(() => Object.fromEntries(tickers.map((row) => [row.symbol, row])), [tickers]);
+  const tickerMap = useMemo(
+    () => Object.fromEntries(
+      tickers
+        .map((row) => [normalizeLookupKey(row.symbol), row] as const)
+        .filter(([symbol]) => Boolean(symbol))
+    ),
+    [tickers]
+  );
   const accountMap = useMemo(() => buildAccountLookupMap(accounts), [accounts]);
   const accountTaxStatusByName = useMemo(() => buildAccountTaxStatusMap(accounts), [accounts]);
   const accountTaxStatusOptions = useMemo(() => {
@@ -3293,15 +3300,80 @@ export default function App() {
     return ["", ...new Set([...values, ...fromTickers])];
   }, [categories, tickers]);
   const accountOptions = useMemo(() => ["", ...accounts.map((row) => row.account).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [accounts]);
-  const symbolOptions = useMemo(() => ["", ...tickers.map((row) => row.symbol).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [tickers]);
+  const symbolOptions = useMemo(
+    () => [
+      "",
+      ...tickers
+        .map((row) => String(row.symbol || "").trim())
+        .filter(Boolean)
+        .filter((value, index, array) => array.indexOf(value) === index),
+    ],
+    [tickers]
+  );
+
+  const overridePercentForSymbol = (symbol: string) => {
+    const ticker = tickerMap[normalizeLookupKey(symbol)];
+    return normalizeRate(ticker?.percentReturn || 0);
+  };
+
+  const updateInvestmentRow = (id: number, field: keyof InvestmentRow, value: string | boolean) => {
+    setInvestments((current) =>
+      current.map((row) => {
+        if (row.id !== id) return row;
+
+        if (field === "includeIncome" || field === "overrideProposal") {
+          const checked = Boolean(value);
+          const nextRow = { ...row, [field]: checked };
+          if (field === "overrideProposal") {
+            const nextSymbol = nextRow.newSymbol || nextRow.symbol;
+            return {
+              ...nextRow,
+              newSymbol: nextSymbol,
+              newPercent: overridePercentForSymbol(nextSymbol),
+            };
+          }
+          return nextRow;
+        }
+
+        if (field === "totalInvestment" || field === "yearlyIncome") {
+          return { ...row, [field]: toNumber(value) };
+        }
+
+        if (field === "newSymbol") {
+          const nextSymbol = String(value || "").trim();
+          return {
+            ...row,
+            newSymbol: nextSymbol,
+            newPercent: overridePercentForSymbol(nextSymbol),
+          };
+        }
+
+        if (field === "symbol") {
+          const nextSymbol = String(value || "").trim();
+          const nextRow = { ...row, symbol: nextSymbol };
+          if (!nextRow.overrideProposal) {
+            return {
+              ...nextRow,
+              newSymbol: nextSymbol,
+              newPercent: overridePercentForSymbol(nextSymbol),
+            };
+          }
+          return nextRow;
+        }
+
+        return { ...row, [field]: value };
+      })
+    );
+  };
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
-    const currentTicker = tickerMap[row.symbol];
+    const currentTicker = tickerMap[normalizeLookupKey(row.symbol)];
     const effectiveSymbol = row.overrideProposal && row.newSymbol ? row.newSymbol : row.symbol;
-    const effectiveTicker = tickerMap[effectiveSymbol] || currentTicker;
+    const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
+    const effectiveTicker = tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
     const totalInvestment = toNumber(row.totalInvestment);
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
-    const proposedPercent = normalizeRate(row.newPercent);
+    const proposedPercent = normalizeRate(proposedTicker?.percentReturn ?? row.newPercent);
     const effectivePercent = row.overrideProposal ? proposedPercent || currentPercent : currentPercent;
     const incomeItem = Boolean(effectiveTicker?.incomeItem);
     const yearlyIncome = incomeItem ? toNumber(row.yearlyIncome) : totalInvestment * effectivePercent;
@@ -3322,6 +3394,7 @@ export default function App() {
       yearlyIncome,
       monthlyIncome,
       currentPercent,
+      newPercent: proposedPercent,
       effectiveSymbol,
       effectivePercent,
       incomeItem,
@@ -3372,15 +3445,17 @@ export default function App() {
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
+      const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
       return derived
         ? {
             ...row,
             totalInvestment: derived.incomeItem ? 0 : row.totalInvestment,
             yearlyIncome: derived.yearlyIncome,
+            newPercent: normalizeRate(proposedTicker?.percentReturn ?? row.newPercent),
           }
         : row;
     }),
-    [investments, derivedRows]
+    [investments, derivedRows, tickerMap]
   );
 
   const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome;
@@ -4028,8 +4103,8 @@ export default function App() {
           tab: "investments",
           rows: asEditable(investments),
           setRows: wrapSetter(setInvestments),
-          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
-          numericFields: ["totalInvestment", "yearlyIncome", "newPercent"],
+          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol"],
+          numericFields: ["totalInvestment", "yearlyIncome"],
           booleanFields: ["includeIncome", "overrideProposal"],
           defaultRow: (id) => ({ id, description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 }),
         };
@@ -4552,8 +4627,8 @@ export default function App() {
             onApplyFavorite={applyFavorite}
             onDeleteFavorite={deleteFavorite}
             onRenameFavorite={renameFavorite}
-            onChange={updateCollection(setInvestments, ["totalInvestment", "yearlyIncome", "newPercent"], ["includeIncome", "overrideProposal"])}
-            onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 })}
+            onChange={updateInvestmentRow}
+            onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: overridePercentForSymbol(symbolOptions[1] || "") })}
             onReorder={reorderInvestments}
             onRemoveIncluded={() => {
               const removedIds = new Set(investments.filter((row) => row.includeIncome).map((row) => row.id));
