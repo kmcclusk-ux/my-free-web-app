@@ -2511,7 +2511,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -2560,7 +2560,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [renameTarget, setRenameTarget] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
-  const [showOverrideColumns, setShowOverrideColumns] = useState(false);
   const [showTaxColumns, setShowTaxColumns] = useState(false);
   const [showDebugColumns, setShowDebugColumns] = useState(false);
   const [columnWidths, setColumnWidths] = useState<InvestmentColumnWidths>(() => {
@@ -2822,7 +2821,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const renderEmptyTotalCell = (key: InvestmentColumnId) => <td key={key} />;
   const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
     const group = "group" in column ? column.group : undefined;
-    if (group === "override") return showOverrideColumns;
+    if (group === "override") return isWhatIfActive;
     if (group === "tax") return showTaxColumns;
     if (group === "debug") return showDebugColumns;
     return true;
@@ -2887,8 +2886,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
-          <button className={`ghost-button ghost-button--compact column-toggle ${showOverrideColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showOverrideColumns} onClick={() => setShowOverrideColumns((current) => !current)}>
-            {showOverrideColumns ? "- WhatIf" : "+ WhatIf"}
+          <button className={`ghost-button ghost-button--compact column-toggle ${isWhatIfActive ? "column-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
+            {isWhatIfActive ? "- WhatIf" : "+ WhatIf"}
           </button>
           <button className={`ghost-button ghost-button--compact column-toggle ${showTaxColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showTaxColumns} onClick={() => setShowTaxColumns((current) => !current)}>
             {showTaxColumns ? "- Tax categories" : "+ Tax categories"}
@@ -3169,6 +3168,7 @@ export default function App() {
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
+  const [isWhatIfActive, setIsWhatIfActive] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState<InvestmentRow[]>(() => authEnabled ? [] : initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
@@ -3368,13 +3368,14 @@ export default function App() {
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
     const currentTicker = tickerMap[normalizeLookupKey(row.symbol)];
-    const effectiveSymbol = row.overrideProposal && row.newSymbol ? row.newSymbol : row.symbol;
+    const isRowWhatIfActive = isWhatIfActive && row.overrideProposal;
+    const effectiveSymbol = isRowWhatIfActive && row.newSymbol ? row.newSymbol : row.symbol;
     const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
     const effectiveTicker = tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
     const totalInvestment = toNumber(row.totalInvestment);
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
     const proposedPercent = normalizeRate(proposedTicker?.percentReturn ?? row.newPercent);
-    const effectivePercent = row.overrideProposal ? proposedPercent || currentPercent : currentPercent;
+    const effectivePercent = isRowWhatIfActive ? proposedPercent || currentPercent : currentPercent;
     const incomeItem = Boolean(effectiveTicker?.incomeItem);
     const yearlyIncome = incomeItem ? toNumber(row.yearlyIncome) : totalInvestment * effectivePercent;
     const monthlyIncome = yearlyIncome / 12;
@@ -3420,7 +3421,7 @@ export default function App() {
       realEstate: investmentType === "real estate" ? includedTotal : 0,
       bitcoin: investmentType === "bitcoin" ? includedTotal : 0,
     };
-  }), [investments, tickerMap, accountMap]);
+  }), [investments, tickerMap, accountMap, isWhatIfActive]);
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
@@ -4623,6 +4624,8 @@ export default function App() {
             filters={investmentFilters}
             sort={investmentSort}
             selectedAssetIds={selectedInvestmentIds}
+            isWhatIfActive={isWhatIfActive}
+            onToggleWhatIf={() => setIsWhatIfActive((current) => !current)}
             onSaveFavorite={saveFavorite}
             onApplyFavorite={applyFavorite}
             onDeleteFavorite={deleteFavorite}
