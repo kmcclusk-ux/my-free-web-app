@@ -2746,8 +2746,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [renameTarget, setRenameTarget] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
-  const [showTaxColumns, setShowTaxColumns] = useState(false);
-  const [showDebugColumns, setShowDebugColumns] = useState(false);
   const [columnWidths, setColumnWidths] = useState<InvestmentColumnWidths>(() => {
     if (typeof window === "undefined") return DEFAULT_INVESTMENT_COLUMN_WIDTHS;
     try {
@@ -3008,8 +3006,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
     const group = "group" in column ? column.group : undefined;
     if (group === "override") return isWhatIfActive;
-    if (group === "tax") return showTaxColumns;
-    if (group === "debug") return showDebugColumns;
+    if (group === "tax" || group === "debug") return false;
     return true;
   };
   const visibleInvestmentColumns = INVESTMENT_COLUMN_DEFS.filter(isColumnVisible);
@@ -3075,12 +3072,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`ghost-button ghost-button--compact column-toggle ${isWhatIfActive ? "column-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             {isWhatIfActive ? "- WhatIf" : "+ WhatIf"}
-          </button>
-          <button className={`ghost-button ghost-button--compact column-toggle ${showTaxColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showTaxColumns} onClick={() => setShowTaxColumns((current) => !current)}>
-            {showTaxColumns ? "- Tax categories" : "+ Tax categories"}
-          </button>
-          <button className={`ghost-button ghost-button--compact column-toggle ${showDebugColumns ? "column-toggle--open" : ""}`} type="button" aria-pressed={showDebugColumns} onClick={() => setShowDebugColumns((current) => !current)}>
-            {showDebugColumns ? "- Debug" : "+ Debug"}
           </button>
         </div>
       </div>
