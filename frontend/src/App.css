@@ -1010,6 +1010,21 @@
   line-height: 1;
   color: #f9fcfb;
 }
+
+.aftertaxum-logo__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aftertaxum-logo__us-flag {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, .42);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+}
 .aftertaxum-logo__copy span,
 .aftertaxum-logo__copy small {
   display: none;

@@ -245,6 +245,7 @@ const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
 const MCP_CONNECTOR_BASE_URL = (import.meta.env.VITE_MCP_CONNECTOR_BASE_URL as string | undefined)?.replace(/\/+$/, "") || "https://www.aftertaxus.com/mcp";
+const US_FLAG_ICON_URL = "https://commons.wikimedia.org/wiki/Special:FilePath/Flag%20of%20the%20United%20States.svg?width=32";
 const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN as string | undefined)?.replace(/\/+$/, "") || "";
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined;
 const BROWSER_ROOT_URI = typeof window !== "undefined"
@@ -3323,7 +3324,7 @@ function AfterTaxUSLogo() {
     <div className="aftertaxum-logo" aria-label="AfterTax US">
       <AfterTaxUSMark idSuffix="full" />
       <div className="aftertaxum-logo__copy">
-        <strong>AfterTax US</strong>
+        <strong className="aftertaxum-logo__title">AfterTax US<img className="aftertaxum-logo__us-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /></strong>
         <span>AI-powered after-tax portfolio intelligence</span>
         <small>See the after-tax impact before every decision.</small>
       </div>
