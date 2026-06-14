@@ -3374,6 +3374,7 @@ export default function App() {
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
+  const [isCameraFlashing, setIsCameraFlashing] = useState(false);
   const [incomeSnapshot, setIncomeSnapshot] = useState<IncomeSnapshot | null>(null);
   const saveTimeout = useRef<number | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
@@ -3883,6 +3884,9 @@ export default function App() {
     : null;
   const captureIncomeSnapshot = () => {
     setIncomeSnapshot({ ...currentIncomeSnapshot, capturedAt: new Date().toISOString() });
+    setIsCameraFlashing(false);
+    window.setTimeout(() => setIsCameraFlashing(true), 0);
+    window.setTimeout(() => setIsCameraFlashing(false), 520);
   };
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
@@ -4719,6 +4723,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {isCameraFlashing && <div className="camera-flash" aria-hidden="true" />}
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
           {actionMenu}

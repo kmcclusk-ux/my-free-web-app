@@ -351,6 +351,23 @@
 .income-snapshot--inline .income-snapshot__empty {
   color: var(--pm-muted, #667085);
 }
+
+.camera-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+  background: #fff;
+  animation: camera-flash-pop 520ms ease-out forwards;
+}
+
+@keyframes camera-flash-pop {
+  0% { opacity: 0; }
+  8% { opacity: .98; }
+  22% { opacity: .92; }
+  100% { opacity: 0; }
+}
+
 @keyframes snapshot-delta-tumble {
   0% {
     filter: blur(.75px);
