@@ -2566,63 +2566,82 @@
   font-size: .72rem;
 }
 
-.state-select-inline {
-  display: inline-flex;
+
+.state-flag-select {
+  position: relative;
+  min-width: 184px;
+}
+
+.state-flag-select--toolbar {
+  min-width: 170px;
+}
+
+.state-flag-select__button,
+.state-flag-select__option {
+  display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  border: 1px solid var(--poly-border);
+  background: rgba(255, 255, 255, .92);
+  color: var(--poly-ink);
+  font: inherit;
+  text-align: left;
 }
 
-.state-select-inline select {
-  min-width: 160px;
-}
-
-.state-flag-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  white-space: nowrap;
-  line-height: 1;
-}
-
-.state-flag-badge__pole {
-  width: 2px;
-  height: 20px;
-  border-radius: 2px;
-  background: #64748b;
-  box-shadow: 0 8px 0 -6px rgba(15, 23, 42, .32);
-}
-
-.state-flag-badge__flag {
-  min-width: 34px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(15, 23, 42, .18);
-  border-left: 0;
-  border-radius: 2px 6px 6px 2px;
-  background: linear-gradient(135deg, #1d4ed8 0 33%, #fff 33% 66%, #dc2626 66% 100%);
-  color: #0f172a;
-  font-size: .64rem;
-  font-weight: 900;
-  letter-spacing: .06em;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, .9);
-  box-shadow: 0 3px 8px rgba(15, 23, 42, .12);
-}
-
-.column-toggle {
+.state-flag-select__button {
   min-height: 32px;
-  padding: 6px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
-  font-size: .72rem;
+  font-size: .74rem;
   font-weight: 750;
-  letter-spacing: .03em;
 }
 
-.column-toggle--open {
-  border-color: rgba(31, 109, 106, .22);
+.state-flag-select__chevron {
+  margin-left: auto;
+  color: var(--poly-muted);
+  font-size: .72rem;
+}
+
+.state-flag-select__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  width: max(220px, 100%);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--poly-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+}
+
+.state-flag-select__option {
+  min-height: 30px;
+  padding: 5px 8px;
+  border-color: transparent;
+  border-radius: 10px;
+  font-size: .76rem;
+  cursor: pointer;
+}
+
+.state-flag-select__option:hover,
+.state-flag-select__option--selected {
   background: rgba(31, 109, 106, .10);
-  color: var(--poly-blue);
+  border-color: rgba(31, 109, 106, .18);
+}
+
+.state-flag-image {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  object-fit: cover;
+  border: 1px solid rgba(15, 23, 42, .18);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .14);
 }
 
 .sheet-table--workbook.sheet-table--hide-override {

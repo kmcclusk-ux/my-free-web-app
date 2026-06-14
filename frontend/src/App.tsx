@@ -526,18 +526,63 @@ function normalizeStateCode(value: string) {
   return stateNameByCode[code] ? code : "CA";
 }
 
-function stateFlagLabel(code: string) {
+const stateFlagFileNameByCode: Record<string, string> = {
+  DC: "Flag of Washington, D.C.svg",
+  GA: "Flag of Georgia (U.S. state).svg",
+};
+
+function stateFlagUrl(code: string) {
   const normalized = normalizeStateCode(code);
-  return `? ${normalized}`;
+  const stateName = stateNameByCode[normalized] || normalized;
+  const fileName = stateFlagFileNameByCode[normalized] || `Flag of ${stateName}.svg`;
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=32`;
 }
 
-function stateOptionLabel(code: string, name: string) {
-  return `${stateFlagLabel(code)} - ${name}`;
-}
-
-function StateFlagBadge({ stateCode, stateName }: { stateCode: string; stateName?: string }) {
+function StateFlagImage({ stateCode, stateName }: { stateCode: string; stateName?: string }) {
   const normalized = normalizeStateCode(stateCode);
-  return <span className="state-flag-badge" aria-label={`${stateName || stateNameByCode[normalized] || normalized} flag`} title={`${stateName || stateNameByCode[normalized] || normalized} flag`}><span className="state-flag-badge__pole" aria-hidden="true" /><span className="state-flag-badge__flag" aria-hidden="true">{normalized}</span></span>;
+  const label = stateName || stateNameByCode[normalized] || normalized;
+  return <img className="state-flag-image" src={stateFlagUrl(normalized)} alt={`${label} flag`} width={18} height={18} loading="lazy" referrerPolicy="no-referrer" />;
+}
+
+function StateFlagSelect({ value, onChange, className = "" }: { value: string; onChange: (stateCode: string) => void; className?: string }) {
+  const selectedCode = normalizeStateCode(value);
+  const selectedName = stateNameByCode[selectedCode] || selectedCode;
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!selectRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className={`state-flag-select ${className}`.trim()} ref={selectRef}>
+      <button className="state-flag-select__button" type="button" aria-haspopup="listbox" aria-expanded={isOpen} onClick={() => setIsOpen((current) => !current)}>
+        <StateFlagImage stateCode={selectedCode} stateName={selectedName} />
+        <span>{selectedCode} - {selectedName}</span>
+        <span className="state-flag-select__chevron" aria-hidden="true">v</span>
+      </button>
+      {isOpen && (
+        <div className="state-flag-select__menu" role="listbox" aria-label="Select state">
+          {stateOptions.map(([code, name]) => {
+            const isSelected = normalizeStateCode(code) === selectedCode;
+            return <button key={code} className={`state-flag-select__option ${isSelected ? "state-flag-select__option--selected" : ""}`} type="button" role="option" aria-selected={isSelected} onClick={() => { onChange(code); setIsOpen(false); }}><StateFlagImage stateCode={code} stateName={name} /><span>{code} - {name}</span></button>;
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 type LocalStateTaxFilingStatus = "single" | "mfj" | "mfs" | "hoh";
@@ -3024,7 +3069,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
-        <label className="column-toggle-group column-toggle-group--state"><span>State</span><select value={normalizeStateCode(selectedStateCode)} onChange={(event) => onStateChange(event.target.value)}>{stateOptions.map(([code, name]) => <option key={code} value={code}>{stateOptionLabel(code, name)}</option>)}</select><StateFlagBadge stateCode={selectedStateCode} stateName={stateNameByCode[normalizeStateCode(selectedStateCode)]} /></label>
+        <label className="column-toggle-group column-toggle-group--state"><span>State</span><StateFlagSelect value={selectedStateCode} onChange={onStateChange} className="state-flag-select--toolbar" /></label>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`ghost-button ghost-button--compact column-toggle ${isWhatIfActive ? "column-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             {isWhatIfActive ? "- WhatIf" : "+ WhatIf"}
@@ -4812,7 +4857,7 @@ export default function App() {
         {activeTab === "investmentType" && <LookupTable title="Investment Type" subtitle="Reference list for the asset classes used by the workbook rollups." rows={investmentTypes} columns={[{ key: "name", label: "Investment type" }]} onChange={updateCollection(setInvestmentTypes)} onAdd={() => addRow(setInvestmentTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setInvestmentTypes)} onReorder={reorderCollection(setInvestmentTypes)} showMoveHeaderLabel={false} />}
 
         {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label><label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} /><MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
-        {activeTab === "state" && <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">State calculations use 2025 resident state income-tax brackets. Local taxes, state credits, and state-specific income modifications are not modeled.</div><div className="form-grid form-grid--compact-wide"><label><span>State</span><div className="state-select-inline"><select value={selectedStateCode} onChange={(event) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(event.target.value) }))}>{stateOptions.map(([code, name]) => <option key={code} value={code}>{stateOptionLabel(code, name)}</option>)}</select><StateFlagBadge stateCode={selectedStateCode} stateName={selectedStateName} /></div></label><label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} /><MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} /><MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{displayedStateResult.note && <div className="status-card status-card--note">{displayedStateResult.note}</div>}<div className="api-grid"><MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} tone="accent" /></div></Section>}
+        {activeTab === "state" && <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">State calculations use 2025 resident state income-tax brackets. Local taxes, state credits, and state-specific income modifications are not modeled.</div><div className="form-grid form-grid--compact-wide"><label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label><label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} /><MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} /><MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{displayedStateResult.note && <div className="status-card status-card--note">{displayedStateResult.note}</div>}<div className="api-grid"><MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} tone="accent" /></div></Section>}
                 {activeTab === "calculator" && (
           <Section title="Tax Calculator" subtitle="Standalone inputs that mirror the spreadsheet layout and call the shared federal + state Lambdas.">
             <div className="calculator-section-grid">
@@ -4829,12 +4874,7 @@ export default function App() {
                   </label>
                   <label>
                     <span>State</span>
-                    <div className="state-select-inline">
-                      <select value={normalizeStateCode(taxCalcInputs.stateCode)} onChange={(event) => setTaxCalcInputs((current) => ({ ...current, stateCode: normalizeStateCode(event.target.value) }))}>
-                        {stateOptions.map(([code, name]) => <option key={code} value={code}>{stateOptionLabel(code, name)}</option>)}
-                      </select>
-                      <StateFlagBadge stateCode={taxCalcInputs.stateCode} stateName={stateNameByCode[normalizeStateCode(taxCalcInputs.stateCode)]} />
-                    </div>
+                    <StateFlagSelect value={taxCalcInputs.stateCode} onChange={(stateCode) => setTaxCalcInputs((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} />
                     <small className="field-note">Used for the standalone state calculation.</small>
                   </label>
                   <label>
