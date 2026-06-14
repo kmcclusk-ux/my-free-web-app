@@ -728,6 +728,16 @@
 .thermometer-rail .tax-thermometer-panel__summary-heading { gap: 6px; }
 .thermometer-rail .tax-thermometer-panel__summary-heading strong, .thermometer-rail .tax-thermometer__heading strong { font-size: .76rem; }
 .thermometer-rail .tax-thermometer-panel__summary-heading span, .thermometer-rail .tax-thermometer__heading span { display: none; }
+
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-flag {
+  display: inline-flex;
+  color: #17313a;
+  font-size: inherit;
+}
+
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-flag .state-flag-image {
+  display: inline-block;
+}
 .thermometer-rail .tax-thermometer-panel__summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .thermometer-rail .tax-thermometer-panel__summary-grid > div { padding: 6px; border-radius: 10px; }
 .thermometer-rail .tax-thermometer-panel__summary-grid span { font-size: .56rem; }
