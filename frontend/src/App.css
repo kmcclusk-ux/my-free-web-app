@@ -639,6 +639,21 @@
 .tax-thermometer__heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .tax-thermometer--collapsed .tax-thermometer__heading { margin-bottom: 0; }
 .tax-thermometer__heading strong { display: block; color: #17313a; font-size: .95rem; }
+
+.tax-thermometer__title-with-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tax-thermometer__title-flag,
+.tax-thermometer__title-with-flag .state-flag-image {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid rgba(15, 23, 42, .18);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
 .tax-thermometer__heading em { font-style: normal; white-space: nowrap; }
 .tax-thermometer__heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .tax-thermometer__toggle { min-width: 58px; }

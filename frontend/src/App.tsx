@@ -2076,7 +2076,8 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
   );
 }
 
-function TaxThermometer({ title, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, bandThresholds, collapsed, onToggle }: { title: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; bandThresholds: { greenEnd: number; yellowEnd: number }; collapsed: boolean; onToggle: () => void }) {
+function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, bandThresholds, collapsed, onToggle }: { title: React.ReactNode; titleLabel?: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; bandThresholds: { greenEnd: number; yellowEnd: number }; collapsed: boolean; onToggle: () => void }) {
+  const labelText = titleLabel || (typeof title === "string" ? title : "Tax thermometer");
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
   const bandStyle = {
@@ -2092,14 +2093,14 @@ function TaxThermometer({ title, subtitle, taxableIncome, values, markers, stats
           <span>{subtitle}</span>
         </div>
         <div className="tax-thermometer__heading-actions">
-          <button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? `Show ${title}` : `Hide ${title}`} title={collapsed ? `Show ${title}` : `Hide ${title}`}>
+          <button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? `Show ${labelText}` : `Hide ${labelText}`} title={collapsed ? `Show ${labelText}` : `Hide ${labelText}`}>
             <VisibilityToggleIcon variant={collapsed ? "show" : "hide"} />
           </button>
         </div>
       </div>
       {!collapsed && (
         <>
-          <div className="tax-thermometer__track" aria-label={`${title} tax threshold thermometer`} style={bandStyle}>
+          <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`} style={bandStyle}>
             <div className="tax-thermometer__heat" />
             {visibleMarkers.map((marker) => (
               <div
@@ -2187,8 +2188,8 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
 
   return (
     <div className="tax-thermometer-panel">
-      <TaxThermometer title="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
-      <TaxThermometer title={`${stateName} Tax`} subtitle={stateCode === "CA" ? "Green <4%, yellow <6%, red above 6%" : "State schedule; no visual brackets configured"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={stateCode === "CA" ? { greenEnd: ca4Threshold, yellowEnd: ca6Threshold } : { greenEnd: stateTaxable + 1, yellowEnd: stateTaxable + 1 }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
+      <TaxThermometer title={<span className="tax-thermometer__title-with-flag">Federal Tax<img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /></span>} titleLabel="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
+      <TaxThermometer title={<span className="tax-thermometer__title-with-flag">{stateName} Tax<StateFlagImage stateCode={stateCode} stateName={stateName} /></span>} titleLabel={`${stateName} Tax`} subtitle={stateCode === "CA" ? "Green <4%, yellow <6%, red above 6%" : "State schedule; no visual brackets configured"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={stateCode === "CA" ? { greenEnd: ca4Threshold, yellowEnd: ca6Threshold } : { greenEnd: stateTaxable + 1, yellowEnd: stateTaxable + 1 }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
       <div className={`tax-thermometer-panel__summary ${collapsedSections.summary ? "tax-thermometer-panel__summary--collapsed" : ""}`}>
         <div className="tax-thermometer-panel__summary-heading">
           <div>
