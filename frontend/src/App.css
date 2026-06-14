@@ -777,6 +777,11 @@
 .thermometer-rail .tax-thermometer__footer strong { font-size: .64rem; text-align: right; }
 @media (prefers-reduced-motion: reduce) { .tax-thermometer__value { transition: none; will-change: auto; } }
 .content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; }
+.topbar-state-selector {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-end;
+}
 .content-topbar h2 { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.22rem; color: #18313a; }
 .topbar-chip { padding: 6px 9px; border-radius: 999px; background: rgba(255,255,255,.82); border: 1px solid rgba(24,49,58,.1); color: #4f666d; font-size: .76rem; }
 .sheet-section { padding: 14px; border-radius: 18px; border: 1px solid rgba(24,49,58,.1); background: rgba(255,255,255,.86); box-shadow: 0 14px 30px rgba(24,49,58,.07); }
@@ -905,24 +910,6 @@
 .investments-workspace .section-heading p { display: none; }
 .investments-workspace .actions-row { align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 
-.investments-panel-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.investments-panel-bar > strong {
-  color: var(--poly-ink);
-  font-size: .95rem;
-  font-weight: 850;
-  letter-spacing: .01em;
-}
-
-.investments-panel-bar .column-toggle-group--state {
-  margin-left: 0;
-}
 .investments-workspace .debug-panel { display: block; margin-bottom: 6px; padding: 7px 9px; }
 .investments-workspace .debug-panel summary { cursor: pointer; font-weight: 700; }
 .investments-workspace .debug-panel:not([open]) { padding: 6px 9px; }
