@@ -2038,6 +2038,14 @@
   letter-spacing: -.065em;
 }
 
+.app-splash .aftertaxum-logo__us-flag {
+  width: 45px;
+  height: 30px;
+  border-radius: 4px;
+  border-color: rgba(6, 27, 56, .22);
+  box-shadow: 0 4px 10px rgba(6, 27, 56, .16);
+}
+
 .app-splash .aftertaxum-logo__copy span,
 .app-splash .aftertaxum-logo__copy small {
   display: block;
