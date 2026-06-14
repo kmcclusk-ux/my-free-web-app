@@ -4733,9 +4733,12 @@ export default function App() {
         </aside>
         <main className="content-panel">
         <div className="content-topbar">
-          <div>
-            <p className="eyebrow">Live Model</p>
-            <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
+          <div className="content-topbar__title-group">
+            <div>
+              <p className="eyebrow">Live Model</p>
+              <h2>{navItems.find((item) => item.key === activeTab)?.label}</h2>
+            </div>
+            {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
           <div className="topbar-stack">
             {authEnabled ? (
@@ -4747,7 +4750,6 @@ export default function App() {
             ) : (
               <div className="topbar-chip">Auth: legacy</div>
             )}
-            {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
             <IncomeSnapshotControl
               snapshot={incomeSnapshot}
               deltas={incomeSnapshotDeltas}

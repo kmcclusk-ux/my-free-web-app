@@ -776,11 +776,18 @@
 .thermometer-rail .tax-thermometer__footer span { font-size: .58rem; }
 .thermometer-rail .tax-thermometer__footer strong { font-size: .64rem; text-align: right; }
 @media (prefers-reduced-motion: reduce) { .tax-thermometer__value { transition: none; will-change: auto; } }
-.content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; }
+.content-topbar { position: relative; z-index: 120; display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; overflow: visible; }
+.content-topbar__title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .topbar-state-selector {
   display: inline-flex;
   align-items: center;
-  align-self: flex-end;
+  justify-content: flex-start;
 }
 .content-topbar h2 { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.22rem; color: #18313a; }
 .topbar-chip { padding: 6px 9px; border-radius: 999px; background: rgba(255,255,255,.82); border: 1px solid rgba(24,49,58,.1); color: #4f666d; font-size: .76rem; }
@@ -824,6 +831,8 @@
 @media (max-width: 980px) { .workspace-shell,.workspace-shell--focus-grid { grid-template-columns: 1fr; } .sidebar { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .sidebar:hover { width: auto; box-shadow: none; } .sidebar__brand span,.nav-item span { display: block; } .sidebar__nav { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); } .thermometer-rail { position: static; height: auto; border-left: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .thermometer-rail .tax-thermometer-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 150px; } .content-panel { padding: 0 12px 18px; } .content-topbar { flex-direction: column; align-items: flex-start; } .portfolio-workstation__sticky { position: static; } .investments-workspace { height: auto; min-height: 520px; } .investments-workspace .table-wrap--tall { height: 64vh; } }
 
 .topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.content-topbar .state-flag-select,
+.content-topbar .topbar-state-selector { overflow: visible; }
 .ai-button { display: inline-flex; align-items: center; border: 1px solid rgba(24,49,58,.12); border-radius: 999px; padding: 8px 14px; background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; font-weight: 700; letter-spacing: .08em; text-decoration: none; }
 .ai-button--link { background: linear-gradient(135deg, #7f4b29, #c3732c); }
 .ai-button--assistant { background: linear-gradient(135deg, #244d42, #63823d); }
@@ -2666,7 +2675,7 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 50;
+  z-index: 10000;
   width: max(220px, 100%);
   max-height: 280px;
   overflow-y: auto;
