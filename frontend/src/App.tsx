@@ -15,7 +15,7 @@ type TabKey =
   | "investmentType";
 
 type FilingStatus = "single" | "mfj";
-type TaxResult = { calc: string; tax: number; ordinaryTax?: number; prefTax?: number; niit?: number };
+type TaxResult = { calc: string; tax: number; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string };
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
 type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
@@ -77,7 +77,7 @@ type AccountTaxTypeRow = { id: number; taxStatus: string };
 type InvestmentTypeRow = { id: number; name: string };
 
 type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number; saltCap: number };
-type StateSettings = { extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
+type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
 type UiSettings = { investmentFavorites: InvestmentFavorite[] };
@@ -189,6 +189,7 @@ type TaxCalculatorInputs = {
   federalStandardDeduction: number;
   federalSaltCap: number;
   caStandardDeduction: number;
+  stateCode: string;
   nonInvestmentOrdinaryIncome: number;
   otherOrdinaryInvestmentIncome: number;
   ordinaryDividends: number;
@@ -207,6 +208,7 @@ const initialTaxCalculatorInputs: TaxCalculatorInputs = {
   federalStandardDeduction: 31500,
   federalSaltCap: 40400,
   caStandardDeduction: 11000,
+  stateCode: "CA",
   nonInvestmentOrdinaryIncome: 300000,
   otherOrdinaryInvestmentIncome: 0,
   ordinaryDividends: 0,
@@ -478,7 +480,7 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "tickers", label: "Tickers", meta: "symbol lookups" },
   { key: "categories", label: "Categories", meta: "ticker categories" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
-  { key: "state", label: "State Tax", meta: "CA worksheet" },
+  { key: "state", label: "State Tax", meta: "state worksheet" },
   { key: "calculator", label: "Tax Calculator", meta: "summary" },
   { key: "taxTreatment", label: "Tax Treatment", meta: "sheet labels" },
   { key: "investmentType", label: "Investment Type", meta: "asset classes" },
@@ -515,6 +517,14 @@ const caTaxRateMarkers: ThermometerMarker[] = [
 ];
 
 const categoryLabels = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"];
+const stateOptions: Array<[string, string]> = [
+  ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"], ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"], ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"], ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"], ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"], ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"], ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"], ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"], ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"], ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"], ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"], ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
+];
+const stateNameByCode = Object.fromEntries(stateOptions);
+function normalizeStateCode(value: string) {
+  const code = String(value || "CA").trim().toUpperCase();
+  return stateNameByCode[code] ? code : "CA";
+}
 
 const initialInvestments: InvestmentRow[] = [
   { id: 1, description: "Social Security", account: "Social Security", category: "core", totalInvestment: 0, yearlyIncome: 10000, includeIncome: true, overrideProposal: false, symbol: "SS", newSymbol: "SS", newPercent: 0 },
@@ -589,7 +599,7 @@ const initialAccounts: AccountRow[] = [
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
 const initialInvestmentTypes: InvestmentTypeRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 31500, saltCap: 40400 };
-const initialStateSettings: StateSettings = { extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 11000 };
+const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [] };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
@@ -1101,7 +1111,7 @@ function parseStateSettingsSection(section: unknown): Partial<StateSettings> {
   const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
   const result: Partial<StateSettings> = {};
 
-  const setNumberField = (field: keyof StateSettings, label: string) => {
+  const setNumberField = (field: Exclude<keyof StateSettings, "stateCode">, label: string) => {
     const value = parseNumberFromSection(sectionObj, rows, field, label);
     if (value !== undefined) {
       result[field] = value as StateSettings[typeof field];
@@ -1174,7 +1184,7 @@ function formatSignedCurrency(value: number) {
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
 function fedTaxAdjust(amount: number, taxTreatment: string, extraData: number, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; case "real estate": return pref ? 0 : Math.max(amount - extraData, 0); default: return pref ? 0 : amount; } }
-function stateTaxAdjust(amount: number, taxTreatment: string, extraData: number) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "state tax free": case "ss-85-fed": return 0; case "real estate": return Math.max(amount - extraData, 0); default: return amount; } }
+function stateTaxAdjust(amount: number, taxTreatment: string, extraData: number, stateCode = "CA") { const treatment = String(taxTreatment || "").toLowerCase().trim(); if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0; if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0; if (treatment === "real estate") return Math.max(amount - extraData, 0); return amount; }
 async function postTaxCalculation(payload: Record<string, number | string>) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -1980,12 +1990,13 @@ function getReachedTaxRateLabel(markers: ThermometerMarker[], taxableIncome: num
   return reached;
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus }) {
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, stateCode, stateName }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; stateCode: string; stateName: string }) {
   const [collapsedSections, setCollapsedSections] = useState({ summary: false, federal: false, state: false });
   const totalTax = federalTax + stateTax;
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
   const federal12Threshold = federalMarkers.find((marker) => marker.label === "12%")?.amount || 0;
   const federal22Threshold = federalMarkers.find((marker) => marker.label === "22%")?.amount || federal12Threshold;
+  const stateMarkers = stateCode === "CA" ? caTaxRateMarkers : [];
   const ca4Threshold = caTaxRateMarkers.find((marker) => marker.label === "4%")?.amount || 0;
   const ca6Threshold = caTaxRateMarkers.find((marker) => marker.label === "6%")?.amount || ca4Threshold;
   const federalEffectiveRate = federalTaxable > 0 ? federalTax / federalTaxable : 0;
@@ -1994,7 +2005,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { amount: federalTaxable, label: "Fed taxable", value: formatCurrencyDetailed(federalTaxable), tone: "taxable" },
   ];
   const stateValues: ThermometerValue[] = [
-    { amount: stateTaxable, label: "CA taxable", value: formatCurrencyDetailed(stateTaxable), tone: "taxable" },
+    { amount: stateTaxable, label: `${stateCode} taxable`, value: formatCurrencyDetailed(stateTaxable), tone: "taxable" },
   ];
   const federalStats: ThermometerStat[] = [
     { label: "Federal tax", value: formatCurrencyDetailed(federalTax), tone: "tax" },
@@ -2002,17 +2013,17 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { label: "Top bracket", value: getReachedTaxRateLabel(federalOrdinaryRateMarkers[filingStatus], federalTaxable, "10%"), tone: "income" },
   ];
   const stateStats: ThermometerStat[] = [
-    { label: "CA tax", value: formatCurrencyDetailed(stateTax), tone: "tax" },
+    { label: `${stateCode} tax`, value: formatCurrencyDetailed(stateTax), tone: "tax" },
     { label: "Effective", value: formatPercent(stateEffectiveRate), tone: "taxable" },
-    { label: "Top bracket", value: getReachedTaxRateLabel(caTaxRateMarkers, stateTaxable, "1%"), tone: "income" },
+    { label: "Top bracket", value: stateMarkers.length ? getReachedTaxRateLabel(stateMarkers, stateTaxable, "1%") : "state schedule", tone: "income" },
   ];
   const federalTopBracket = federalStats.find((stat) => stat.label === "Top bracket")?.value || "10%";
-  const stateTopBracket = stateStats.find((stat) => stat.label === "Top bracket")?.value || "1%";
+  const stateTopBracket = stateStats.find((stat) => stat.label === "Top bracket")?.value || "state schedule";
 
   return (
     <div className="tax-thermometer-panel">
       <TaxThermometer title="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
-      <TaxThermometer title="California Tax" subtitle="Green <4%, yellow <6%, red above 6%" taxableIncome={stateTaxable} values={stateValues} markers={caTaxRateMarkers} stats={stateStats} footerLabel="CA taxable income" footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={{ greenEnd: ca4Threshold, yellowEnd: ca6Threshold }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
+      <TaxThermometer title={`${stateName} Tax`} subtitle={stateCode === "CA" ? "Green <4%, yellow <6%, red above 6%" : "State schedule; no visual brackets configured"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={stateCode === "CA" ? { greenEnd: ca4Threshold, yellowEnd: ca6Threshold } : { greenEnd: stateTaxable + 1, yellowEnd: stateTaxable + 1 }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
       <div className={`tax-thermometer-panel__summary ${collapsedSections.summary ? "tax-thermometer-panel__summary--collapsed" : ""}`}>
         <div className="tax-thermometer-panel__summary-heading">
           <div>
@@ -2027,15 +2038,15 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
           <div className="tax-thermometer-panel__summary-grid">
             <div><span>Federal tax</span><strong>{formatCurrencyDetailed(federalTax)}</strong></div>
             <div><span>Federal effective</span><strong>{formatPercent(federalEffectiveRate)}</strong></div>
-            <div><span>CA tax</span><strong>{formatCurrencyDetailed(stateTax)}</strong></div>
-            <div><span>CA effective</span><strong>{formatPercent(stateEffectiveRate)}</strong></div>
+            <div><span>{stateCode} tax</span><strong>{formatCurrencyDetailed(stateTax)}</strong></div>
+            <div><span>{stateCode} effective</span><strong>{formatPercent(stateEffectiveRate)}</strong></div>
             <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
           </div>
         )}
         {!collapsedSections.summary && (
           <div className="tax-insight-card">
             <span>Live tax readout</span>
-            <strong>Federal bracket {federalTopBracket}; California bracket {stateTopBracket}</strong>
+            <strong>Federal bracket {federalTopBracket}; {stateCode} bracket {stateTopBracket}</strong>
             <p>Updates as included holdings, overrides, and tax inputs change.</p>
           </div>
         )}
@@ -2520,7 +2531,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, selectedStateCode, isWhatIfActive, onStateChange, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; selectedStateCode: string; isWhatIfActive: boolean; onStateChange: (stateCode: string) => void; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -2894,6 +2905,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
+        <label className="column-toggle-group column-toggle-group--state"><span>State</span><select value={normalizeStateCode(selectedStateCode)} onChange={(event) => onStateChange(event.target.value)}>{stateOptions.map(([code, name]) => <option key={code} value={code}>{code} - {name}</option>)}</select></label>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`ghost-button ghost-button--compact column-toggle ${isWhatIfActive ? "column-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             {isWhatIfActive ? "- WhatIf" : "+ WhatIf"}
@@ -3191,6 +3203,8 @@ export default function App() {
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
   const [taxCalcInputs, setTaxCalcInputs] = useState(initialTaxCalculatorInputs);
+  const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
+  const selectedStateName = stateNameByCode[selectedStateCode] || selectedStateCode;
   const [taxCalcResult, setTaxCalcResult] = useState<TaxResult | null>(null);
   const [taxCalcError, setTaxCalcError] = useState<string | null>(null);
   const [taxCalcStateResult, setTaxCalcStateResult] = useState<TaxResult | null>(null);
@@ -3423,7 +3437,7 @@ export default function App() {
       investmentType,
       ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, false),
       preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, true),
-      stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, extraData),
+      stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, selectedStateCode),
       nonTaxableMonthly: !isTaxableAccount && row.includeIncome ? monthlyIncome : 0,
       nonInvestmentIncome: ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0,
       cash: investmentType === "cash" ? includedTotal : 0,
@@ -3437,7 +3451,7 @@ export default function App() {
       realEstate: investmentType === "real estate" ? includedTotal : 0,
       bitcoin: investmentType === "bitcoin" ? includedTotal : 0,
     };
-  }), [investments, tickerMap, accountMap, isWhatIfActive]);
+  }), [investments, tickerMap, accountMap, isWhatIfActive, selectedStateCode]);
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
@@ -3603,7 +3617,7 @@ export default function App() {
         if (!cancelled) { setFederalResult(null); setFederalError(error.message); }
       });
 
-      postTaxCalculation({ calc: "STATE_TAX_2025_CA_MFJ", taxableIncome: stateTaxableAfterDeductions }).then((result) => {
+      postTaxCalculation({ calc: "STATE_TAX_2025", state: selectedStateCode, filingStatus: federalSettings.filingStatus, taxableIncome: stateTaxableAfterDeductions }).then((result) => {
         if (!cancelled) { setStateResult(result); setStateError(null); }
       }).catch((error: Error) => {
         if (!cancelled) { setStateResult(null); setStateError(error.message); }
@@ -3611,7 +3625,7 @@ export default function App() {
     }, 220);
 
     return () => { cancelled = true; window.clearTimeout(timeoutId); };
-    }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions]);
+    }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions, selectedStateCode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3645,7 +3659,9 @@ export default function App() {
     let cancelled = false;
     setTaxCalcStateError(null);
     postTaxCalculation({
-      calc: "STATE_TAX_2025_CA_MFJ",
+      calc: "STATE_TAX_2025",
+      state: normalizeStateCode(taxCalcInputs.stateCode),
+      filingStatus: taxCalcInputs.filingStatus,
       taxableIncome: stateTaxableForCalc,
     })
       .then((result) => {
@@ -3663,7 +3679,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [stateTaxableForCalc]);
+  }, [stateTaxableForCalc, taxCalcInputs.filingStatus, taxCalcInputs.stateCode]);
 
   useEffect(() => {
     if (authEnabled && authState.status !== "signedIn") return;
@@ -4640,7 +4656,9 @@ export default function App() {
             filters={investmentFilters}
             sort={investmentSort}
             selectedAssetIds={selectedInvestmentIds}
+            selectedStateCode={selectedStateCode}
             isWhatIfActive={isWhatIfActive}
+            onStateChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))}
             onToggleWhatIf={() => setIsWhatIfActive((current) => !current)}
             onSaveFavorite={saveFavorite}
             onApplyFavorite={applyFavorite}
@@ -4671,9 +4689,9 @@ export default function App() {
         {activeTab === "investmentType" && <LookupTable title="Investment Type" subtitle="Reference list for the asset classes used by the workbook rollups." rows={investmentTypes} columns={[{ key: "name", label: "Investment type" }]} onChange={updateCollection(setInvestmentTypes)} onAdd={() => addRow(setInvestmentTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setInvestmentTypes)} onReorder={reorderCollection(setInvestmentTypes)} showMoveHeaderLabel={false} />}
 
         {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label><label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} /><MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
-        {activeTab === "state" && <Section title="State Tax" subtitle="California worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">Current backend support is still modeled for the California MFJ route.</div><div className="form-grid form-grid--compact-wide"><label><span>Extra California income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>CA standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label="CA gross" value={formatCurrency(stateGross)} /><MetricCard label="CA deduction used" value={formatCurrency(stateDeduction)} /><MetricCard label="CA taxable after deductions" value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{stateResult && <div className="api-grid"><MetricCard label="California tax" value={formatCurrencyDetailed(stateResult.tax)} tone="accent" /></div>}</Section>}
-        {activeTab === "calculator" && (
-          <Section title="Tax Calculator" subtitle="Standalone inputs that mirror the spreadsheet layout and call the shared federal + CA Lambdas.">
+        {activeTab === "state" && <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">State calculations use 2025 resident state income-tax brackets. Local taxes, state credits, and state-specific income modifications are not modeled.</div><div className="form-grid form-grid--compact-wide"><label><span>State</span><select value={selectedStateCode} onChange={(event) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(event.target.value) }))}>{stateOptions.map(([code, name]) => <option key={code} value={code}>{code} - {name}</option>)}</select></label><label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} /><MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} /><MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{stateResult?.note && <div className="status-card status-card--note">{stateResult.note}</div>}{stateResult && <div className="api-grid"><MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(stateResult.tax)} tone="accent" /></div>}</Section>}
+                {activeTab === "calculator" && (
+          <Section title="Tax Calculator" subtitle="Standalone inputs that mirror the spreadsheet layout and call the shared federal + state Lambdas.">
             <div className="calculator-section-grid">
               <div className="calculator-section">
                 <h3>Setup</h3>
@@ -4687,6 +4705,13 @@ export default function App() {
                     <small className="field-note">Use `mfj` for the combined federal backend route.</small>
                   </label>
                   <label>
+                    <span>State</span>
+                    <select value={normalizeStateCode(taxCalcInputs.stateCode)} onChange={(event) => setTaxCalcInputs((current) => ({ ...current, stateCode: normalizeStateCode(event.target.value) }))}>
+                      {stateOptions.map(([code, name]) => <option key={code} value={code}>{code} - {name}</option>)}
+                    </select>
+                    <small className="field-note">Used for the standalone state calculation.</small>
+                  </label>
+                  <label>
                     <span>Federal standard deduction</span>
                     <input type="number" value={taxCalcInputs.federalStandardDeduction} onChange={(event) => updateTaxCalculatorNumber("federalStandardDeduction", event.target.value)} />
                     <small className="field-note">Edit if your standard deduction changes.</small>
@@ -4697,7 +4722,7 @@ export default function App() {
                     <small className="field-note">Current value used in your other tabs.</small>
                   </label>
                   <label>
-                    <span>CA standard deduction</span>
+                    <span>State standard deduction</span>
                     <input type="number" value={taxCalcInputs.caStandardDeduction} onChange={(event) => updateTaxCalculatorNumber("caStandardDeduction", event.target.value)} />
                     <small className="field-note">Edit if needed.</small>
                   </label>
@@ -4749,7 +4774,7 @@ export default function App() {
                   <label>
                     <span>Mortgage interest</span>
                     <input type="number" value={taxCalcInputs.mortgageInterest} onChange={(event) => updateTaxCalculatorNumber("mortgageInterest", event.target.value)} />
-                    <small className="field-note">Federal and CA itemized deduction input.</small>
+                    <small className="field-note">Federal and state itemized deduction input.</small>
                   </label>
                   <label>
                     <span>Property tax</span>
@@ -4787,11 +4812,11 @@ export default function App() {
                 <div className="derived-row"><span>Estimated NIIT</span><strong>{formatCurrency(taxCalcResult?.niit ?? niitBaseCalc * 0.038)}</strong></div>
               </div>
               <div className="calculator-section">
-                <h3>CA derived</h3>
-                <div className="derived-row"><span>CA itemized deduction</span><strong>{formatCurrency(caItemizedDeduction)}</strong></div>
-                <div className="derived-row"><span>CA deduction used</span><strong>{formatCurrency(caDeductionUsed)}</strong></div>
-                <div className="derived-row"><span>CA taxable income</span><strong>{formatCurrency(caTaxableIncome)}</strong></div>
-                <div className="derived-row"><span>CA state tax</span><strong>{formatCurrencyDetailed(taxCalcStateResult?.tax || 0)}</strong></div>
+                <h3>{normalizeStateCode(taxCalcInputs.stateCode)} derived</h3>
+                <div className="derived-row"><span>State itemized deduction</span><strong>{formatCurrency(caItemizedDeduction)}</strong></div>
+                <div className="derived-row"><span>State deduction used</span><strong>{formatCurrency(caDeductionUsed)}</strong></div>
+                <div className="derived-row"><span>State taxable income</span><strong>{formatCurrency(caTaxableIncome)}</strong></div>
+                <div className="derived-row"><span>State tax</span><strong>{formatCurrencyDetailed(taxCalcStateResult?.tax || 0)}</strong></div>
               </div>
             </div>
             <div className="calculator-section-grid">
@@ -4816,7 +4841,7 @@ export default function App() {
               <div className="calculator-section">
                 <h3>Audit</h3>
                 <div className="derived-row"><span>Backend formula used</span><strong>FED_TAX_2025_COMBINED</strong></div>
-                <div className="derived-row"><span>CA formula used</span><strong>STATE_TAX_2025_CA_MFJ</strong></div>
+                <div className="derived-row"><span>State formula used</span><strong>STATE_TAX_2025</strong></div>
                 <div className="derived-row"><span>Notes</span><strong>Combined federal route currently supports `mfj`.</strong></div>
               </div>
             </div>
@@ -4835,7 +4860,7 @@ export default function App() {
               <MetricCard label="Net owed / refund" value={formatCurrencyDetailed(netAfterWithholdingsCalc)} tone={netAfterWithholdingsCalc > 0 ? "warning" : "accent"} />
               <MetricCard label="MAGI used by calc" value={formatCurrency(magiStandalone)} />
               <MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncomeStandalone)} />
-              <MetricCard label="CA taxable" value={formatCurrency(caTaxableIncome)} />
+              <MetricCard label="State taxable" value={formatCurrency(caTaxableIncome)} />
             </div>
           </Section>
         )}
@@ -4857,6 +4882,8 @@ export default function App() {
                 federalTax={federalResult?.tax || 0}
                 stateTax={stateResult?.tax || 0}
                 filingStatus={federalSettings.filingStatus}
+                stateCode={selectedStateCode}
+                stateName={selectedStateName}
               />
             </>
           ) : (

@@ -6,6 +6,7 @@ import {
   fedTax2025Ordinary,
   fedPrefTax2024,
   caTax2025Mfj,
+  stateTax2025,
   niitTax,
   type FilingStatus,
 } from "./taxCalcs";
@@ -71,6 +72,7 @@ type RequestBody =
     }
   | { calc: "CA_TAX_2025_MFJ"; taxableIncome: number }
   | { calc: "STATE_TAX_2025_CA_MFJ"; taxableIncome: number }
+  | { calc: "STATE_TAX_2025"; taxableIncome: number; state: string; filingStatus?: FilingStatus }
   | { calc: "WORKBOOK_GET"; workspaceId?: string }
   | { calc: "WORKBOOK_GET_TAB"; workspaceId?: string; tabName: string }
   | { calc: "WORKBOOK_SAVE"; workspaceId?: string; tabs?: Record<string, unknown>; settings?: Record<string, unknown> }
@@ -1731,7 +1733,26 @@ export const handler = async (
     }
 
     const tax = caTax2025Mfj(taxableIncome.value);
-    return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
+    return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, state: "CA", stateName: "California", tax }, origin);
+  }
+
+  if (calc === "STATE_TAX_2025") {
+    const taxableIncome = readNonNegativeNumber((body as any).taxableIncome, "taxableIncome");
+    if ("error" in taxableIncome) {
+      return jsonResponse(400, { error: taxableIncome.error }, origin);
+    }
+
+    const filingStatus = String((body as any).filingStatus || "single").toLowerCase();
+    if (!isFilingStatus(filingStatus)) {
+      return jsonResponse(
+        400,
+        { error: "filingStatus must be one of: single, mfj, mfs, hoh" },
+        origin
+      );
+    }
+
+    const result = stateTax2025(taxableIncome.value, String((body as any).state || "CA"), filingStatus);
+    return jsonResponse(200, { calc, ...result }, origin);
   }
 
   if (calc === "FED_PREF_TAX_2024") {
@@ -1843,6 +1864,7 @@ export const handler = async (
         "FED_TAX_2025_COMBINED",
         "CA_TAX_2025_MFJ",
         "STATE_TAX_2025_CA_MFJ",
+        "STATE_TAX_2025",
         "PORTFOLIO_CHAT",
       ],
     },

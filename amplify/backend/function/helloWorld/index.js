@@ -1435,7 +1435,19 @@ const handler = async (event) => {
             return jsonResponse(400, { error: taxableIncome.error }, origin);
         }
         const tax = (0, taxCalcs_1.caTax2025Mfj)(taxableIncome.value);
-        return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
+        return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, state: "CA", stateName: "California", tax }, origin);
+    }
+    if (calc === "STATE_TAX_2025") {
+        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
+        if ("error" in taxableIncome) {
+            return jsonResponse(400, { error: taxableIncome.error }, origin);
+        }
+        const filingStatus = String(body.filingStatus || "single").toLowerCase();
+        if (!isFilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
+        }
+        const result = (0, taxCalcs_1.stateTax2025)(taxableIncome.value, String(body.state || "CA"), filingStatus);
+        return jsonResponse(200, { calc, ...result }, origin);
     }
     if (calc === "FED_PREF_TAX_2024") {
         const ordinaryTaxable = readNonNegativeNumber(body.ordinaryTaxable, "ordinaryTaxable");
@@ -1509,6 +1521,7 @@ const handler = async (event) => {
             "FED_TAX_2025_COMBINED",
             "CA_TAX_2025_MFJ",
             "STATE_TAX_2025_CA_MFJ",
+            "STATE_TAX_2025",
             "PORTFOLIO_CHAT",
         ],
     }, origin);
