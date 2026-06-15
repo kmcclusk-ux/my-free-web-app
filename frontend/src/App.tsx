@@ -4987,8 +4987,31 @@ export default function App() {
             </div>
           </Section>
         )}
-        {activeTab === "state" && <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">State calculations use 2025 resident state income-tax brackets. Local taxes, state credits, and state-specific income modifications are not modeled.</div><div className="form-grid form-grid--compact-wide"><label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label><label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} /><MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} /><MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{displayedStateResult.note && <div className="status-card status-card--note">{displayedStateResult.note}</div>}<div className="api-grid"><MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} tone="accent" /></div></Section>}
-                {activeTab === "calculator" && (
+        {activeTab === "state" && (
+          <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend." className="state-tax-panel">
+            <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
+              <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
+            </div>
+            <div className="metric-grid state-tax-panel__tiles">
+              <MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} />
+              <MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} />
+              <MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} />
+              <MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} />
+            </div>
+            {stateError && <div className="status-card status-card--error">{stateError}</div>}
+            {displayedStateResult.note && <div className="status-card status-card--note">{displayedStateResult.note}</div>}
+            <div className="status-card status-card--note">State calculations use 2025 resident state income-tax brackets. Local taxes, state credits, and state-specific income modifications are not modeled.</div>
+            <div className="form-grid form-grid--compact-wide">
+              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
+              <label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label>
+              <label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label>
+              <label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label>
+              <label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label>
+              <label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label>
+            </div>
+          </Section>
+        )}
+        {activeTab === "calculator" && (
           <Section title="Tax Calculator" subtitle="Standalone inputs that mirror the spreadsheet layout and call the shared federal + state Lambdas.">
             <div className="calculator-section-grid">
               <div className="calculator-section">
