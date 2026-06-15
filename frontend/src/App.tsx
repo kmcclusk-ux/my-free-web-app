@@ -1378,6 +1378,7 @@ function formatSignedCurrency(value: number) {
 }
 function fedTaxAdjust(amount: number, taxTreatment: string, extraData: number, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; case "real estate": return pref ? 0 : Math.max(amount - extraData, 0); default: return pref ? 0 : amount; } }
 function stateTaxAdjust(amount: number, taxTreatment: string, extraData: number, stateCode = "CA") { const treatment = String(taxTreatment || "").toLowerCase().trim(); if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0; if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0; if (treatment === "real estate") return Math.max(amount - extraData, 0); return amount; }
+function isUnknownCalcError(error: Error) { return /unknown calc/i.test(error.message || ""); }
 async function postTaxCalculation(payload: Record<string, number | string>) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -3821,7 +3822,7 @@ export default function App() {
       postTaxCalculation({ calc: "STATE_TAX_2025", state: selectedStateCode, filingStatus: federalSettings.filingStatus, taxableIncome: stateTaxableAfterDeductions }).then((result) => {
         if (!cancelled) { setStateResult(result); setStateError(null); }
       }).catch((error: Error) => {
-        if (!cancelled) { setStateResult(null); setStateError(error.message); }
+        if (!cancelled) { setStateResult(null); setStateError(isUnknownCalcError(error) ? null : error.message); }
       });
     }, 220);
 
@@ -3874,7 +3875,7 @@ export default function App() {
       .catch((error: Error) => {
         if (!cancelled) {
           setTaxCalcStateResult(null);
-          setTaxCalcStateError(error.message);
+          setTaxCalcStateError(isUnknownCalcError(error) ? null : error.message);
         }
       });
     return () => {
