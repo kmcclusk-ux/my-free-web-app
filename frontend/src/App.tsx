@@ -3900,21 +3900,44 @@ export default function App() {
     const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) return;
     const audioContext = new AudioContextCtor();
-    const playClick = (startOffset: number, frequency: number, gain: number, duration: number) => {
+    const playTone = (startOffset: number, frequency: number, gain: number, duration: number, type: OscillatorType = "square") => {
       const oscillator = audioContext.createOscillator();
       const clickGain = audioContext.createGain();
-      oscillator.type = "square";
+      oscillator.type = type;
       oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + startOffset);
       clickGain.gain.setValueAtTime(0.0001, audioContext.currentTime + startOffset);
-      clickGain.gain.exponentialRampToValueAtTime(gain, audioContext.currentTime + startOffset + 0.006);
+      clickGain.gain.exponentialRampToValueAtTime(gain, audioContext.currentTime + startOffset + 0.004);
       clickGain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + startOffset + duration);
       oscillator.connect(clickGain).connect(audioContext.destination);
       oscillator.start(audioContext.currentTime + startOffset);
       oscillator.stop(audioContext.currentTime + startOffset + duration);
     };
-    playClick(0, 820, 0.08, 0.055);
-    playClick(0.072, 420, 0.055, 0.07);
-    window.setTimeout(() => void audioContext.close(), 220);
+    const playNoise = (startOffset: number, gain: number, duration: number, highpass: number) => {
+      const sampleCount = Math.max(1, Math.floor(audioContext.sampleRate * duration));
+      const buffer = audioContext.createBuffer(1, sampleCount, audioContext.sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let index = 0; index < sampleCount; index += 1) {
+        samples[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
+      }
+      const source = audioContext.createBufferSource();
+      const filter = audioContext.createBiquadFilter();
+      const noiseGain = audioContext.createGain();
+      source.buffer = buffer;
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(highpass, audioContext.currentTime + startOffset);
+      noiseGain.gain.setValueAtTime(0.0001, audioContext.currentTime + startOffset);
+      noiseGain.gain.exponentialRampToValueAtTime(gain, audioContext.currentTime + startOffset + 0.003);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + startOffset + duration);
+      source.connect(filter).connect(noiseGain).connect(audioContext.destination);
+      source.start(audioContext.currentTime + startOffset);
+      source.stop(audioContext.currentTime + startOffset + duration);
+    };
+    playNoise(0, 0.16, 0.032, 1600);
+    playTone(0.006, 190, 0.11, 0.058, "triangle");
+    playTone(0.052, 520, 0.07, 0.035, "square");
+    playNoise(0.078, 0.09, 0.045, 900);
+    playTone(0.126, 145, 0.045, 0.08, "triangle");
+    window.setTimeout(() => void audioContext.close(), 360);
   };
   const captureIncomeSnapshot = (origin: { x: number; y: number }) => {
     setIncomeSnapshot({ ...currentIncomeSnapshot, capturedAt: new Date().toISOString() });
