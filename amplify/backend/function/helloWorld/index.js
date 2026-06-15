@@ -63,7 +63,7 @@ Action schemas:
 - setView payload: {"viewName":"Investments"|"Tickers"|"Accounts"|"Federal Tax"|"State Tax"|"Tax Calculator"|"focus_grid"|"analytics"}.
 Investment row fields: description, account, category, totalInvestment, yearlyIncome, includeIncome, overrideProposal, symbol, newSymbol, newPercent.
 When the user pastes spreadsheet investment rows, map columns like DESC/description -> description, ACCNT/account -> account, total inv. -> totalInvestment, yr inc. -> yearlyIncome, Inc/use checkbox -> includeIncome, override -> overrideProposal, symbol/ticker -> symbol, new symbol -> newSymbol, and new % -> newPercent. Ignore calculated downstream columns such as monthly income, tax status, ordinary, preferred, state, non taxable, cash/stocks/bonds rollups, filtered, and total.
-Ticker row fields: symbol, percentReturn, category, taxTreatment, incomeItem, extraData, description, exDividend, divPayout.
+Ticker row fields: symbol, percentReturn (shown as Dividend % in the UI; user-facing values are entered as percentages), category, taxTreatment, incomeItem, extraData, description, exDividend, divPayout.
 Account row fields: account, taxStatus, dividendAccrued, includeInFreeCashflow.
 Category row fields: name. Tax treatment row fields: label. Account tax type row fields: taxStatus. Investment type row fields: name.
 For bulk updates to tickers, accounts, categories, taxTreatment, accountTaxType, or investmentType, prefer upsertRows. Use replaceRows only when the user clearly wants the whole table replaced.

@@ -214,6 +214,9 @@ const referenceTableConfigs: Record<
     aliases: {
       ticker: "symbol",
       percentreturn: "percentReturn",
+      dividend: "percentReturn",
+      dividendpercent: "percentReturn",
+      dividendpercentage: "percentReturn",
       pctreturn: "percentReturn",
       return: "percentReturn",
       taxtreatment: "taxTreatment",
@@ -286,6 +289,11 @@ function normalizeNumberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeRateValue(value: unknown) {
+  const numeric = normalizeNumberValue(value);
+  return Math.abs(numeric) > 1 ? numeric / 100 : numeric;
+}
+
 function referenceFieldAlias(tabName: ReferenceTableName, field: string) {
   const config = referenceTableConfigs[tabName];
   const normalized = normalizeReferenceKey(field);
@@ -298,6 +306,7 @@ function referenceFieldAlias(tabName: ReferenceTableName, field: string) {
 function coerceReferenceValue(tabName: ReferenceTableName, field: string, value: unknown) {
   const config = referenceTableConfigs[tabName];
   if (config.booleanFields?.includes(field)) return normalizeBooleanValue(value);
+  if (tabName === "tickers" && field === "percentReturn") return normalizeRateValue(value);
   if (config.numericFields?.includes(field)) return normalizeNumberValue(value);
   return String(value ?? "");
 }
