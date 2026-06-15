@@ -1860,14 +1860,18 @@ function IncomeSnapshotControl({
         className="income-snapshot__button"
         type="button"
         onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          onCapture({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+          const iconRect = event.currentTarget.querySelector("svg")?.getBoundingClientRect();
+          const buttonRect = event.currentTarget.getBoundingClientRect();
+          onCapture(iconRect
+            ? { x: iconRect.left + iconRect.width * (17.5 / 24), y: iconRect.top + iconRect.height * (10.1 / 24) }
+            : { x: buttonRect.left + buttonRect.width / 2, y: buttonRect.top + buttonRect.height / 2 });
         }}
         aria-label="Snapshot income baseline"
         title="Snapshot"
       >
         <svg className="income-snapshot__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M6.5 7.5 8.25 5h7.5l1.75 2.5H20a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5V9A1.5 1.5 0 0 1 4 7.5h2.5Z" />
+          <rect className="income-snapshot__flash-window" x="16.4" y="9" width="2.2" height="2.2" rx=".45" />
           <path d="M12 10a3.25 3.25 0 1 0 0 6.5 3.25 3.25 0 0 0 0-6.5Z" />
         </svg>
         <span>Snapshot</span>
@@ -4764,7 +4768,9 @@ export default function App() {
           className="camera-flash"
           style={{ "--camera-flash-x": `${cameraFlashOrigin.x}px`, "--camera-flash-y": `${cameraFlashOrigin.y}px` } as CSSProperties}
           aria-hidden="true"
-        />
+        >
+          <span className="camera-flash__source" />
+        </div>
       )}
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">

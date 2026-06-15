@@ -136,6 +136,11 @@
   stroke-linejoin: round;
   stroke-width: 1.8;
 }
+.income-snapshot__flash-window {
+  fill: #fff;
+  stroke: rgba(255, 255, 255, .92);
+  stroke-width: .35;
+}
 .income-snapshot__button span {
   max-width: 0;
   opacity: 0;
@@ -398,6 +403,21 @@
   transform: rotate(-4deg) scale(.2);
   animation: camera-rays-spark 520ms ease-out forwards;
 }
+.camera-flash__source {
+  position: absolute;
+  left: var(--camera-flash-x, calc(100% - 154px));
+  top: var(--camera-flash-y, 108px);
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .85),
+    0 0 12px rgba(255, 255, 255, .95),
+    0 0 26px rgba(255, 241, 160, .72);
+  transform: translate(-50%, -50%) scale(.58);
+  animation: camera-flash-source-pop 420ms ease-out forwards;
+}
 
 @keyframes camera-flash-pop {
   0% { opacity: 0; filter: saturate(1.05); }
@@ -418,6 +438,13 @@
   10% { opacity: .85; transform: rotate(-5deg) scale(.74); }
   38% { opacity: .22; transform: rotate(2deg) scale(1.02); }
   100% { opacity: 0; transform: rotate(7deg) scale(1.16); }
+}
+
+@keyframes camera-flash-source-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.35); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  48% { opacity: .82; transform: translate(-50%, -50%) scale(.92); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.68); }
 }
 
 @keyframes snapshot-delta-tumble {
