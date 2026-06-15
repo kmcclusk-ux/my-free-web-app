@@ -896,6 +896,11 @@
 .metric-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 18px; border: 1px solid rgba(24,49,58,.09); background: rgba(255,255,255,.78); }
 .metric-card span { font-size: .8rem; color: #62767a; }
 .metric-card strong { font-size: 1.16rem; color: #16323a; }
+.federal-tax-panel__tiles { grid-template-columns: repeat(auto-fit,minmax(132px,1fr)); gap: 8px; margin-bottom: 10px; }
+.federal-tax-panel__tiles .metric-card { gap: 4px; min-height: 0; padding: 9px 10px; border-radius: 14px; }
+.federal-tax-panel__tiles .metric-card span { font-size: .68rem; line-height: 1.12; }
+.federal-tax-panel__tiles .metric-card strong { font-size: .92rem; line-height: 1.1; }
+.federal-tax-panel__tiles--result { grid-template-columns: repeat(auto-fit,minmax(144px,1fr)); margin-bottom: 8px; }
 .metric-card--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
 .metric-card--warning { background: linear-gradient(135deg, #7f4b29, #c3732c); border-color: transparent; }
 .metric-card--accent span,.metric-card--accent strong,.metric-card--warning span,.metric-card--warning strong { color: #f8faf7; }
