@@ -359,24 +359,24 @@
   pointer-events: none;
   overflow: hidden;
   background:
-    radial-gradient(circle at calc(100% - 154px) 108px, rgba(255, 255, 255, .9) 0 10px, rgba(255, 242, 174, .46) 11px 18px, transparent 38px),
-    radial-gradient(circle at calc(100% - 154px) 108px, rgba(255, 255, 255, .26) 0 1px, transparent 44vw);
+    radial-gradient(circle at var(--camera-flash-x, calc(100% - 154px)) var(--camera-flash-y, 108px), rgba(255, 255, 255, .9) 0 10px, rgba(255, 242, 174, .46) 11px 18px, transparent 38px),
+    radial-gradient(circle at var(--camera-flash-x, calc(100% - 154px)) var(--camera-flash-y, 108px), rgba(255, 255, 255, .26) 0 1px, transparent 44vw);
   animation: camera-flash-pop 640ms cubic-bezier(.16, .82, .18, 1) forwards;
 }
 .camera-flash::before,
 .camera-flash::after {
   content: "";
   position: absolute;
-  left: calc(100% - 154px);
-  top: 108px;
+  left: calc(var(--camera-flash-x, calc(100% - 154px)) - 75vmax);
+  top: calc(var(--camera-flash-y, 108px) - 75vmax);
   width: 150vmax;
   height: 150vmax;
   pointer-events: none;
-  transform-origin: 0 0;
+  transform-origin: 50% 50%;
 }
 .camera-flash::before {
   background:
-    conic-gradient(from -26deg at 0 0,
+    conic-gradient(from -26deg at 50% 50%,
       rgba(255, 255, 255, .92) 0deg 5deg,
       transparent 7deg 15deg,
       rgba(255, 236, 145, .58) 18deg 23deg,
@@ -391,7 +391,7 @@
 }
 .camera-flash::after {
   background:
-    repeating-conic-gradient(from -32deg at 0 0,
+    repeating-conic-gradient(from -32deg at 50% 50%,
       rgba(255, 255, 255, .62) 0deg 1.4deg,
       transparent 1.5deg 10deg);
   opacity: 0;

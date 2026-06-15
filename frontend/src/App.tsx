@@ -1833,7 +1833,7 @@ function IncomeSnapshotControl({
 }: {
   snapshot: IncomeSnapshot | null;
   deltas: IncomeSnapshotValues | null;
-  onCapture: () => void;
+  onCapture: (origin: { x: number; y: number }) => void;
   className?: string;
 }) {
   const [snapshotView, setSnapshotView] = useState<"monthly" | "yearly">("monthly");
@@ -1856,7 +1856,16 @@ function IncomeSnapshotControl({
 
   return (
     <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
-      <button className="income-snapshot__button" type="button" onClick={onCapture} aria-label="Snapshot income baseline" title="Snapshot">
+      <button
+        className="income-snapshot__button"
+        type="button"
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          onCapture({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+        }}
+        aria-label="Snapshot income baseline"
+        title="Snapshot"
+      >
         <svg className="income-snapshot__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M6.5 7.5 8.25 5h7.5l1.75 2.5H20a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5V9A1.5 1.5 0 0 1 4 7.5h2.5Z" />
           <path d="M12 10a3.25 3.25 0 1 0 0 6.5 3.25 3.25 0 0 0 0-6.5Z" />
@@ -3375,6 +3384,7 @@ export default function App() {
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
   const [isCameraFlashing, setIsCameraFlashing] = useState(false);
+  const [cameraFlashOrigin, setCameraFlashOrigin] = useState({ x: window.innerWidth - 154, y: 108 });
   const [incomeSnapshot, setIncomeSnapshot] = useState<IncomeSnapshot | null>(null);
   const saveTimeout = useRef<number | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
@@ -3882,8 +3892,30 @@ export default function App() {
       afterTaxMonthly: currentIncomeSnapshot.afterTaxMonthly - incomeSnapshot.afterTaxMonthly,
     }
     : null;
-  const captureIncomeSnapshot = () => {
+  const playCameraShutter = () => {
+    const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const audioContext = new AudioContextCtor();
+    const playClick = (startOffset: number, frequency: number, gain: number, duration: number) => {
+      const oscillator = audioContext.createOscillator();
+      const clickGain = audioContext.createGain();
+      oscillator.type = "square";
+      oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime + startOffset);
+      clickGain.gain.setValueAtTime(0.0001, audioContext.currentTime + startOffset);
+      clickGain.gain.exponentialRampToValueAtTime(gain, audioContext.currentTime + startOffset + 0.006);
+      clickGain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + startOffset + duration);
+      oscillator.connect(clickGain).connect(audioContext.destination);
+      oscillator.start(audioContext.currentTime + startOffset);
+      oscillator.stop(audioContext.currentTime + startOffset + duration);
+    };
+    playClick(0, 820, 0.08, 0.055);
+    playClick(0.072, 420, 0.055, 0.07);
+    window.setTimeout(() => void audioContext.close(), 220);
+  };
+  const captureIncomeSnapshot = (origin: { x: number; y: number }) => {
     setIncomeSnapshot({ ...currentIncomeSnapshot, capturedAt: new Date().toISOString() });
+    setCameraFlashOrigin(origin);
+    playCameraShutter();
     setIsCameraFlashing(false);
     window.setTimeout(() => setIsCameraFlashing(true), 0);
     window.setTimeout(() => setIsCameraFlashing(false), 640);
@@ -4727,7 +4759,13 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {isCameraFlashing && <div className="camera-flash" aria-hidden="true" />}
+      {isCameraFlashing && (
+        <div
+          className="camera-flash"
+          style={{ "--camera-flash-x": `${cameraFlashOrigin.x}px`, "--camera-flash-y": `${cameraFlashOrigin.y}px` } as CSSProperties}
+          aria-hidden="true"
+        />
+      )}
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
           {actionMenu}
