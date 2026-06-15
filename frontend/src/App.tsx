@@ -228,7 +228,7 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
   { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
-  { id: "symbol", label: "Symbol", defaultWidth: 82, minWidth: 78 },
+  { id: "symbol", label: "Asset ID", defaultWidth: 92, minWidth: 84 },
   { id: "normalPercent", label: "Dividend", defaultWidth: 58, minWidth: 48 },
   { id: "amount", label: "Investment", defaultWidth: 104, minWidth: 100 },
   { id: "year", label: "Year", defaultWidth: 82, minWidth: 62 },
@@ -256,7 +256,7 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "overrideSymbol", label: "New", defaultWidth: 110, minWidth: 76, group: "override" },
   { id: "overridePercent", label: "New %", defaultWidth: 58, minWidth: 48, group: "override" },
   { id: "usePercent", label: "Use %", defaultWidth: 52, minWidth: 44, group: "debug" },
-  { id: "useSymbol", label: "Use symbol", defaultWidth: 72, minWidth: 58, group: "debug" },
+  { id: "useSymbol", label: "Use asset", defaultWidth: 78, minWidth: 62, group: "debug" },
   { id: "extraData", label: "$", defaultWidth: 62, minWidth: 48, group: "debug" },
 ] as const;
 type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
@@ -435,8 +435,8 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
   { key: "accounts", label: "Accounts", meta: "tax status" },
   { key: "accountTaxType", label: "Account Tax Type", meta: "status list" },
-  { key: "tickers", label: "Tickers", meta: "symbol lookups" },
-  { key: "categories", label: "Asset Classes", meta: "ticker asset classes" },
+  { key: "tickers", label: "Assets", meta: "asset lookups" },
+  { key: "categories", label: "Asset Classes", meta: "asset classes" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "state worksheet" },
   { key: "taxTreatment", label: "Tax Treatment", meta: "sheet labels" },
@@ -3014,7 +3014,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   ].filter(Boolean).join(" ");
 
   return (
-    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When override is checked, the proposed symbol and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
+    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When WhatIf is checked, the new asset and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
       <div className="actions-row">
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
@@ -4710,8 +4710,8 @@ export default function App() {
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />
         )}
-        {activeTab === "tickers" && <LookupTable title="Tickers" subtitle="Workbook symbol table. Dividend percentage, category, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Symbol" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Category", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onReorder={reorderCollection(setTickers)} showMoveHeaderLabel={false} />}
-        {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Tickers tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} />}
+        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset class, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onReorder={reorderCollection(setTickers)} showMoveHeaderLabel={false} />}
+        {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Type" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} />}
