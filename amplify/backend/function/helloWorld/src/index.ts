@@ -159,10 +159,6 @@ function isFilingStatus(x: string): x is FilingStatus {
   return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
 }
 
-function isOrdinary2025FilingStatus(x: FilingStatus): x is "single" | "mfj" {
-  return x === "single" || x === "mfj";
-}
-
 function readNonNegativeNumber(value: unknown, fieldName: string) {
   const num = Number(value);
   if (!Number.isFinite(num) || num < 0) {
@@ -1714,14 +1710,6 @@ export const handler = async (
       );
     }
 
-    if (!isOrdinary2025FilingStatus(filingStatus)) {
-      return jsonResponse(
-        400,
-        { error: "FED_TAX_2025_ORDINARY currently supports filingStatus=single or mfj" },
-        origin
-      );
-    }
-
     const tax = fedTax2025Ordinary(taxableIncome.value, filingStatus);
     return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, filingStatus, tax }, origin);
   }
@@ -1809,14 +1797,6 @@ export const handler = async (
       );
     }
 
-    if (!isOrdinary2025FilingStatus(filingStatus)) {
-      return jsonResponse(
-        400,
-        { error: "FED_TAX_2025_COMBINED currently supports filingStatus=single or mfj" },
-        origin
-      );
-    }
-
     const magi = readNonNegativeNumber((body as any).magi, "magi");
     if ("error" in magi) {
       return jsonResponse(400, { error: magi.error }, origin);
@@ -1871,6 +1851,5 @@ export const handler = async (
     origin
   );
 };
-
 
 

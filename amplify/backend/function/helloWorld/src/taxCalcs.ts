@@ -31,6 +31,8 @@ export type StateTaxProfile = {
   name: string;
   single: StateTaxBracket[];
   mfj: StateTaxBracket[];
+  mfs?: StateTaxBracket[];
+  hoh?: StateTaxBracket[];
   note?: string;
 };
 
@@ -117,11 +119,16 @@ function computeThresholdTax(taxableIncome: number, brackets: ReadonlyArray<Stat
 
 export function stateTax2025(taxableIncome: number, stateCode: string, filingStatus: StateTaxFilingStatus = "single") {
   const profile = getStateTaxProfile(stateCode);
-  const brackets = filingStatus === "mfj" ? profile.mfj : profile.single;
+  const brackets =
+    filingStatus === "mfj" ? profile.mfj :
+    filingStatus === "mfs" ? profile.mfs ?? profile.single :
+    filingStatus === "hoh" ? profile.hoh ?? profile.single :
+    profile.single;
   return {
     state: profile.code,
     stateName: profile.name,
     taxableIncome: Number.isFinite(Number(taxableIncome)) ? Math.max(Number(taxableIncome), 0) : 0,
+    filingStatus,
     tax: computeThresholdTax(taxableIncome, brackets),
     note: profile.note,
   };
@@ -162,16 +169,60 @@ export function fedTax2025Single(taxableIncome: number): number {
   return computeBracketedTax(taxableIncome, brackets);
 }
 
+/**
+ * 2025 Married Filing Separately ordinary income tax on taxable income (after deductions).
+ */
+export function fedTax2025Mfs(taxableIncome: number): number {
+  const brackets = [
+    { max: 11925, rate: 0.10 },
+    { max: 48475, rate: 0.12 },
+    { max: 103350, rate: 0.22 },
+    { max: 197300, rate: 0.24 },
+    { max: 250525, rate: 0.32 },
+    { max: 375800, rate: 0.35 },
+    { max: Number.POSITIVE_INFINITY, rate: 0.37 },
+  ] as const;
+
+  return computeBracketedTax(taxableIncome, brackets);
+}
+
+/**
+ * 2025 Head of Household ordinary income tax on taxable income (after deductions).
+ */
+export function fedTax2025Hoh(taxableIncome: number): number {
+  const brackets = [
+    { max: 17000, rate: 0.10 },
+    { max: 64850, rate: 0.12 },
+    { max: 103350, rate: 0.22 },
+    { max: 197300, rate: 0.24 },
+    { max: 250500, rate: 0.32 },
+    { max: 626350, rate: 0.35 },
+    { max: Number.POSITIVE_INFINITY, rate: 0.37 },
+  ] as const;
+
+  return computeBracketedTax(taxableIncome, brackets);
+}
+
 export function fedTax2025Ordinary(
   taxableIncome: number,
   filingStatus: FilingStatus
 ): number {
-  return filingStatus === "mfj" ? fedTax2025Mfj(taxableIncome) : fedTax2025Single(taxableIncome);
+  switch (filingStatus) {
+    case "mfj":
+      return fedTax2025Mfj(taxableIncome);
+    case "mfs":
+      return fedTax2025Mfs(taxableIncome);
+    case "hoh":
+      return fedTax2025Hoh(taxableIncome);
+    case "single":
+    default:
+      return fedTax2025Single(taxableIncome);
+  }
 }
 
 /**
  * Preferential tax (LTCG + qualified dividends) on the preferential portion ONLY.
- * Uses 2024 thresholds.
+ * Uses 2025 thresholds. Function name is retained for API compatibility.
  */
 export function fedPrefTax2024(
   ordinaryTaxable: number,
@@ -185,10 +236,10 @@ export function fedPrefTax2024(
   const fs = (filingStatus || "single").toLowerCase() as FilingStatus;
 
   const thresholds: Record<FilingStatus, { z0: number; z15: number }> = {
-    single: { z0: 47025, z15: 518900 },
-    mfj: { z0: 94050, z15: 583750 },
-    mfs: { z0: 47025, z15: 291850 },
-    hoh: { z0: 63000, z15: 551350 },
+    single: { z0: 48350, z15: 533400 },
+    mfj: { z0: 96700, z15: 600050 },
+    mfs: { z0: 48350, z15: 300000 },
+    hoh: { z0: 64750, z15: 566700 },
   };
 
   const b = thresholds[fs] ?? thresholds.single;

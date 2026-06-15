@@ -59,18 +59,22 @@ describe("Lambda handler", () => {
     expect(json.filingStatus).toBe("single");
   });
 
-  test("FED_TAX_2025_COMBINED still rejects unsupported filing statuses", async () => {
+  test("FED_TAX_2025_COMBINED supports head of household", async () => {
     const response = await post({
       calc: "FED_TAX_2025_COMBINED",
-      ordinaryTaxable: 100000,
-      prefTaxable: 1000,
+      ordinaryTaxable: 150000,
+      prefTaxable: 25000,
       filingStatus: "hoh",
-      magi: 150000,
-      netInvestmentIncome: 1000,
+      magi: 260000,
+      netInvestmentIncome: 50000,
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
     const json = JSON.parse(response.body);
-    expect(json.error).toMatch(/single or mfj/i);
+    expect(json.filingStatus).toBe("hoh");
+    expect(json.ordinaryTax).toBe(27108);
+    expect(json.prefTax).toBe(3750);
+    expect(json.niit).toBe(1900);
+    expect(json.tax).toBe(32758);
   });
 });

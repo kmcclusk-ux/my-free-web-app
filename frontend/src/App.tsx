@@ -14,7 +14,7 @@ type TabKey =
   | "accountTaxType"
   | "investmentType";
 
-type FilingStatus = "single" | "mfj";
+type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
 type TaxResult = { calc: string; tax: number; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string };
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
@@ -504,6 +504,22 @@ const federalOrdinaryRateMarkers: Record<FilingStatus, ThermometerMarker[]> = {
     { amount: 250525, label: "35%", detail: "Federal ordinary 35% bracket starts", tone: "federal" },
     { amount: 626350, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
   ],
+  mfs: [
+    { amount: 11925, label: "12%", detail: "Federal ordinary 12% bracket starts", tone: "federal" },
+    { amount: 48475, label: "22%", detail: "Federal ordinary 22% bracket starts", tone: "federal" },
+    { amount: 103350, label: "24%", detail: "Federal ordinary 24% bracket starts", tone: "federal" },
+    { amount: 197300, label: "32%", detail: "Federal ordinary 32% bracket starts", tone: "federal" },
+    { amount: 250525, label: "35%", detail: "Federal ordinary 35% bracket starts", tone: "federal" },
+    { amount: 375800, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
+  ],
+  hoh: [
+    { amount: 17000, label: "12%", detail: "Federal ordinary 12% bracket starts", tone: "federal" },
+    { amount: 64850, label: "22%", detail: "Federal ordinary 22% bracket starts", tone: "federal" },
+    { amount: 103350, label: "24%", detail: "Federal ordinary 24% bracket starts", tone: "federal" },
+    { amount: 197300, label: "32%", detail: "Federal ordinary 32% bracket starts", tone: "federal" },
+    { amount: 250500, label: "35%", detail: "Federal ordinary 35% bracket starts", tone: "federal" },
+    { amount: 626350, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
+  ],
 };
 const caTaxRateMarkers: ThermometerMarker[] = [
   { amount: 21512, label: "2%", detail: "California 2% bracket starts", tone: "state" },
@@ -593,6 +609,8 @@ type LocalStateTaxProfile = {
   name: string;
   single: LocalStateTaxBracket[];
   mfj: LocalStateTaxBracket[];
+  mfs?: LocalStateTaxBracket[];
+  hoh?: LocalStateTaxBracket[];
   note?: string;
 };
 
@@ -679,11 +697,16 @@ function computeThresholdTax(taxableIncome: number, brackets: ReadonlyArray<Loca
 
 function localStateTax2025(taxableIncome: number, stateCode: string, filingStatus: LocalStateTaxFilingStatus = "single") {
   const profile = getLocalStateTaxProfile(stateCode);
-  const brackets = filingStatus === "mfj" ? profile.mfj : profile.single;
+  const brackets =
+    filingStatus === "mfj" ? profile.mfj :
+    filingStatus === "mfs" ? profile.mfs ?? profile.single :
+    filingStatus === "hoh" ? profile.hoh ?? profile.single :
+    profile.single;
   return {
     state: profile.code,
     stateName: profile.name,
     taxableIncome: Number.isFinite(Number(taxableIncome)) ? Math.max(Number(taxableIncome), 0) : 0,
+    filingStatus,
     tax: computeThresholdTax(taxableIncome, brackets),
     note: profile.note,
   };
@@ -1111,7 +1134,12 @@ function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
   return favorites;
 }
 function normalizeFilingStatus(value: unknown): FilingStatus {
-  return String(value || "single").trim().toLowerCase() === "mfj" ? "mfj" : "single";
+  const status = String(value || "single").trim().toLowerCase();
+  return status === "mfj" || status === "mfs" || status === "hoh" ? status : "single";
+}
+
+function niitThresholdForStatus(filingStatus: FilingStatus) {
+  return filingStatus === "mfj" ? 250000 : filingStatus === "mfs" ? 125000 : 200000;
 }
 
 const SS_THRESHOLDS: Record<string, { base1: number; base2: number; bandCap: number }> = {
@@ -3670,7 +3698,7 @@ export default function App() {
   const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
   const magi = grossFederalTaxable;
   const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome, 0);
-  const niitThreshold = federalSettings.filingStatus === "mfj" ? 250000 : 200000;
+  const niitThreshold = niitThresholdForStatus(federalSettings.filingStatus);
   const niitBase = Math.max(Math.min(netInvestmentIncome, Math.max(magi - niitThreshold, 0)), 0);
   const stateGross = flows.stateTaxable + stateSettings.extraStateIncome;
   const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax + stateSettings.stateIncomeTax;
@@ -3713,7 +3741,7 @@ export default function App() {
     taxCalcInputs.ordinaryDividends +
     taxCalcInputs.qualifiedDividends +
     taxCalcInputs.longTermCapitalGains;
-  const niitThresholdCalc = taxCalcInputs.filingStatus === "mfj" ? 250000 : 200000;
+  const niitThresholdCalc = niitThresholdForStatus(taxCalcInputs.filingStatus);
   const magiAboveThreshold = Math.max(magiStandalone - niitThresholdCalc, 0);
   const niitBaseCalc = Math.min(netInvestmentIncomeStandalone, magiAboveThreshold);
   const caItemizedDeduction = taxCalcInputs.mortgageInterest + taxCalcInputs.propertyTax + taxCalcInputs.stateIncomeTax;
@@ -4925,7 +4953,7 @@ export default function App() {
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Type" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} />}
         {activeTab === "investmentType" && <LookupTable title="Investment Type" subtitle="Reference list for the asset classes used by the workbook rollups." rows={investmentTypes} columns={[{ key: "name", label: "Investment type" }]} onChange={updateCollection(setInvestmentTypes)} onAdd={() => addRow(setInvestmentTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setInvestmentTypes)} onReorder={reorderCollection(setInvestmentTypes)} showMoveHeaderLabel={false} />}
 
-        {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label><label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} /><MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
+        {activeTab === "federal" && <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend."><div className="form-grid"><label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label><label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label><label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label><label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} /><MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} /><MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} /><MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} /><MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" /><MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} /><MetricCard label="MAGI" value={formatCurrency(magi)} /><MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} /><MetricCard label="NIIT base" value={formatCurrency(niitBase)} /></div>{federalError && <div className="status-card status-card--error">{federalError}</div>}{federalResult && <div className="api-grid"><MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" /><MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} /><MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} /><MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} /></div>}</Section>}
         {activeTab === "state" && <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend."><div className="status-card status-card--note">State calculations use 2025 resident state income-tax brackets. Local taxes, state credits, and state-specific income modifications are not modeled.</div><div className="form-grid form-grid--compact-wide"><label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label><label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label><label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label><label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label><label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label><label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label></div><div className="metric-grid"><MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} /><MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} /><MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} /><MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} tone="accent" /></div>{stateError && <div className="status-card status-card--error">{stateError}</div>}{displayedStateResult.note && <div className="status-card status-card--note">{displayedStateResult.note}</div>}<div className="api-grid"><MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} tone="accent" /></div></Section>}
                 {activeTab === "calculator" && (
           <Section title="Tax Calculator" subtitle="Standalone inputs that mirror the spreadsheet layout and call the shared federal + state Lambdas.">
@@ -4938,8 +4966,10 @@ export default function App() {
                     <select value={taxCalcInputs.filingStatus} onChange={(event) => updateTaxCalculatorStatus(normalizeFilingStatus(event.target.value))}>
                       <option value="mfj">mfj</option>
                       <option value="single">single</option>
+                      <option value="mfs">mfs</option>
+                      <option value="hoh">hoh</option>
                     </select>
-                    <small className="field-note">Use `mfj` for the combined federal backend route.</small>
+                    <small className="field-note">Federal and state calculations support single, MFJ, MFS, and HOH.</small>
                   </label>
                   <label>
                     <span>State</span>

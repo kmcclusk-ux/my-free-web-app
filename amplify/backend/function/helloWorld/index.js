@@ -76,9 +76,6 @@ Do not request placing trades, transferring money, connecting brokerage accounts
 function isFilingStatus(x) {
     return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
 }
-function isOrdinary2025FilingStatus(x) {
-    return x === "single" || x === "mfj";
-}
 function readNonNegativeNumber(value, fieldName) {
     const num = Number(value);
     if (!Number.isFinite(num) || num < 0) {
@@ -1423,9 +1420,6 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        if (!isOrdinary2025FilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "FED_TAX_2025_ORDINARY currently supports filingStatus=single or mfj" }, origin);
-        }
         const tax = (0, taxCalcs_1.fedTax2025Ordinary)(taxableIncome.value, filingStatus);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, filingStatus, tax }, origin);
     }
@@ -1483,9 +1477,6 @@ const handler = async (event) => {
         const filingStatus = String(body.filingStatus || "mfj").toLowerCase();
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
-        }
-        if (!isOrdinary2025FilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "FED_TAX_2025_COMBINED currently supports filingStatus=single or mfj" }, origin);
         }
         const magi = readNonNegativeNumber(body.magi, "magi");
         if ("error" in magi) {

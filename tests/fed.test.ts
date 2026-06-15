@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   fedTax2025Mfj,
   fedTax2025Single,
+  fedTax2025Mfs,
+  fedTax2025Hoh,
   fedTax2025Ordinary,
 } from "../amplify/backend/function/helloWorld/taxCalcs.js";
 
@@ -18,9 +20,16 @@ describe("2025 federal ordinary tax", () => {
     expect(fedTax2025Single(150000)).toBe(28847);
   });
 
-  test("status-aware helper routes mfj and single correctly", () => {
+  test("mfs and hoh have their own 2025 ordinary schedules", () => {
+    expect(fedTax2025Mfs(450000)).toBe(128531.25);
+    expect(fedTax2025Hoh(150000)).toBe(27108);
+  });
+
+  test("status-aware helper routes all filing statuses correctly", () => {
     expect(fedTax2025Ordinary(450000, "mfj")).toBe(98126);
     expect(fedTax2025Ordinary(150000, "single")).toBe(28847);
+    expect(fedTax2025Ordinary(450000, "mfs")).toBe(128531.25);
+    expect(fedTax2025Ordinary(150000, "hoh")).toBe(27108);
   });
 
   test("ordinary tax is monotonic", () => {
@@ -28,4 +37,3 @@ describe("2025 federal ordinary tax", () => {
     expect(fedTax2025Single(100000)).toBeLessThanOrEqual(fedTax2025Single(200000));
   });
 });
-
