@@ -3886,7 +3886,7 @@ export default function App() {
     setIncomeSnapshot({ ...currentIncomeSnapshot, capturedAt: new Date().toISOString() });
     setIsCameraFlashing(false);
     window.setTimeout(() => setIsCameraFlashing(true), 0);
-    window.setTimeout(() => setIsCameraFlashing(false), 520);
+    window.setTimeout(() => setIsCameraFlashing(false), 640);
   };
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
