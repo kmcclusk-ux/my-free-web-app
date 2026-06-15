@@ -4957,7 +4957,7 @@ export default function App() {
           <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend." className="federal-tax-panel">
             {federalResult && (
               <div className="api-grid federal-tax-panel__tiles federal-tax-panel__tiles--result">
-                <MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} tone="accent" />
+                <MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} />
                 <MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} />
                 <MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} />
                 <MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} />
@@ -4968,7 +4968,7 @@ export default function App() {
               <MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} />
               <MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} />
               <MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} />
-              <MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} tone="accent" />
+              <MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} />
               <MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} />
               <MetricCard label="MAGI" value={formatCurrency(magi)} />
               <MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} />
