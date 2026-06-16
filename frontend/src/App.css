@@ -3239,3 +3239,7 @@
 .sidebar { z-index: 500; }
 .sidebar:hover,
 .sidebar:focus-within { z-index: 900; }
+
+.nav-item--federal strong { display: inline-flex; align-items: center; gap: 6px; }
+.nav-item--federal strong::before { content: "1040"; display: inline-grid; place-items: center; width: 22px; height: 16px; border-radius: 3px; border: 1px solid currentColor; background: rgba(255,255,255,.72); color: #0b63f6; font-size: .45rem; font-weight: 900; line-height: 1; letter-spacing: -.02em; box-shadow: inset 0 -2px 0 rgba(11,99,246,.14); }
+.nav-item--federal.nav-item--active strong::before { background: rgba(255,255,255,.92); color: #18313a; }
