@@ -3242,5 +3242,8 @@
 
 
 .nav-item--federal strong { display: inline-flex; align-items: center; gap: 6px; }
-.nav-item__icon-1040 { display: inline-grid; place-items: center; flex: 0 0 auto; width: 24px; height: 17px; border-radius: 3px; border: 1px solid currentColor; background: #fff; color: #0b63f6; font-size: .46rem; font-style: normal; font-weight: 900; line-height: 1; letter-spacing: -.02em; box-shadow: inset 0 -2px 0 rgba(11,99,246,.16), 0 1px 2px rgba(16,24,40,.12); }
-.nav-item--federal.nav-item--active .nav-item__icon-1040 { color: #18313a; }
+.nav-item__icon-1040 { position: relative; display: inline-grid; place-items: start center; flex: 0 0 auto; width: 24px; height: 18px; padding-top: 2px; border-radius: 2px; border: 1px solid #1f7a4d; background: linear-gradient(180deg, #dff5df 0 22%, #f8fff8 22% 100%); color: #116239; font-size: .43rem; font-style: normal; font-weight: 900; line-height: 1; letter-spacing: -.03em; box-shadow: inset 0 -1px 0 rgba(31,122,77,.18), 0 1px 2px rgba(16,24,40,.12); }
+.nav-item__icon-1040::before, .nav-item__icon-1040::after { content: ""; position: absolute; left: 4px; right: 4px; height: 1px; background: rgba(31,122,77,.34); }
+.nav-item__icon-1040::before { top: 9px; }
+.nav-item__icon-1040::after { top: 13px; }
+.nav-item--federal.nav-item--active .nav-item__icon-1040 { color: #0d4f30; border-color: #0d6b3f; }
