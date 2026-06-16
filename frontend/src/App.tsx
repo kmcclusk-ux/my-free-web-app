@@ -4633,7 +4633,11 @@ export default function App() {
           <div className="content-topbar__title-group">
             <div>
               <p className="eyebrow">Live Model</p>
-              <h2 className={activeTab === "federal" ? "content-topbar__title content-topbar__title--federal" : "content-topbar__title"}>{activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}{navItems.find((item) => item.key === activeTab)?.label}</h2>
+              <h2 className={activeTab === "federal" ? "content-topbar__title content-topbar__title--federal" : activeTab === "state" ? "content-topbar__title content-topbar__title--state" : "content-topbar__title"}>
+                {activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}
+                {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" aria-hidden="true">{selectedStateCode}</i>}
+                {navItems.find((item) => item.key === activeTab)?.label}
+              </h2>
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
