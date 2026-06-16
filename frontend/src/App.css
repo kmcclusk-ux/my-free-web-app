@@ -3230,3 +3230,9 @@
     width: 100%;
   }
 }
+
+.sidebar__advanced-nav { display: grid; gap: 5px; padding-left: 7px; border-left: 1px solid rgba(11, 99, 246, .14); }
+.nav-item--advanced-toggle { margin-top: 4px; border-style: dashed; }
+.nav-item--advanced-toggle strong::after { content: " +"; font-size: .68rem; }
+.nav-item--advanced-toggle.nav-item--advanced-open strong::after { content: " -"; }
+.nav-item--advanced { min-height: 35px; opacity: .94; }
