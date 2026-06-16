@@ -4635,7 +4635,7 @@ export default function App() {
               <p className="eyebrow">Live Model</p>
               <h2 className={activeTab === "federal" ? "content-topbar__title content-topbar__title--federal" : activeTab === "state" ? "content-topbar__title content-topbar__title--state" : "content-topbar__title"}>
                 {activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}
-                {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" aria-hidden="true">{selectedStateCode}</i>}
+                {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
                 {navItems.find((item) => item.key === activeTab)?.label}
               </h2>
             </div>
