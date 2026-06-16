@@ -639,6 +639,55 @@ function setExportRecordCell_(record, headerKey, columnNumber, value) {
   record[headerKey + '_' + columnNumber] = value;
 }
 
+function exportValueIsBlank_(value) {
+  return value === undefined || value === null || String(value).trim() === '';
+}
+
+function exportNumber_(value) {
+  var numeric = Number(String(value || '').replace(/[\$,]/g, '').trim());
+  return isFinite(numeric) ? numeric : 0;
+}
+
+function firstExportValue_(record, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (!exportValueIsBlank_(record[key])) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function normalizeInvestmentExportRecord_(record) {
+  var totalInvestment = firstExportValue_(record, ['totalInvestment', 'total_investment', 'total_inv', 'total_inv_amount', 'totalinvestment', 'inv', 'col_5']);
+  var yearlyIncome = firstExportValue_(record, ['yearlyIncome', 'yearly_income', 'yr_inc', 'yearinc', 'yearly_income_amount', 'year', 'yr', 'col_6']);
+  var monthlyIncome = firstExportValue_(record, ['monthlyIncome', 'monthly_income', 'mnth_inc', 'month_inc', 'mnth', 'month', 'monthly', 'col_7']);
+  var includedYearlyIncome = firstExportValue_(record, ['filtered', 'filtered_income', 'included_income', 'col_17']);
+
+  if ((exportValueIsBlank_(yearlyIncome) || exportNumber_(yearlyIncome) === 0) && exportNumber_(includedYearlyIncome) !== 0) {
+    yearlyIncome = includedYearlyIncome;
+  }
+  if (exportValueIsBlank_(yearlyIncome) && !exportValueIsBlank_(monthlyIncome)) {
+    yearlyIncome = exportNumber_(monthlyIncome) * 12;
+  }
+  if ((exportValueIsBlank_(monthlyIncome) || exportNumber_(monthlyIncome) === 0) && !exportValueIsBlank_(yearlyIncome)) {
+    monthlyIncome = exportNumber_(yearlyIncome) / 12;
+  }
+
+  if (!exportValueIsBlank_(totalInvestment)) {
+    record.total_inv = totalInvestment;
+    record.totalInvestment = totalInvestment;
+  }
+  if (!exportValueIsBlank_(yearlyIncome)) {
+    record.yr_inc = yearlyIncome;
+    record.yearlyIncome = yearlyIncome;
+  }
+  if (!exportValueIsBlank_(monthlyIncome)) {
+    record.mnth_inc = monthlyIncome;
+    record.monthlyIncome = monthlyIncome;
+  }
+}
+
 function sheetToRowObjects_(sheet) {
   if (!sheet) return [];
 
@@ -727,6 +776,7 @@ function sheetToRowObjectsFromLine8UntilEndDescription_(sheet) {
     if (!record.symbol && record.symb !== undefined) record.symbol = record.symb;
     if (!record.new_symbol && record.n !== undefined) record.new_symbol = record.n;
     if (!record.new_percent && record.new !== undefined) record.new_percent = record.new;
+    normalizeInvestmentExportRecord_(record);
 
     rows.push(record);
   }
@@ -859,4 +909,3 @@ function EXPORT_WORKBOOK_TO_DATASTORE() {
 
   return result;
 }
-
