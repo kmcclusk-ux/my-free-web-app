@@ -4602,7 +4602,7 @@ export default function App() {
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
         <aside className="sidebar">
           <nav className="sidebar__nav">
-            {mainNavItems.map((item) => <button key={item.key} className={`nav-item ${item.key === "federal" ? "nav-item--federal" : ""} ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
+            {mainNavItems.map((item) => <button key={item.key} className={`nav-item ${item.key === "federal" ? "nav-item--federal" : ""} ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.key === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}{item.label}</strong><span>{item.meta}</span></button>)}
             <button className={`nav-item nav-item--advanced-toggle ${isAdvancedNavOpen ? "nav-item--advanced-open" : ""}`} type="button" onClick={() => setIsAdvancedNavOpen((current) => !current)} aria-expanded={isAdvancedNavOpen}>
               <strong>Advanced</strong>
               <span>{isAdvancedNavOpen ? "hide lookup tabs" : "show lookup tabs"}</span>
