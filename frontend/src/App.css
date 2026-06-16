@@ -3236,3 +3236,6 @@
 .nav-item--advanced-toggle strong::after { content: " +"; font-size: .68rem; }
 .nav-item--advanced-toggle.nav-item--advanced-open strong::after { content: " -"; }
 .nav-item--advanced { min-height: 35px; opacity: .94; }
+.sidebar { z-index: 500; }
+.sidebar:hover,
+.sidebar:focus-within { z-index: 900; }
