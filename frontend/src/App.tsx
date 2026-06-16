@@ -1294,6 +1294,8 @@ function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", {
 function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
 function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
 function formatGridCurrency(value: number) { return formatCurrency(toNumber(value)); }
+function formatCurrencyInput(value: number) { return formatCurrency(toNumber(value)); }
+function parseCurrencyInput(value: string) { return toNumber(value); }
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
@@ -1616,6 +1618,22 @@ function buildPortfolioSnapshot({
 }
 function MetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "accent" | "warning" }) {
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function CurrencyInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const [isFocused, setIsFocused] = useState(false);
+  const displayValue = isFocused ? String(toNumber(value) || "") : formatCurrencyInput(value);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={displayValue}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      onChange={(event) => onChange(parseCurrencyInput(event.target.value))}
+    />
+  );
 }
 
 type KpiMetricConfig = {
@@ -4751,13 +4769,13 @@ export default function App() {
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
-              <label><span>Extra ordinary income</span><input type="number" value={federalSettings.extraOrdinaryIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: toNumber(event.target.value) }))} /></label>
-              <label><span>Extra preferred income</span><input type="number" value={federalSettings.extraPreferredIncome} onChange={(event) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: toNumber(event.target.value) }))} /></label>
-              <label><span>Mortgage interest</span><input type="number" value={federalSettings.mortgageInterest} onChange={(event) => setFederalSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label>
-              <label><span>Property tax</span><input type="number" value={federalSettings.propertyTax} onChange={(event) => setFederalSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label>
-              <label><span>State income tax</span><input type="number" value={federalSettings.stateIncomeTax} onChange={(event) => setFederalSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label>
-              <label><span>Standard deduction</span><input type="number" value={federalSettings.standardDeduction} onChange={(event) => setFederalSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label>
-              <label><span>SALT cap</span><input type="number" value={federalSettings.saltCap} onChange={(event) => setFederalSettings((current) => ({ ...current, saltCap: toNumber(event.target.value) }))} /></label>
+              <label><span>Extra ordinary income</span><CurrencyInput value={federalSettings.extraOrdinaryIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: value }))} /></label>
+              <label><span>Extra preferred income</span><CurrencyInput value={federalSettings.extraPreferredIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: value }))} /></label>
+              <label><span>Mortgage interest</span><CurrencyInput value={federalSettings.mortgageInterest} onChange={(value) => setFederalSettings((current) => ({ ...current, mortgageInterest: value }))} /></label>
+              <label><span>Property tax</span><CurrencyInput value={federalSettings.propertyTax} onChange={(value) => setFederalSettings((current) => ({ ...current, propertyTax: value }))} /></label>
+              <label><span>State income tax</span><CurrencyInput value={federalSettings.stateIncomeTax} onChange={(value) => setFederalSettings((current) => ({ ...current, stateIncomeTax: value }))} /></label>
+              <label><span>Standard deduction</span><CurrencyInput value={federalSettings.standardDeduction} onChange={(value) => setFederalSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
+              <label><span>SALT cap</span><CurrencyInput value={federalSettings.saltCap} onChange={(value) => setFederalSettings((current) => ({ ...current, saltCap: value }))} /></label>
             </div>
           </Section>
         )}
@@ -4775,11 +4793,11 @@ export default function App() {
             {stateError && <div className="status-card status-card--error">{stateError}</div>}
             <div className="form-grid form-grid--compact-wide">
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
-              <label><span>Extra {selectedStateCode} income</span><input type="number" value={stateSettings.extraStateIncome} onChange={(event) => setStateSettings((current) => ({ ...current, extraStateIncome: toNumber(event.target.value) }))} /></label>
-              <label><span>Mortgage interest</span><input type="number" value={stateSettings.mortgageInterest} onChange={(event) => setStateSettings((current) => ({ ...current, mortgageInterest: toNumber(event.target.value) }))} /></label>
-              <label><span>Property tax</span><input type="number" value={stateSettings.propertyTax} onChange={(event) => setStateSettings((current) => ({ ...current, propertyTax: toNumber(event.target.value) }))} /></label>
-              <label><span>State income tax</span><input type="number" value={stateSettings.stateIncomeTax} onChange={(event) => setStateSettings((current) => ({ ...current, stateIncomeTax: toNumber(event.target.value) }))} /></label>
-              <label><span>{selectedStateCode} standard deduction</span><input type="number" value={stateSettings.standardDeduction} onChange={(event) => setStateSettings((current) => ({ ...current, standardDeduction: toNumber(event.target.value) }))} /></label>
+              <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => setStateSettings((current) => ({ ...current, extraStateIncome: value }))} /></label>
+              <label><span>Mortgage interest</span><CurrencyInput value={stateSettings.mortgageInterest} onChange={(value) => setStateSettings((current) => ({ ...current, mortgageInterest: value }))} /></label>
+              <label><span>Property tax</span><CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} /></label>
+              <label><span>State income tax</span><CurrencyInput value={stateSettings.stateIncomeTax} onChange={(value) => setStateSettings((current) => ({ ...current, stateIncomeTax: value }))} /></label>
+              <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
             </div>
           </Section>
         )}
