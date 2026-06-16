@@ -2507,6 +2507,30 @@ function AssistantPanel({
 }
 
 type LookupColumn<T> = { key: keyof T; label: string; type?: "text" | "number" | "percent" | "select" | "checkbox" | "yesNoCheckbox" | "invertedYesNoCheckbox"; options?: string[] };
+const LOOKUP_TABLE_DRAG_COLUMN_WIDTH = 48;
+const LOOKUP_TABLE_ACTION_COLUMN_WIDTH = 42;
+const LOOKUP_TABLE_MIN_COLUMN_WIDTH = 82;
+const LOOKUP_TABLE_MAX_COLUMN_WIDTH = 480;
+
+function lookupColumnTextWidth(value: unknown, extraPadding = 40) {
+  const text = String(value ?? "");
+  return text ? Math.ceil(text.length * 7.4) + extraPadding : LOOKUP_TABLE_MIN_COLUMN_WIDTH;
+}
+
+function lookupColumnDefaultWidth<T>(column: LookupColumn<T>, rows: T[]) {
+  const extraPadding = column.type === "select" ? 62 : column.type === "percent" ? 48 : 40;
+  const minWidth = column.type === "checkbox" || column.type === "yesNoCheckbox" || column.type === "invertedYesNoCheckbox"
+    ? Math.max(76, lookupColumnTextWidth(column.label, 30))
+    : column.type === "percent"
+      ? Math.max(92, lookupColumnTextWidth(column.label, extraPadding))
+      : Math.max(LOOKUP_TABLE_MIN_COLUMN_WIDTH, lookupColumnTextWidth(column.label, extraPadding));
+  const contentWidth = Math.max(
+    minWidth,
+    ...(column.options || []).map((option) => lookupColumnTextWidth(option, extraPadding)),
+    ...rows.map((row) => lookupColumnTextWidth(row[column.key], extraPadding))
+  );
+  return Math.min(LOOKUP_TABLE_MAX_COLUMN_WIDTH, contentWidth);
+}
 
 function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onReorder, showMoveHeaderLabel = true }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onReorder: (sourceId: number, targetId: number) => void; showMoveHeaderLabel?: boolean; }) {
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
@@ -2515,6 +2539,9 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const dropHandledRef = useRef(false);
+  const lookupColumnWidths = useMemo(() => columns.map((column) => lookupColumnDefaultWidth(column, rows)), [columns, rows]);
+  const lookupTableWidth = LOOKUP_TABLE_DRAG_COLUMN_WIDTH + lookupColumnWidths.reduce((sum, width) => sum + width, 0) + LOOKUP_TABLE_ACTION_COLUMN_WIDTH;
+  const lookupTableStyle = { width: lookupTableWidth, minWidth: lookupTableWidth } as CSSProperties;
   const stopAutoScroll = () => {
     if (autoScrollFrameRef.current !== null) {
       window.cancelAnimationFrame(autoScrollFrameRef.current);
@@ -2645,7 +2672,12 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
       </div>
       <div className="table-wrap table-wrap--tall lookup-table-wrap" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
-        <table className="sheet-table sheet-table--compact sheet-table--lookup">
+        <table className="sheet-table sheet-table--compact sheet-table--lookup" style={lookupTableStyle}>
+          <colgroup>
+            <col style={{ width: LOOKUP_TABLE_DRAG_COLUMN_WIDTH }} />
+            {lookupColumnWidths.map((width, index) => <col key={String(columns[index].key)} style={{ width }} />)}
+            <col style={{ width: LOOKUP_TABLE_ACTION_COLUMN_WIDTH }} />
+          </colgroup>
           <thead>
             <tr><th className="drag-handle-heading lookup-drag-heading" aria-label="Move row">{showMoveHeaderLabel ? "Move" : ""}</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr>
           </thead>
