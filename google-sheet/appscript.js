@@ -700,21 +700,32 @@ function exportRate_(value) {
   return numeric;
 }
 
+function exportLooksBoolean_(value) {
+  var text = String(value || '').trim().toLowerCase();
+  return text === 'true' || text === 'false' || text === 'yes' || text === 'no' || text === 'y' || text === 'n' || text === '1' || text === '0';
+}
+
 function normalizeTickerExportRecord_(record) {
   var symbol = firstExportValue_(record, ['symbol', 'ticker', 'asset', 'asset_id', 'col_1']);
   var percentReturn = exportRate_(firstExportValue_(record, ['percentReturn', 'percent_return', 'return', 'roi', 'dividend', 'col_2']));
-  var category = firstExportValue_(record, ['category', 'asset_class', 'class', 'col_3']);
-  var taxTreatment = firstExportValue_(record, ['taxTreatment', 'tax_treatment', 'tax_treatment_based_on_investment_type_not_account_type', 'tax_status', 'col_4']);
-  var extraData = firstExportValue_(record, ['extraData', 'extra_data', 'extra_data_for_tax_calc_monthly_depreciation_amount', 'extra_tax_data', 'col_5']);
-  var description = firstExportValue_(record, ['description', 'desc', 'col_6']);
-  var exDividend = firstExportValue_(record, ['exDividend', 'ex_dividend', 'ex_divided', 'ex_divided_7', 'col_7']);
-  var divPayout = firstExportValue_(record, ['divPayout', 'div_payout', 'payout', 'col_8']);
+  var incomeItem = firstExportValue_(record, ['incomeItem', 'income_item', 'is_income_item', 'income_ticker']);
+  var hasIncomeItemColumn = !exportValueIsBlank_(incomeItem) || exportLooksBoolean_(record.col_3);
+  var category = firstExportValue_(record, hasIncomeItemColumn ? ['category', 'asset_class', 'class', 'col_4', 'col_3'] : ['category', 'asset_class', 'class', 'col_3', 'col_4']);
+  var taxTreatment = firstExportValue_(record, hasIncomeItemColumn ? ['taxTreatment', 'tax_treatment', 'tax_treatment_based_on_investment_type_not_account_type', 'tax_status', 'col_5', 'col_4'] : ['taxTreatment', 'tax_treatment', 'tax_treatment_based_on_investment_type_not_account_type', 'tax_status', 'col_4', 'col_5']);
+  var extraData = firstExportValue_(record, hasIncomeItemColumn ? ['extraData', 'extra_data', 'extra_data_for_tax_calc_monthly_depreciation_amount', 'extra_tax_data', 'col_6', 'col_5'] : ['extraData', 'extra_data', 'extra_data_for_tax_calc_monthly_depreciation_amount', 'extra_tax_data', 'col_5', 'col_6']);
+  var description = firstExportValue_(record, hasIncomeItemColumn ? ['description', 'desc', 'col_7', 'col_6'] : ['description', 'desc', 'col_6', 'col_7']);
+  var exDividend = firstExportValue_(record, hasIncomeItemColumn ? ['exDividend', 'ex_dividend', 'ex_divided', 'ex_divided_8', 'ex_divided_7', 'col_8', 'col_7'] : ['exDividend', 'ex_dividend', 'ex_divided', 'ex_divided_7', 'col_7', 'col_8']);
+  var divPayout = firstExportValue_(record, hasIncomeItemColumn ? ['divPayout', 'div_payout', 'payout', 'col_9', 'col_8'] : ['divPayout', 'div_payout', 'payout', 'col_8', 'col_9']);
 
   if (!exportValueIsBlank_(symbol)) record.symbol = symbol;
   if (percentReturn !== undefined) {
     record.percent_return = percentReturn;
     record.percentReturn = percentReturn;
     record.dividend = percentReturn;
+  }
+  if (!exportValueIsBlank_(incomeItem)) {
+    record.income_item = incomeItem;
+    record.incomeItem = incomeItem;
   }
   if (!exportValueIsBlank_(category)) record.category = category;
   if (!exportValueIsBlank_(taxTreatment)) {
@@ -896,7 +907,7 @@ function collectWorkbookExportPayload_() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
   var investmentsSheet = getSheetByNames_(spreadsheet, ['investments', 'Investments']);
-  var tickersSheet = getSheetByNames_(spreadsheet, ['tickers', 'Tickers']);
+  var tickersSheet = getSheetByNames_(spreadsheet, ['Assets', 'assets', 'tickers', 'Tickers']);
   var taxTreatmentSheet = getSheetByNames_(spreadsheet, ['tax treatment', 'Tax Treatment', 'tax-treatment', 'Tax-Treatment', 'tax_treatment', 'TaxTreatment', 'taxTreatment']);
   var accountsSheet = getSheetByNames_(spreadsheet, ['accounts', 'Accounts']);
   var accountTaxTypeSheet = getSheetByNames_(spreadsheet, ['account tax type', 'Account Tax Type']);
