@@ -1293,6 +1293,11 @@ function parseWorkbookSettings(settings: unknown) {
 function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
 function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
 function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
+function truncatePercentInputValue(value: number) { return Math.trunc(value * 100) / 100; }
+function formatPercentInputValue(value: number) {
+  const truncated = truncatePercentInputValue(value);
+  return Number.isFinite(truncated) ? String(truncated) : "";
+}
 function formatGridCurrency(value: number) { return formatCurrency(toNumber(value)); }
 function formatCurrencyInput(value: number) { return formatCurrency(toNumber(value)); }
 function parseCurrencyInput(value: string) { return toNumber(value); }
@@ -2655,10 +2660,10 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     }
     if (column.type === "percent") {
       const rawNumberValue = Number(row[column.key]);
-      const percentValue = Number.isFinite(rawNumberValue) ? String(toNumber(rawNumberValue) * 100) : "";
+      const percentValue = Number.isFinite(rawNumberValue) ? formatPercentInputValue(toNumber(rawNumberValue) * 100) : "";
       return (
         <div className="percent-input">
-          <input type="number" value={percentValue} step="0.01" onChange={(event) => onChange(row.id, column.key, String(toNumber(event.target.value) / 100))} />
+          <input type="number" value={percentValue} step="0.01" onChange={(event) => onChange(row.id, column.key, String(truncatePercentInputValue(toNumber(event.target.value)) / 100))} />
           <span>%</span>
         </div>
       );
