@@ -688,7 +688,55 @@ function normalizeInvestmentExportRecord_(record) {
   }
 }
 
-function sheetToRowObjects_(sheet) {
+function exportRate_(value) {
+  if (exportValueIsBlank_(value)) return undefined;
+  var text = String(value).trim();
+  var hasPercentSign = text.indexOf('%') >= 0;
+  var numeric = Number(text.replace(/[\$,%]/g, '').trim());
+  if (!isFinite(numeric)) return undefined;
+  if (hasPercentSign || Math.abs(numeric) > 1) {
+    return numeric / 100;
+  }
+  return numeric;
+}
+
+function normalizeTickerExportRecord_(record) {
+  var symbol = firstExportValue_(record, ['symbol', 'ticker', 'asset', 'asset_id', 'col_1']);
+  var percentReturn = exportRate_(firstExportValue_(record, ['percentReturn', 'percent_return', 'return', 'roi', 'dividend', 'col_2']));
+  var category = firstExportValue_(record, ['category', 'asset_class', 'class', 'col_3']);
+  var taxTreatment = firstExportValue_(record, ['taxTreatment', 'tax_treatment', 'tax_treatment_based_on_investment_type_not_account_type', 'tax_status', 'col_4']);
+  var extraData = firstExportValue_(record, ['extraData', 'extra_data', 'extra_data_for_tax_calc_monthly_depreciation_amount', 'extra_tax_data', 'col_5']);
+  var description = firstExportValue_(record, ['description', 'desc', 'col_6']);
+  var exDividend = firstExportValue_(record, ['exDividend', 'ex_dividend', 'ex_divided', 'ex_divided_7', 'col_7']);
+  var divPayout = firstExportValue_(record, ['divPayout', 'div_payout', 'payout', 'col_8']);
+
+  if (!exportValueIsBlank_(symbol)) record.symbol = symbol;
+  if (percentReturn !== undefined) {
+    record.percent_return = percentReturn;
+    record.percentReturn = percentReturn;
+    record.dividend = percentReturn;
+  }
+  if (!exportValueIsBlank_(category)) record.category = category;
+  if (!exportValueIsBlank_(taxTreatment)) {
+    record.tax_treatment = taxTreatment;
+    record.taxTreatment = taxTreatment;
+  }
+  if (!exportValueIsBlank_(extraData)) {
+    record.extra_data = extraData;
+    record.extraData = extraData;
+  }
+  if (!exportValueIsBlank_(description)) record.description = description;
+  if (!exportValueIsBlank_(exDividend)) {
+    record.ex_dividend = exDividend;
+    record.exDividend = exDividend;
+  }
+  if (!exportValueIsBlank_(divPayout)) {
+    record.div_payout = divPayout;
+    record.divPayout = divPayout;
+  }
+}
+
+function sheetToRowObjects_(sheet, normalizeRecord) {
   if (!sheet) return [];
 
   var values = sheet.getDataRange().getDisplayValues();
@@ -721,6 +769,7 @@ function sheetToRowObjects_(sheet) {
     record.id = r + 1;
     record.spreadsheet_row_number = r + 1;
     record.spreadsheetRowNumber = r + 1;
+    if (normalizeRecord) normalizeRecord(record);
     rows.push(record);
   }
 
@@ -859,7 +908,7 @@ function collectWorkbookExportPayload_() {
   return {
     tabs: {
       investments: sheetToRowObjectsFromLine8UntilEndDescription_(investmentsSheet),
-      tickers: sheetToRowObjects_(tickersSheet),
+      tickers: sheetToRowObjects_(tickersSheet, normalizeTickerExportRecord_),
       taxTreatment: sheetToRowObjects_(taxTreatmentSheet),
       accounts: sheetToRowObjects_(accountsSheet),
       accountTaxType: sheetToRowObjects_(accountTaxTypeSheet),
