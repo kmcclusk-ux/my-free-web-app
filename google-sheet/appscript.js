@@ -705,11 +705,19 @@ function exportLooksBoolean_(value) {
   return text === 'true' || text === 'false' || text === 'yes' || text === 'no' || text === 'y' || text === 'n' || text === '1' || text === '0';
 }
 
+function exportBoolean_(value) {
+  var text = String(value || '').trim().toLowerCase();
+  return text === 'true' || text === 'yes' || text === 'y' || text === '1';
+}
+
 function normalizeTickerExportRecord_(record) {
   var symbol = firstExportValue_(record, ['symbol', 'ticker', 'asset', 'asset_id', 'col_1']);
   var percentReturn = exportRate_(firstExportValue_(record, ['percentReturn', 'percent_return', 'return', 'roi', 'dividend', 'col_2']));
-  var incomeItem = firstExportValue_(record, ['incomeItem', 'income_item', 'is_income_item', 'income_ticker']);
+  var incomeItem = firstExportValue_(record, ['incomeItem', 'income_item', 'income', 'is_income_item', 'income_ticker']);
   var hasIncomeItemColumn = !exportValueIsBlank_(incomeItem) || exportLooksBoolean_(record.col_3);
+  if (exportValueIsBlank_(incomeItem) && hasIncomeItemColumn) {
+    incomeItem = record.col_3;
+  }
   var category = firstExportValue_(record, hasIncomeItemColumn ? ['category', 'asset_class', 'class', 'col_4', 'col_3'] : ['category', 'asset_class', 'class', 'col_3', 'col_4']);
   var taxTreatment = firstExportValue_(record, hasIncomeItemColumn ? ['taxTreatment', 'tax_treatment', 'tax_treatment_based_on_investment_type_not_account_type', 'tax_status', 'col_5', 'col_4'] : ['taxTreatment', 'tax_treatment', 'tax_treatment_based_on_investment_type_not_account_type', 'tax_status', 'col_4', 'col_5']);
   var extraData = firstExportValue_(record, hasIncomeItemColumn ? ['extraData', 'extra_data', 'extra_data_for_tax_calc_monthly_depreciation_amount', 'extra_tax_data', 'col_6', 'col_5'] : ['extraData', 'extra_data', 'extra_data_for_tax_calc_monthly_depreciation_amount', 'extra_tax_data', 'col_5', 'col_6']);
@@ -724,8 +732,8 @@ function normalizeTickerExportRecord_(record) {
     record.dividend = percentReturn;
   }
   if (!exportValueIsBlank_(incomeItem)) {
-    record.income_item = incomeItem;
-    record.incomeItem = incomeItem;
+    record.income_item = exportBoolean_(incomeItem);
+    record.incomeItem = exportBoolean_(incomeItem);
   }
   if (!exportValueIsBlank_(category)) record.category = category;
   if (!exportValueIsBlank_(taxTreatment)) {
