@@ -744,7 +744,7 @@ const initialAccounts: AccountRow[] = [
 ];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 31500, saltCap: 40400 };
-const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 11000 };
+const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 0, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [] };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
@@ -1103,9 +1103,12 @@ type SettingsSection = Record<string, unknown>;
 
 function parseNumber(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined;
-  const normalized = typeof value === "string" ? value.replace(/,/g, "") : value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const text = String(value).trim();
+  const isNegative = /^\(.*\)$/.test(text);
+  const normalized = text.replace(/[,$%\s]/g, "").replace(/^\((.*)\)$/, "$1");
   const num = Number(normalized);
-  return Number.isFinite(num) ? num : undefined;
+  return Number.isFinite(num) ? (isNegative ? -num : num) : undefined;
 }
 
 function normalizeSheetRows(raw: unknown): string[][] | undefined {
@@ -1138,10 +1141,8 @@ function extractNumberFromRow(row: string[], labelIndex: number): number | undef
   for (let idx = labelIndex + 1; idx < row.length; idx += 1) {
     const candidate = row[idx] ? row[idx].trim() : "";
     if (!candidate) continue;
-    const num = Number(candidate.replace(/,/g, ""));
-    if (Number.isFinite(num)) {
-      return num;
-    }
+    const num = parseNumber(candidate);
+    if (num !== undefined) return num;
   }
   return undefined;
 }
