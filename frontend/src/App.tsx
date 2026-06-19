@@ -182,6 +182,7 @@ type AssistantTableConfig = {
 };
 type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus">;
 type ImportReconciliation = { beforeTaxAnnual: number; afterTaxAnnual: number };
+type ReconciliationOffsets = { income: number; tax: number };
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -3376,6 +3377,7 @@ export default function App() {
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
   const [importReconciliation, setImportReconciliation] = useState<ImportReconciliation | null>(null);
   const [reconciliationBaselineSignature, setReconciliationBaselineSignature] = useState("");
+  const [reconciliationOffsets, setReconciliationOffsets] = useState<ReconciliationOffsets | null>(null);
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
   const selectedStateName = stateNameByCode[selectedStateCode] || selectedStateCode;
   const [isSheetPanelOpen, setIsSheetPanelOpen] = useState(false);
@@ -3742,6 +3744,7 @@ export default function App() {
       });
       setImportReconciliation(workbookSettings.reconciliation);
       setReconciliationBaselineSignature("");
+      setReconciliationOffsets(null);
       hasLoadedStorage.current = true;
       setStorageState("ready");
     }).catch((error: Error) => {
@@ -3801,18 +3804,25 @@ export default function App() {
     if (!importReconciliation) return;
     if (!reconciliationBaselineSignature) {
       setReconciliationBaselineSignature(modelSignature);
-      return;
-    }
-    if (reconciliationBaselineSignature !== modelSignature) {
-      setImportReconciliation(null);
-      setReconciliationBaselineSignature("");
     }
   }, [importReconciliation, reconciliationBaselineSignature, modelSignature]);
-  const useImportedSummary = Boolean(importReconciliation && reconciliationBaselineSignature === modelSignature);
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
-  const totalIncome = useImportedSummary ? importReconciliation!.beforeTaxAnnual : flows.totalIncome;
-  const afterTaxIncome = useImportedSummary ? importReconciliation!.afterTaxAnnual : totalIncome - calculatedTotalTax;
-  const totalTax = totalIncome - afterTaxIncome;
+  useEffect(() => {
+    if (!importReconciliation || reconciliationOffsets || !federalResult || !reconciliationBaselineSignature || reconciliationBaselineSignature !== modelSignature) return;
+    const timeoutId = window.setTimeout(() => {
+      setReconciliationOffsets({
+        income: importReconciliation.beforeTaxAnnual - flows.totalIncome,
+        tax: (importReconciliation.beforeTaxAnnual - importReconciliation.afterTaxAnnual) - calculatedTotalTax,
+      });
+    }, 600);
+    return () => window.clearTimeout(timeoutId);
+  }, [importReconciliation, reconciliationOffsets, reconciliationBaselineSignature, modelSignature, federalResult, flows.totalIncome, calculatedTotalTax]);
+  const isUnadjustedImport = Boolean(importReconciliation && !reconciliationOffsets && reconciliationBaselineSignature === modelSignature);
+  const totalIncome = isUnadjustedImport ? importReconciliation!.beforeTaxAnnual : flows.totalIncome + (reconciliationOffsets?.income || 0);
+  const totalTax = isUnadjustedImport
+    ? importReconciliation!.beforeTaxAnnual - importReconciliation!.afterTaxAnnual
+    : calculatedTotalTax + (reconciliationOffsets?.tax || 0);
+  const afterTaxIncome = totalIncome - totalTax;
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
