@@ -181,6 +181,8 @@ type AssistantTableConfig = {
   defaultRow: (id: number) => AssistantEditableRow;
 };
 type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus">;
+type ImportReconciliation = { beforeTaxAnnual: number; afterTaxAnnual: number };
+type ReconciliationOffsets = { beforeTaxAnnual: number; afterTaxAnnual: number };
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -193,7 +195,7 @@ type WorkbookResponse = {
     accounts: AccountRow[];
     accountTaxType: AccountTaxTypeRow[];
   }>;
-  settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings; ui: UiSettings }>;
+  settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings; ui: UiSettings; reconciliation: ImportReconciliation }>;
   updatedAt?: string | null;
 };
 
@@ -1283,6 +1285,12 @@ function parseWorkbookSettings(settings: unknown) {
     federal: parseFederalSettingsSection(settingsObj.federal),
     state: parseStateSettingsSection(settingsObj.state),
     planner,
+    reconciliation: settingsObj.reconciliation && typeof settingsObj.reconciliation === "object"
+      ? {
+          beforeTaxAnnual: toNumber((settingsObj.reconciliation as Record<string, unknown>).beforeTaxAnnual as number | string),
+          afterTaxAnnual: toNumber((settingsObj.reconciliation as Record<string, unknown>).afterTaxAnnual as number | string),
+        }
+      : null,
     ui: {
       investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
         ? ui.investmentFavorites
@@ -3367,6 +3375,8 @@ export default function App() {
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
+  const [importReconciliation, setImportReconciliation] = useState<ImportReconciliation | null>(null);
+  const [reconciliationOffsets, setReconciliationOffsets] = useState<ReconciliationOffsets | null>(null);
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
   const selectedStateName = stateNameByCode[selectedStateCode] || selectedStateCode;
   const [isSheetPanelOpen, setIsSheetPanelOpen] = useState(false);
@@ -3711,6 +3721,8 @@ export default function App() {
       setUiSettings({
         investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
       });
+      setImportReconciliation(workbookSettings.reconciliation);
+      setReconciliationOffsets(null);
       hasLoadedStorage.current = true;
       setStorageState("ready");
     }).catch((error: Error) => {
@@ -3752,7 +3764,7 @@ export default function App() {
     setStorageState("saving");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings, reconciliation: importReconciliation || undefined } }, authToken).then(() => {
         if (!cancelled) { setStorageState("saved"); }
       }).catch((error: Error) => {
         console.error(error);
@@ -3761,17 +3773,30 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, importReconciliation, hasRealData, authEnabled, authState.status, authToken]);
 
   const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
   const displayedStateResult = stateResult?.state === selectedStateCode ? stateResult : localStateResult;
-  const totalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
-  const afterTaxIncome = flows.totalIncome - totalTax;
-  const monthlyIncome = flows.totalIncome / 12;
+  const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
+  const calculatedAfterTaxIncome = flows.totalIncome - calculatedTotalTax;
+  useEffect(() => {
+    if (!importReconciliation || reconciliationOffsets || !federalResult || !stateResult) return;
+    const timeoutId = window.setTimeout(() => {
+      setReconciliationOffsets({
+        beforeTaxAnnual: importReconciliation.beforeTaxAnnual - flows.totalIncome,
+        afterTaxAnnual: importReconciliation.afterTaxAnnual - calculatedAfterTaxIncome,
+      });
+    }, 800);
+    return () => window.clearTimeout(timeoutId);
+  }, [importReconciliation, reconciliationOffsets, federalResult, stateResult, flows.totalIncome, calculatedAfterTaxIncome]);
+  const totalIncome = flows.totalIncome + (reconciliationOffsets?.beforeTaxAnnual || 0);
+  const afterTaxIncome = calculatedAfterTaxIncome + (reconciliationOffsets?.afterTaxAnnual || 0);
+  const totalTax = totalIncome - afterTaxIncome;
+  const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
-  const portfolioYield = flows.totalInvestmentAmount > 0 ? flows.totalIncome / flows.totalInvestmentAmount : 0;
+  const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
   const currentIncomeSnapshot: IncomeSnapshotValues = {
-    beforeTaxAnnual: flows.totalIncome,
+    beforeTaxAnnual: totalIncome,
     beforeTaxMonthly: monthlyIncome,
     afterTaxAnnual: afterTaxIncome,
     afterTaxMonthly: afterTaxMonthlyIncome,
@@ -3884,7 +3909,7 @@ export default function App() {
   );
   const kpiMetrics: KpiMetricConfig[] = [
     { label: "After-tax income", value: formatCurrency(afterTaxIncome), numericValue: afterTaxIncome, tone: "warning" },
-    { label: "Annual income", value: formatCurrency(flows.totalIncome), secondaryValue: `${formatCurrency(monthlyIncome)} monthly`, numericValue: flows.totalIncome },
+    { label: "Annual income", value: formatCurrency(totalIncome), secondaryValue: `${formatCurrency(monthlyIncome)} monthly`, numericValue: totalIncome },
     { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
   ];
@@ -3903,7 +3928,7 @@ export default function App() {
       flows,
     metrics: {
       totalInvestmentAmount: flows.totalInvestmentAmount,
-      totalIncome: flows.totalIncome,
+      totalIncome,
       portfolioYield,
       afterTaxIncome,
       federalTax: federalResult?.tax || 0,
