@@ -181,8 +181,6 @@ type AssistantTableConfig = {
   defaultRow: (id: number) => AssistantEditableRow;
 };
 type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus">;
-type ImportReconciliation = { beforeTaxAnnual: number; afterTaxAnnual: number };
-type ReconciliationOffsets = { income: number; tax: number };
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -195,7 +193,7 @@ type WorkbookResponse = {
     accounts: AccountRow[];
     accountTaxType: AccountTaxTypeRow[];
   }>;
-  settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings; ui: UiSettings; reconciliation: ImportReconciliation }>;
+  settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings; ui: UiSettings }>;
   updatedAt?: string | null;
 };
 
@@ -1285,12 +1283,6 @@ function parseWorkbookSettings(settings: unknown) {
     federal: parseFederalSettingsSection(settingsObj.federal),
     state: parseStateSettingsSection(settingsObj.state),
     planner,
-    reconciliation: settingsObj.reconciliation && typeof settingsObj.reconciliation === "object"
-      ? {
-          beforeTaxAnnual: toNumber((settingsObj.reconciliation as Record<string, unknown>).beforeTaxAnnual as number | string),
-          afterTaxAnnual: toNumber((settingsObj.reconciliation as Record<string, unknown>).afterTaxAnnual as number | string),
-        }
-      : null,
     ui: {
       investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
         ? ui.investmentFavorites
@@ -3375,9 +3367,6 @@ export default function App() {
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
-  const [importReconciliation, setImportReconciliation] = useState<ImportReconciliation | null>(null);
-  const [reconciliationBaselineSignature, setReconciliationBaselineSignature] = useState("");
-  const [reconciliationOffsets, setReconciliationOffsets] = useState<ReconciliationOffsets | null>(null);
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
   const selectedStateName = stateNameByCode[selectedStateCode] || selectedStateCode;
   const [isSheetPanelOpen, setIsSheetPanelOpen] = useState(false);
@@ -3648,7 +3637,7 @@ export default function App() {
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
-    acc.totalIncome += row.displayFilteredIncome;
+    acc.totalIncome += row.filteredIncome;
     acc.federalOrdinary += row.ordinaryMonthly * 12;
     acc.federalPreferred += row.preferredMonthly * 12;
     acc.stateTaxable += row.stateMonthly * 12;
@@ -3720,7 +3709,9 @@ export default function App() {
         response.tabs?.investments,
         workbookToInvestmentRow
       );
-      setInvestments(authenticatedWorkbook && isStarterInvestmentSet(loadedInvestments) ? [] : loadedInvestments);
+      const activeInvestments = authenticatedWorkbook && isStarterInvestmentSet(loadedInvestments) ? [] : loadedInvestments;
+      setInvestments(activeInvestments);
+      setIsWhatIfActive(activeInvestments.some((row) => row.overrideProposal));
       setTickers(
         mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
       );
@@ -3742,9 +3733,6 @@ export default function App() {
       setUiSettings({
         investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
       });
-      setImportReconciliation(workbookSettings.reconciliation);
-      setReconciliationBaselineSignature("");
-      setReconciliationOffsets(null);
       hasLoadedStorage.current = true;
       setStorageState("ready");
     }).catch((error: Error) => {
@@ -3786,7 +3774,7 @@ export default function App() {
     setStorageState("saving");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings, reconciliation: importReconciliation || undefined } }, authToken).then(() => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
         if (!cancelled) { setStorageState("saved"); }
       }).catch((error: Error) => {
         console.error(error);
@@ -3795,33 +3783,13 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, importReconciliation, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
 
   const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
   const displayedStateResult = stateResult?.state === selectedStateCode ? stateResult : localStateResult;
-  const modelSignature = useMemo(() => JSON.stringify({ investments, tickers, accounts, federalSettings, stateSettings, isWhatIfActive }), [investments, tickers, accounts, federalSettings, stateSettings, isWhatIfActive]);
-  useEffect(() => {
-    if (!importReconciliation) return;
-    if (!reconciliationBaselineSignature) {
-      setReconciliationBaselineSignature(modelSignature);
-    }
-  }, [importReconciliation, reconciliationBaselineSignature, modelSignature]);
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
-  useEffect(() => {
-    if (!importReconciliation || reconciliationOffsets || !federalResult || !reconciliationBaselineSignature || reconciliationBaselineSignature !== modelSignature) return;
-    const timeoutId = window.setTimeout(() => {
-      setReconciliationOffsets({
-        income: importReconciliation.beforeTaxAnnual - flows.totalIncome,
-        tax: (importReconciliation.beforeTaxAnnual - importReconciliation.afterTaxAnnual) - calculatedTotalTax,
-      });
-    }, 600);
-    return () => window.clearTimeout(timeoutId);
-  }, [importReconciliation, reconciliationOffsets, reconciliationBaselineSignature, modelSignature, federalResult, flows.totalIncome, calculatedTotalTax]);
-  const isUnadjustedImport = Boolean(importReconciliation && !reconciliationOffsets && reconciliationBaselineSignature === modelSignature);
-  const totalIncome = isUnadjustedImport ? importReconciliation!.beforeTaxAnnual : flows.totalIncome + (reconciliationOffsets?.income || 0);
-  const totalTax = isUnadjustedImport
-    ? importReconciliation!.beforeTaxAnnual - importReconciliation!.afterTaxAnnual
-    : calculatedTotalTax + (reconciliationOffsets?.tax || 0);
+  const totalIncome = flows.totalIncome;
+  const totalTax = calculatedTotalTax;
   const afterTaxIncome = totalIncome - totalTax;
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;

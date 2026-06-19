@@ -588,8 +588,47 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Workbook Sync')
     .addItem('Set Sync Token', 'SET_WORKBOOK_SYNC_TOKEN')
+    .addItem('Repair Assets Column Formulas', 'REPAIR_ASSET_COLUMN_FORMULAS')
     .addItem('Export To Data Store', 'EXPORT_WORKBOOK_TO_DATASTORE')
     .addToUi();
+}
+
+function repairAssetColumnFormulas_(sheet) {
+  if (!sheet) return 0;
+  var formulas = sheet.getDataRange().getFormulas();
+  var repaired = 0;
+  var taxTreatmentColumns = [19, 20, 21]; // T:V, zero-based
+  var assetClassColumn = 23; // X, zero-based
+
+  for (var r = 0; r < formulas.length; r++) {
+    for (var i = 0; i < taxTreatmentColumns.length; i++) {
+      var taxColumn = taxTreatmentColumns[i];
+      var taxFormula = String((formulas[r] && formulas[r][taxColumn]) || '');
+      var repairedTaxFormula = taxFormula.replace(/CHOOSECOLS\(tickers,\s*1\),\s*0\),\s*4\)/gi, 'CHOOSECOLS(tickers,1), 0), 5)');
+      if (repairedTaxFormula !== taxFormula) {
+        sheet.getRange(r + 1, taxColumn + 1).setFormula(repairedTaxFormula);
+        repaired++;
+      }
+    }
+
+    var assetFormula = String((formulas[r] && formulas[r][assetClassColumn]) || '');
+    var repairedAssetFormula = assetFormula.replace(/CHOOSECOLS\(tickers,\s*1\),\s*0\),\s*3\)/gi, 'CHOOSECOLS(tickers,1), 0), 4)');
+    if (repairedAssetFormula !== assetFormula) {
+      sheet.getRange(r + 1, assetClassColumn + 1).setFormula(repairedAssetFormula);
+      repaired++;
+    }
+  }
+
+  return repaired;
+}
+
+function REPAIR_ASSET_COLUMN_FORMULAS() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var investmentsSheet = getSheetByNames_(spreadsheet, ['investments', 'Investments']);
+  var repaired = repairAssetColumnFormulas_(investmentsSheet);
+  SpreadsheetApp.flush();
+  spreadsheet.toast(repaired + ' shifted Assets lookup formula(s) repaired.', 'Workbook Sync', 8);
+  return repaired;
 }
 
 function SET_WORKBOOK_SYNC_TOKEN() {
@@ -647,14 +686,6 @@ function exportValueIsBlank_(value) {
 function exportNumber_(value) {
   var numeric = Number(String(value || '').replace(/[\$,]/g, '').trim());
   return isFinite(numeric) ? numeric : 0;
-}
-
-function sheetIncomeSummary_(sheet) {
-  if (!sheet) return null;
-  var beforeTaxAnnual = exportNumber_(sheet.getRange('E2').getDisplayValue());
-  var afterTaxAnnual = exportNumber_(sheet.getRange('F2').getDisplayValue());
-  if (beforeTaxAnnual <= 0 || afterTaxAnnual <= 0) return null;
-  return { beforeTaxAnnual: beforeTaxAnnual, afterTaxAnnual: afterTaxAnnual };
 }
 
 function firstExportValue_(record, keys) {
@@ -943,7 +974,6 @@ function collectWorkbookExportPayload_() {
       investmentType: sheetToRowObjects_(investmentTypeSheet)
     },
       settings: {
-        reconciliation: sheetIncomeSummary_(investmentsSheet),
         federal: {
         sheetName: federalSheet ? federalSheet.getName() : null,
         rows: sheetToMatrix_(federalSheet)
@@ -976,6 +1006,7 @@ function collectWorkbookExportPayload_() {
 
 function EXPORT_WORKBOOK_TO_DATASTORE() {
   var workspaceId = 'default';
+  REPAIR_ASSET_COLUMN_FORMULAS();
   var payload = collectWorkbookExportPayload_();
   var result = WORKBOOK_SAVE(workspaceId, payload.tabs, payload.settings);
 

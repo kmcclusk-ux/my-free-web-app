@@ -20,7 +20,6 @@ export type WorkbookEntityKey =
   | "settings#planner"
   | "settings#formulas"
   | "settings#ui"
-  | "settings#reconciliation"
   | "auth#mcpToken";
 
 export type WorkbookPayload = {
@@ -59,7 +58,6 @@ const ENTITY_KEYS: WorkbookEntityKey[] = [
   "settings#planner",
   "settings#formulas",
   "settings#ui",
-  "settings#reconciliation",
 ];
 
 const TAB_TO_ENTITY: Record<string, WorkbookEntityKey> = {
@@ -75,7 +73,6 @@ const TAB_TO_ENTITY: Record<string, WorkbookEntityKey> = {
   plannerSettings: "settings#planner",
   formulaSettings: "settings#formulas",
   uiSettings: "settings#ui",
-  reconciliationSettings: "settings#reconciliation",
 };
 
 const ENTITY_TO_RESPONSE_KEY: Partial<Record<WorkbookEntityKey, { group: "tabs" | "settings"; key: string }>> = {
@@ -91,7 +88,6 @@ const ENTITY_TO_RESPONSE_KEY: Partial<Record<WorkbookEntityKey, { group: "tabs" 
   "settings#planner": { group: "settings", key: "planner" },
   "settings#formulas": { group: "settings", key: "formulas" },
   "settings#ui": { group: "settings", key: "ui" },
-  "settings#reconciliation": { group: "settings", key: "reconciliation" },
 };
 
 function getRequiredEnv(name: string): string {
