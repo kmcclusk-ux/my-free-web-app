@@ -16,6 +16,7 @@ const ENTITY_KEYS = [
     "settings#planner",
     "settings#formulas",
     "settings#ui",
+    "settings#reconciliation",
 ];
 const TAB_TO_ENTITY = {
     investments: "tab#investments",
@@ -30,6 +31,7 @@ const TAB_TO_ENTITY = {
     plannerSettings: "settings#planner",
     formulaSettings: "settings#formulas",
     uiSettings: "settings#ui",
+    reconciliationSettings: "settings#reconciliation",
 };
 const ENTITY_TO_RESPONSE_KEY = {
     "tab#investments": { group: "tabs", key: "investments" },
@@ -44,6 +46,7 @@ const ENTITY_TO_RESPONSE_KEY = {
     "settings#planner": { group: "settings", key: "planner" },
     "settings#formulas": { group: "settings", key: "formulas" },
     "settings#ui": { group: "settings", key: "ui" },
+    "settings#reconciliation": { group: "settings", key: "reconciliation" },
 };
 function getRequiredEnv(name) {
     const value = process.env[name];
