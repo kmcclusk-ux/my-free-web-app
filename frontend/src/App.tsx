@@ -1351,12 +1351,12 @@ async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "con
   return json as ChatResponse;
 }
 
-async function createMcpConnectorToken(workspaceId: string, idToken?: string) {
+async function createMcpConnectorToken(workspaceId: string, idToken?: string, label = "ChatGPT connector") {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, {
     method: "POST",
     headers: authHeaders(idToken),
-    body: JSON.stringify({ calc: "MCP_TOKEN_CREATE", workspaceId, label: "ChatGPT connector" }),
+    body: JSON.stringify({ calc: "MCP_TOKEN_CREATE", workspaceId, label }),
   });
   const json = (await response.json()) as { token?: string; tokenId?: string; error?: string };
   if (!response.ok || !json.token) throw new Error(json.error || "MCP token creation failed");
@@ -3456,6 +3456,26 @@ export default function App() {
     }
   };
 
+  const copySpreadsheetSyncToken = async () => {
+    if (!authToken) {
+      setMcpTokenMessage("Sign in first.");
+      return;
+    }
+
+    setIsCreatingMcpToken(true);
+    setMcpTokenMessage("Creating spreadsheet sync token...");
+    try {
+      const result = await createMcpConnectorToken(WORKSPACE_ID, authToken, "Google Sheet sync");
+      await navigator.clipboard.writeText(result.token || "");
+      setMcpTokenMessage("Spreadsheet sync token copied.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create spreadsheet sync token.";
+      setMcpTokenMessage(message);
+    } finally {
+      setIsCreatingMcpToken(false);
+    }
+  };
+
   const tickerMap = useMemo(
     () => Object.fromEntries(
       tickers
@@ -3883,6 +3903,10 @@ export default function App() {
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copyChatGptConnectorUrl(); }} disabled={isCreatingMcpToken}>
                   <TopbarActionIcon name="copy" />
                   <span>{isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}</span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copySpreadsheetSyncToken(); }} disabled={isCreatingMcpToken}>
+                  <TopbarActionIcon name="copy" />
+                  <span>{isCreatingMcpToken ? "Creating token..." : "Copy Sheet Sync Token"}</span>
                 </button>
               </>
             ) : (

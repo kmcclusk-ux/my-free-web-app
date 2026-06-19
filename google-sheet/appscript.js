@@ -18,7 +18,8 @@ function callTaxApi(payload) {
     payload: JSON.stringify(payload),
     muteHttpExceptions: true,
     headers: syncToken ? {
-      "X-Portfolio-Sync-Token": syncToken
+      "X-Portfolio-Sync-Token": syncToken,
+      "X-Portfolio-MCP-Token": syncToken
     } : {}
   };
 
