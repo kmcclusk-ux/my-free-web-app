@@ -1305,8 +1305,8 @@ function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
-function fedTaxAdjust(amount: number, taxTreatment: string, extraData: number, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; case "real estate": return pref ? 0 : Math.max(amount - extraData, 0); default: return pref ? 0 : amount; } }
-function stateTaxAdjust(amount: number, taxTreatment: string, extraData: number, stateCode = "CA") { const treatment = String(taxTreatment || "").toLowerCase().trim(); if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0; if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0; if (treatment === "real estate") return Math.max(amount - extraData, 0); return amount; }
+function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": case "real estate": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; default: return pref ? 0 : amount; } }
+function stateTaxAdjust(amount: number, taxTreatment: string, stateCode = "CA") { const treatment = String(taxTreatment || "").toLowerCase().trim(); if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0; if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0; return amount; }
 function isUnknownCalcError(error: Error) { return /unknown calc/i.test(error.message || ""); }
 async function postTaxCalculation(payload: Record<string, number | string>) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
@@ -1472,16 +1472,18 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
   const base = fallback || initialTickers[index] || initialTickers[0];
   const percentValue = workbookField(row, "dividend", "percent_return", "percentReturn", "percent_return_rate", "percent");
   const extraDataValue = workbookField(row, "extra_data", "extraData");
+  const symbol = workbookField(row, "symbol", "ticker") ?? base.symbol;
   const category = workbookField(row, "category") ?? base.category;
   const taxTreatment = workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment;
   const incomeItemValue = workbookField(row, "incomeItem", "income_item", "is_income_item", "income_ticker", "income");
+  const inferredIncomeItem = isDefaultIncomeTicker({ category, taxTreatment }) || normalizeLookupKey(symbol) === "noninvestmentincome";
   return {
     id: Number(workbookField(row, "id")) || index + 1,
-    symbol: workbookField(row, "symbol", "ticker") ?? base.symbol,
+    symbol,
     percentReturn: percentValue !== undefined ? normalizeRate(percentValue) : normalizeRate(base.percentReturn),
     category,
     taxTreatment,
-    incomeItem: incomeItemValue !== undefined ? normalizeBoolean(incomeItemValue) : isDefaultIncomeTicker({ category, taxTreatment }),
+    incomeItem: inferredIncomeItem || (incomeItemValue !== undefined ? normalizeBoolean(incomeItemValue) : false),
     extraData: extraDataValue !== undefined ? toNumber(extraDataValue) : base.extraData,
     description: workbookField(row, "description", "desc") ?? base.description,
     exDividend: workbookField(row, "ex_dividend", "exDividend") ?? base.exDividend,
@@ -3617,9 +3619,9 @@ export default function App() {
       taxStatus,
       taxTreatment,
       investmentType,
-      ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, false),
-      preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, true),
-      stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, extraData, selectedStateCode),
+      ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, false),
+      preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, true),
+      stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode),
       nonTaxableMonthly: !isTaxableAccount && row.includeIncome ? monthlyIncome : 0,
       nonInvestmentIncome: ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0,
       cash: investmentType === "cash" ? includedTotal : 0,

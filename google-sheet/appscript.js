@@ -764,6 +764,11 @@ function normalizeTickerExportRecord_(record) {
   var description = firstExportValue_(record, hasIncomeItemColumn ? ['description', 'desc', 'col_7', 'col_6'] : ['description', 'desc', 'col_6', 'col_7']);
   var exDividend = firstExportValue_(record, hasIncomeItemColumn ? ['exDividend', 'ex_dividend', 'ex_divided', 'ex_divided_8', 'ex_divided_7', 'col_8', 'col_7'] : ['exDividend', 'ex_dividend', 'ex_divided', 'ex_divided_7', 'col_7', 'col_8']);
   var divPayout = firstExportValue_(record, hasIncomeItemColumn ? ['divPayout', 'div_payout', 'payout', 'col_9', 'col_8'] : ['divPayout', 'div_payout', 'payout', 'col_8', 'col_9']);
+  var normalizedSymbol = String(symbol || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  var normalizedCategory = String(category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalizedSymbol === 'noninvestmentincome' || normalizedCategory === 'noninvestmentincome' || normalizedCategory === 'socialsecurity') {
+    incomeItem = true;
+  }
 
   if (!exportValueIsBlank_(symbol)) record.symbol = symbol;
   if (percentReturn !== undefined) {
