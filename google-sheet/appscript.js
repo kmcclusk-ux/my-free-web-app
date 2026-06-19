@@ -648,6 +648,14 @@ function exportNumber_(value) {
   return isFinite(numeric) ? numeric : 0;
 }
 
+function sheetIncomeSummary_(sheet) {
+  if (!sheet) return null;
+  var beforeTaxAnnual = exportNumber_(sheet.getRange('E2').getDisplayValue());
+  var afterTaxAnnual = exportNumber_(sheet.getRange('F2').getDisplayValue());
+  if (beforeTaxAnnual <= 0 || afterTaxAnnual <= 0) return null;
+  return { beforeTaxAnnual: beforeTaxAnnual, afterTaxAnnual: afterTaxAnnual };
+}
+
 function firstExportValue_(record, keys) {
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
@@ -933,8 +941,9 @@ function collectWorkbookExportPayload_() {
       accountTaxType: sheetToRowObjects_(accountTaxTypeSheet),
       investmentType: sheetToRowObjects_(investmentTypeSheet)
     },
-    settings: {
-      federal: {
+      settings: {
+        reconciliation: sheetIncomeSummary_(investmentsSheet),
+        federal: {
         sheetName: federalSheet ? federalSheet.getName() : null,
         rows: sheetToMatrix_(federalSheet)
       },
