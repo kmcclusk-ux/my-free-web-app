@@ -3583,8 +3583,9 @@ export default function App() {
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
     const proposedPercent = normalizeRate(proposedTicker?.percentReturn ?? row.newPercent);
     const effectivePercent = isRowWhatIfActive ? proposedPercent || currentPercent : currentPercent;
-    const incomeItem = Boolean(effectiveTicker?.incomeItem);
-    const yearlyIncome = incomeItem ? toNumber(row.yearlyIncome) : totalInvestment * effectivePercent;
+    const importedYearlyIncome = toNumber(row.yearlyIncome);
+    const incomeItem = Boolean(effectiveTicker?.incomeItem) || (totalInvestment === 0 && importedYearlyIncome !== 0);
+    const yearlyIncome = incomeItem ? importedYearlyIncome : totalInvestment * effectivePercent;
     const monthlyIncome = yearlyIncome / 12;
     const filteredIncome = row.includeIncome ? yearlyIncome : 0;
     const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
