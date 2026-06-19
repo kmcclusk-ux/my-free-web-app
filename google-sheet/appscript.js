@@ -648,6 +648,36 @@ function exportNumber_(value) {
   return isFinite(numeric) ? numeric : 0;
 }
 
+function exportOptionalNumber_(value) {
+  var text = String(value || '').replace(/[\$,]/g, '').trim();
+  if (!text) return null;
+  var numeric = Number(text);
+  return isFinite(numeric) ? numeric : null;
+}
+
+function sheetIncomeSummary_(sheet) {
+  if (!sheet) return null;
+  var values = sheet.getDataRange().getDisplayValues();
+  var maxHeaderRows = Math.min(values.length - 1, 7);
+  for (var r = 0; r < maxHeaderRows; r++) {
+    for (var c = 0; c < values[r].length; c++) {
+      var label = normalizeExportHeader_(values[r][c]);
+      if (label !== 'after_tax' && label !== 'aftertax') continue;
+      var afterTaxAnnual = exportOptionalNumber_(values[r + 1][c]);
+      if (afterTaxAnnual === null) continue;
+      for (var beforeColumn = c - 1; beforeColumn >= 0; beforeColumn--) {
+        var beforeLabel = normalizeExportHeader_(values[r][beforeColumn]);
+        if (beforeLabel !== 'before_tax' && beforeLabel !== 'beforetax' && beforeLabel !== 'total') continue;
+        var beforeTaxAnnual = exportOptionalNumber_(values[r + 1][beforeColumn]);
+        if (beforeTaxAnnual !== null) {
+          return { beforeTaxAnnual: beforeTaxAnnual, afterTaxAnnual: afterTaxAnnual };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function firstExportValue_(record, keys) {
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
@@ -933,8 +963,9 @@ function collectWorkbookExportPayload_() {
       accountTaxType: sheetToRowObjects_(accountTaxTypeSheet),
       investmentType: sheetToRowObjects_(investmentTypeSheet)
     },
-    settings: {
-      federal: {
+      settings: {
+        reconciliation: sheetIncomeSummary_(investmentsSheet),
+        federal: {
         sheetName: federalSheet ? federalSheet.getName() : null,
         rows: sheetToMatrix_(federalSheet)
       },
