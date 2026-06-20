@@ -1877,10 +1877,18 @@ function SnapshotValue({ label, delta, suffix }: { label: string; delta: number;
 
 function SnapshotToggleIcon({ type }: { type: "afterTax" | "beforeTax" | "monthly" | "yearly" }) {
   if (type === "afterTax") {
-    return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h8v7h-8z" /><path d="M5.5 8h4M7.5 6.5v3" /><path d="m12 13 1.7 1.7 3-3.4" /></svg>;
+    return <svg className="snapshot-coin-stack" viewBox="0 0 20 20" aria-hidden="true">
+      <path className="snapshot-coin snapshot-coin--green" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--green" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+    </svg>;
   }
   if (type === "beforeTax") {
-    return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="10" r="5.5" /><path d="M10.8 7.5H8.4a1.4 1.4 0 0 0 0 2.8h1.2a1.4 1.4 0 0 1 0 2.8H7M9 6v8" /><path d="M14 4.5h2.5V7" /></svg>;
+    return <svg className="snapshot-coin-stack" viewBox="0 0 20 20" aria-hidden="true">
+      <path className="snapshot-coin snapshot-coin--green" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--green" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--red" d="M4 6.8c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--red" d="M4 3.5c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6V5c0 .9-2.7 1.6-6 1.6S4 5.9 4 5z" />
+    </svg>;
   }
   if (type === "monthly") {
     return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M6.5 3v3M13.5 3v3M3.5 8h13" /><path d="M7 11h2v2H7z" /></svg>;

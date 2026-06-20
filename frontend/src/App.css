@@ -300,6 +300,21 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.income-snapshot__toggle-button .snapshot-coin-stack {
+  width: 16px;
+  height: 16px;
+}
+.income-snapshot__toggle-button .snapshot-coin {
+  stroke-width: .75;
+}
+.income-snapshot__toggle-button .snapshot-coin--green {
+  fill: #42c784;
+  stroke: #13764b;
+}
+.income-snapshot__toggle-button .snapshot-coin--red {
+  fill: #ef6b6b;
+  stroke: #a43d3d;
+}
 .income-snapshot__toggle-button:hover,
 .income-snapshot__toggle-button:focus-visible {
   background: rgba(255, 255, 255, .1);
