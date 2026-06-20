@@ -1890,7 +1890,7 @@ function IncomeSnapshotControl({
   const [snapshotBasis, setSnapshotBasis] = useState<"afterTax" | "beforeTax">("afterTax");
   const capturedLabel = snapshot
     ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : "No baseline";
+    : "";
   const viewDeltas = snapshotView === "monthly"
     ? {
         afterTax: deltas?.afterTaxMonthly ?? 0,
