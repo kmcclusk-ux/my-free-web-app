@@ -92,25 +92,25 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 32px;
-  min-height: 32px;
-  padding: 2px 4px;
+  gap: 3px;
+  height: 28px;
+  min-height: 28px;
+  padding: 1px 3px;
   border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 999px;
   background: rgba(255, 255, 255, .075);
   color: rgba(255, 255, 255, .9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  box-shadow: none;
 }
 .income-snapshot__button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  width: 28px;
-  height: 26px;
-  min-height: 26px;
-  padding: 4px 5px;
+  width: 26px;
+  height: 24px;
+  min-height: 24px;
+  padding: 3px 4px;
   border: 1px solid rgba(82, 214, 169, .28);
   border-radius: 9px;
   background: linear-gradient(135deg, rgba(41, 199, 163, .22), rgba(35, 97, 201, .18));
@@ -281,8 +281,8 @@
   background: rgba(255, 255, 255, .06);
 }
 .income-snapshot__toggle-button {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   min-height: 0;
   display: inline-grid;
   place-items: center;
@@ -764,8 +764,8 @@
     font-size: 1rem;
   }
   .income-snapshot__toggle-button {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     padding: 0;
   }
 }
@@ -2879,8 +2879,8 @@
 }
 
 .state-flag-select__button {
-  min-height: 32px;
-  padding: 4px 9px;
+  min-height: 28px;
+  padding: 2px 9px;
   border-radius: 999px;
   font-size: .74rem;
   font-weight: 750;
