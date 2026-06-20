@@ -91,7 +91,7 @@
 .income-snapshot {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   min-height: 42px;
   padding: 4px 7px;
   border: 1px solid rgba(255, 255, 255, .14);
@@ -271,25 +271,34 @@
 .income-snapshot__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: 1px;
+  padding: 1px;
   border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, .06);
 }
 .income-snapshot__toggle-button {
-  min-height: 24px;
-  padding: 3px 8px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 5px;
   background: transparent;
   color: rgba(255, 255, 255, .62);
   cursor: pointer;
-  font-size: .58rem;
-  font-weight: 850;
-  letter-spacing: .06em;
-  text-transform: uppercase;
   transition: background 140ms ease, color 140ms ease;
+}
+.income-snapshot__toggle-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .income-snapshot__toggle-button:hover,
 .income-snapshot__toggle-button:focus-visible {
@@ -302,7 +311,7 @@
   color: #fff;
 }
 .income-snapshot__toggle--basis .income-snapshot__toggle-button {
-  padding-inline: 7px;
+  padding: 0;
 }
 .income-snapshot--inline {
   order: 99;
@@ -678,8 +687,9 @@
     font-size: 1rem;
   }
   .income-snapshot__toggle-button {
-    padding-inline: 6px;
-    font-size: .52rem;
+    width: 22px;
+    height: 22px;
+    padding: 0;
   }
 }
 .workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr) 216px; min-height: calc(100vh - var(--app-top-nav-height)); }

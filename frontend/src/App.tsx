@@ -1875,6 +1875,19 @@ function SnapshotValue({ label, delta, suffix }: { label: string; delta: number;
   );
 }
 
+function SnapshotToggleIcon({ type }: { type: "afterTax" | "beforeTax" | "monthly" | "yearly" }) {
+  if (type === "afterTax") {
+    return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h8v7h-8z" /><path d="M5.5 8h4M7.5 6.5v3" /><path d="m12 13 1.7 1.7 3-3.4" /></svg>;
+  }
+  if (type === "beforeTax") {
+    return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="10" r="5.5" /><path d="M10.8 7.5H8.4a1.4 1.4 0 0 0 0 2.8h1.2a1.4 1.4 0 0 1 0 2.8H7M9 6v8" /><path d="M14 4.5h2.5V7" /></svg>;
+  }
+  if (type === "monthly") {
+    return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M6.5 3v3M13.5 3v3M3.5 8h13" /><path d="M7 11h2v2H7z" /></svg>;
+  }
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M6.5 3v3M13.5 3v3M3.5 8h13" /><path d="M6.5 10.5h1M9.5 10.5h1M12.5 10.5h1M6.5 13.5h1M9.5 13.5h1M12.5 13.5h1" /></svg>;
+}
+
 function IncomeSnapshotControl({
   snapshot,
   deltas,
@@ -1943,15 +1956,19 @@ function IncomeSnapshotControl({
           className={`income-snapshot__toggle-button ${snapshotBasis === "afterTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
           type="button"
           onClick={() => setSnapshotBasis("afterTax")}
+          aria-label="Show after-tax change"
+          title="After Tax"
         >
-          After Tax
+          <SnapshotToggleIcon type="afterTax" />
         </button>
         <button
           className={`income-snapshot__toggle-button ${snapshotBasis === "beforeTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
           type="button"
           onClick={() => setSnapshotBasis("beforeTax")}
+          aria-label="Show before-tax change"
+          title="Before Tax"
         >
-          Before Tax
+          <SnapshotToggleIcon type="beforeTax" />
         </button>
       </div>
       <div className="income-snapshot__toggle" role="group" aria-label="Snapshot period">
@@ -1959,15 +1976,19 @@ function IncomeSnapshotControl({
           className={`income-snapshot__toggle-button ${snapshotView === "monthly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
           type="button"
           onClick={() => setSnapshotView("monthly")}
+          aria-label="Show monthly change"
+          title="Monthly"
         >
-          Monthly
+          <SnapshotToggleIcon type="monthly" />
         </button>
         <button
           className={`income-snapshot__toggle-button ${snapshotView === "yearly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
           type="button"
           onClick={() => setSnapshotView("yearly")}
+          aria-label="Show yearly change"
+          title="Yearly"
         >
-          Yearly
+          <SnapshotToggleIcon type="yearly" />
         </button>
       </div>
     </div>
