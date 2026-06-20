@@ -89,6 +89,7 @@
   min-width: 0;
 }
 .income-snapshot {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -278,7 +279,6 @@
   background: rgba(255, 255, 255, .06);
 }
 .income-snapshot__toggle-button {
-  position: relative;
   width: 22px;
   height: 22px;
   min-height: 0;
@@ -292,46 +292,39 @@
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease;
 }
-.income-snapshot__toggle-button::before,
-.income-snapshot__toggle-button::after {
+.income-snapshot__tooltip {
   position: absolute;
-  left: 50%;
-  z-index: 500;
-  pointer-events: none;
-  opacity: 0;
-  transform: translate(-50%, -3px);
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-.income-snapshot__toggle-button::before {
-  content: "";
-  top: calc(100% + 3px);
-  border: 4px solid transparent;
-  border-bottom-color: #172033;
-}
-.income-snapshot__toggle-button::after {
-  content: attr(data-tooltip);
-  top: calc(100% + 11px);
+  top: calc(100% + 8px);
+  right: 4px;
+  z-index: 1000;
   width: max-content;
-  max-width: 190px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  max-width: 210px;
+  padding: 7px 9px;
+  border-radius: 7px;
   background: #172033;
   color: #fff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, .2);
-  font-size: 10px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .24);
+  pointer-events: none;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: 0;
   line-height: 1.25;
   text-align: center;
   text-transform: none;
   white-space: nowrap;
+  animation: snapshot-tooltip-in 120ms ease-out;
 }
-.income-snapshot__toggle-button:hover::before,
-.income-snapshot__toggle-button:hover::after,
-.income-snapshot__toggle-button:focus-visible::before,
-.income-snapshot__toggle-button:focus-visible::after {
-  opacity: 1;
-  transform: translate(-50%, 0);
+.income-snapshot__tooltip::before {
+  content: "";
+  position: absolute;
+  right: 18px;
+  bottom: 100%;
+  border: 5px solid transparent;
+  border-bottom-color: #172033;
+}
+@keyframes snapshot-tooltip-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .income-snapshot__toggle-button svg {
   width: 14px;

@@ -1909,6 +1909,7 @@ function IncomeSnapshotControl({
 }) {
   const [snapshotView, setSnapshotView] = useState<"monthly" | "yearly">("monthly");
   const [snapshotBasis, setSnapshotBasis] = useState<"afterTax" | "beforeTax">("afterTax");
+  const [snapshotTooltip, setSnapshotTooltip] = useState("");
   const capturedLabel = snapshot
     ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
@@ -1965,7 +1966,11 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotBasis("afterTax")}
           aria-label="Show after-tax change"
-          data-tooltip="Show after-tax income change"
+          title="Show after-tax income change"
+          onMouseEnter={() => setSnapshotTooltip("Show after-tax income change")}
+          onMouseLeave={() => setSnapshotTooltip("")}
+          onFocus={() => setSnapshotTooltip("Show after-tax income change")}
+          onBlur={() => setSnapshotTooltip("")}
         >
           <SnapshotToggleIcon type="afterTax" />
         </button>
@@ -1974,7 +1979,11 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotBasis("beforeTax")}
           aria-label="Show before-tax change"
-          data-tooltip="Show before-tax income change"
+          title="Show before-tax income change"
+          onMouseEnter={() => setSnapshotTooltip("Show before-tax income change")}
+          onMouseLeave={() => setSnapshotTooltip("")}
+          onFocus={() => setSnapshotTooltip("Show before-tax income change")}
+          onBlur={() => setSnapshotTooltip("")}
         >
           <SnapshotToggleIcon type="beforeTax" />
         </button>
@@ -1985,7 +1994,11 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotView("monthly")}
           aria-label="Show monthly change"
-          data-tooltip="Show monthly change"
+          title="Show monthly change"
+          onMouseEnter={() => setSnapshotTooltip("Show monthly change")}
+          onMouseLeave={() => setSnapshotTooltip("")}
+          onFocus={() => setSnapshotTooltip("Show monthly change")}
+          onBlur={() => setSnapshotTooltip("")}
         >
           <SnapshotToggleIcon type="monthly" />
         </button>
@@ -1994,11 +2007,16 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotView("yearly")}
           aria-label="Show yearly change"
-          data-tooltip="Show yearly change"
+          title="Show yearly change"
+          onMouseEnter={() => setSnapshotTooltip("Show yearly change")}
+          onMouseLeave={() => setSnapshotTooltip("")}
+          onFocus={() => setSnapshotTooltip("Show yearly change")}
+          onBlur={() => setSnapshotTooltip("")}
         >
           <SnapshotToggleIcon type="yearly" />
         </button>
       </div>
+      {snapshotTooltip && <div className="income-snapshot__tooltip" role="tooltip">{snapshotTooltip}</div>}
     </div>
   );
 }
