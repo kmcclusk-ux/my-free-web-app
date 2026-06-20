@@ -1937,7 +1937,7 @@ function IncomeSnapshotControl({
   const selectedSuffix = snapshotView === "monthly" ? "/ month" : "/ year";
 
   return (
-    <div className={`income-snapshot ${className}`.trim()} aria-label="Income snapshot comparison">
+    <div className={`income-snapshot ${!snapshot ? "income-snapshot--empty" : ""} ${className}`.trim()} aria-label="Income snapshot comparison">
       <button
         className="income-snapshot__button"
         type="button"

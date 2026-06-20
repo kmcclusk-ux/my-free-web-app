@@ -161,6 +161,15 @@
   align-items: center;
   min-width: 220px;
 }
+.income-snapshot--empty .income-snapshot__body {
+  min-width: 0;
+}
+.income-snapshot--empty .income-snapshot__single-line {
+  gap: 0;
+}
+.income-snapshot--empty .income-snapshot__captured {
+  display: none;
+}
 .income-snapshot__single-line {
   display: flex;
   align-items: baseline;
