@@ -1965,7 +1965,7 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotBasis("afterTax")}
           aria-label="Show after-tax change"
-          title="After Tax"
+          data-tooltip="Show after-tax income change"
         >
           <SnapshotToggleIcon type="afterTax" />
         </button>
@@ -1974,7 +1974,7 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotBasis("beforeTax")}
           aria-label="Show before-tax change"
-          title="Before Tax"
+          data-tooltip="Show before-tax income change"
         >
           <SnapshotToggleIcon type="beforeTax" />
         </button>
@@ -1985,7 +1985,7 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotView("monthly")}
           aria-label="Show monthly change"
-          title="Monthly"
+          data-tooltip="Show monthly change"
         >
           <SnapshotToggleIcon type="monthly" />
         </button>
@@ -1994,7 +1994,7 @@ function IncomeSnapshotControl({
           type="button"
           onClick={() => setSnapshotView("yearly")}
           aria-label="Show yearly change"
-          title="Yearly"
+          data-tooltip="Show yearly change"
         >
           <SnapshotToggleIcon type="yearly" />
         </button>
