@@ -224,7 +224,7 @@ const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Move row", className: "drag-handle-heading", defaultWidth: 30, minWidth: 26 },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 58, minWidth: 54 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
   { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
@@ -762,6 +762,17 @@ function toNumber(value: number | string | boolean | null | undefined) {
     .trim();
   const parsed = Number(str);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function distributeAmountEvenly(total: number, count: number) {
+  const safeCount = Math.max(2, Math.trunc(count) || 2);
+  const totalCents = Math.round(toNumber(total) * 100);
+  const baseCents = Math.trunc(totalCents / safeCount);
+  const remainderCents = totalCents - baseCents * safeCount;
+  const remainderSign = Math.sign(remainderCents);
+  return Array.from({ length: safeCount }, (_, index) => (
+    baseCents + (index < Math.abs(remainderCents) ? remainderSign : 0)
+  ) / 100);
 }
 function normalizeRate(value: number | string | boolean | null | undefined) {
   const numeric = toNumber(value);
@@ -1953,7 +1964,7 @@ function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   );
 }
 
-function RowActionIcon({ name }: { name: "add" | "select" | "delete" }) {
+function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "split" }) {
   if (name === "add") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -1968,6 +1979,17 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" }) {
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M4.5 6.5h15v11h-15z" />
         <path d="m8 12 2.25 2.25L16 8.75" />
+      </svg>
+    );
+  }
+
+  if (name === "split") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 6.5h5v5H5z" />
+        <path d="M14 12.5h5v5h-5z" />
+        <path d="M10 9h2.5a4 4 0 0 1 4 4" />
+        <path d="m14.5 10.75 2 2.25 2-2.25" />
       </svg>
     );
   }
@@ -2709,7 +2731,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onSplit: (id: number, count: number) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -2758,6 +2780,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [renameTarget, setRenameTarget] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
+  const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
+  const [splitCount, setSplitCount] = useState(2);
   const [columnWidths, setColumnWidths] = useState<InvestmentColumnWidths>(() => {
     if (typeof window === "undefined") return DEFAULT_INVESTMENT_COLUMN_WIDTHS;
     try {
@@ -2871,6 +2895,25 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     onRemoveIncluded();
     setIsRemoveConfirmOpen(false);
   };
+  const openSplitDialog = (row: InvestmentRow) => {
+    setSplitTarget(row);
+    setSplitCount(2);
+  };
+  const closeSplitDialog = () => setSplitTarget(null);
+  const confirmSplitRow = () => {
+    if (!splitTarget) return;
+    const count = Math.min(20, Math.max(2, Math.trunc(splitCount) || 2));
+    onSplit(splitTarget.id, count);
+    closeSplitDialog();
+  };
+  useEffect(() => {
+    if (!splitTarget) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSplitTarget(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [splitTarget]);
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
     if (!name) return;
@@ -3176,6 +3219,34 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           </div>
         </div>
       )}
+      {splitTarget && createPortal(
+        <div className="split-row-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSplitDialog(); }}>
+          <div className="split-row-dialog" role="dialog" aria-modal="true" aria-labelledby="split-row-title">
+            <div className="split-row-dialog__header">
+              <div>
+                <p className="eyebrow">Investment Row</p>
+                <h3 id="split-row-title">Split {splitTarget.description || splitTarget.symbol || "investment"}</h3>
+              </div>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={closeSplitDialog}>Close</button>
+            </div>
+            <p className="split-row-dialog__copy">Creates identical rows and distributes the investment and stored yearly income evenly so portfolio totals stay unchanged.</p>
+            <label className="split-row-dialog__field">
+              <span>Number of rows</span>
+              <input type="number" min="2" max="20" step="1" value={splitCount} onChange={(event) => setSplitCount(Math.min(20, Math.max(2, Math.trunc(toNumber(event.target.value)) || 2)))} autoFocus />
+            </label>
+            <div className="split-row-dialog__summary">
+              <div><span>Original investment</span><strong>{formatCurrencyDetailed(splitTarget.totalInvestment)}</strong></div>
+              <div><span>Each row</span><strong>{formatCurrencyDetailed(splitTarget.totalInvestment / splitCount)}</strong></div>
+              <div><span>Rows created</span><strong>{splitCount}</strong></div>
+            </div>
+            <div className="split-row-dialog__actions">
+              <button className="ghost-button" type="button" onClick={closeSplitDialog}>Cancel</button>
+              <button className="primary-button" type="button" onClick={confirmSplitRow}>Split into {splitCount} rows</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className={tableClassName} style={tableStyle}>
           <colgroup>
@@ -3192,7 +3263,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
             {displayedRows.map((row) => {
               const derived = derivedMap[row.id];
               const investmentCells = {
-                move: <td key="move" className="drag-handle-cell"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>,
+                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
@@ -3572,6 +3643,27 @@ export default function App() {
         return { ...row, [field]: value };
       })
     );
+  };
+
+  const splitInvestmentRow = (id: number, requestedCount: number) => {
+    const count = Math.min(20, Math.max(2, Math.trunc(requestedCount) || 2));
+    setInvestments((current) => {
+      const sourceIndex = current.findIndex((row) => row.id === id);
+      if (sourceIndex < 0) return current;
+      const sourceRow = current[sourceIndex];
+      const investmentAmounts = distributeAmountEvenly(sourceRow.totalInvestment, count);
+      const yearlyIncomeAmounts = distributeAmountEvenly(sourceRow.yearlyIncome, count);
+      let nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1));
+      const splitRows = investmentAmounts.map((totalInvestment, index) => ({
+        ...sourceRow,
+        id: index === 0 ? sourceRow.id : nextId++,
+        spreadsheetRowNumber: index === 0 ? sourceRow.spreadsheetRowNumber : undefined,
+        totalInvestment,
+        yearlyIncome: yearlyIncomeAmounts[index],
+      }));
+      return [...current.slice(0, sourceIndex), ...splitRows, ...current.slice(sourceIndex + 1)];
+    });
+    setStorageState("ready");
   };
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
@@ -4797,6 +4889,7 @@ export default function App() {
             onRenameFavorite={renameFavorite}
             onChange={updateInvestmentRow}
             onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: overridePercentForSymbol(symbolOptions[1] || "") })}
+            onSplit={splitInvestmentRow}
             onReorder={reorderInvestments}
             onRemoveIncluded={() => {
               const removedIds = new Set(investments.filter((row) => row.includeIncome).map((row) => row.id));
