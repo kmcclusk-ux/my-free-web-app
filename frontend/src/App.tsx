@@ -5236,7 +5236,6 @@ export default function App() {
         <div className="content-topbar">
           <div className="content-topbar__title-group">
             <div>
-              <p className="eyebrow">Live Model</p>
               <h2 className={activeTab === "federal" ? "content-topbar__title content-topbar__title--federal" : activeTab === "state" ? "content-topbar__title content-topbar__title--state" : "content-topbar__title"}>
                 {activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}
                 {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
