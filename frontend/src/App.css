@@ -3298,7 +3298,7 @@
 }
 
 .split-row-dialog {
-  width: min(460px, 100%);
+  width: min(560px, 100%);
   padding: 20px;
   border: 1px solid var(--poly-line, #d7dde8);
   border-radius: 16px;
@@ -3348,6 +3348,65 @@
   outline: 3px solid rgba(37, 99, 235, 0.13);
 }
 
+.split-row-dialog__controls {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.split-row-dialog__allocations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  max-height: 260px;
+  margin-top: 16px;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.split-row-dialog__allocation {
+  display: grid;
+  gap: 5px;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.split-row-dialog__currency-input {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.split-row-dialog__currency-input:focus-within {
+  border-color: var(--poly-blue, #2563eb);
+  outline: 3px solid rgba(37, 99, 235, 0.13);
+}
+
+.split-row-dialog__currency-input > span {
+  padding-left: 10px;
+  color: #667085;
+}
+
+.split-row-dialog__currency-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px 9px 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+}
+
 .split-row-dialog__summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3360,6 +3419,15 @@
   padding: 10px;
   border-radius: 10px;
   background: #f5f7fb;
+}
+
+.split-row-dialog__summary > .split-row-dialog__summary--warning {
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.split-row-dialog__summary > .split-row-dialog__summary--warning strong {
+  color: #b42318;
 }
 
 .split-row-dialog__summary span,
@@ -3391,7 +3459,21 @@
   margin-top: 20px;
 }
 
+.split-row-dialog__warning {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.split-row-dialog__actions .primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 @media (max-width: 600px) {
   .split-row-overlay { padding: 14px; }
+  .split-row-dialog__controls { align-items: stretch; flex-direction: column; }
+  .split-row-dialog__allocations { grid-template-columns: 1fr; }
   .split-row-dialog__summary { grid-template-columns: 1fr; }
 }

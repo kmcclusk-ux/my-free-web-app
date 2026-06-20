@@ -774,6 +774,21 @@ function distributeAmountEvenly(total: number, count: number) {
     baseCents + (index < Math.abs(remainderCents) ? remainderSign : 0)
   ) / 100);
 }
+
+function distributeAmountProportionally(total: number, weights: number[]) {
+  if (weights.length === 0) return [];
+  const weightTotal = weights.reduce((sum, weight) => sum + toNumber(weight), 0);
+  if (Math.abs(weightTotal) < 0.005) return distributeAmountEvenly(total, weights.length);
+  const totalCents = Math.round(toNumber(total) * 100);
+  let allocatedCents = 0;
+  return weights.map((weight, index) => {
+    const cents = index === weights.length - 1
+      ? totalCents - allocatedCents
+      : Math.round(totalCents * toNumber(weight) / weightTotal);
+    allocatedCents += cents;
+    return cents / 100;
+  });
+}
 function normalizeRate(value: number | string | boolean | null | undefined) {
   const numeric = toNumber(value);
   return Math.abs(numeric) > 1 ? numeric / 100 : numeric;
@@ -2731,7 +2746,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onSplit: (id: number, count: number) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -2782,6 +2797,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
+  const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
   const [columnWidths, setColumnWidths] = useState<InvestmentColumnWidths>(() => {
     if (typeof window === "undefined") return DEFAULT_INVESTMENT_COLUMN_WIDTHS;
     try {
@@ -2898,12 +2914,24 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   const openSplitDialog = (row: InvestmentRow) => {
     setSplitTarget(row);
     setSplitCount(2);
+    setSplitAllocations(distributeAmountEvenly(row.totalInvestment, 2));
   };
   const closeSplitDialog = () => setSplitTarget(null);
-  const confirmSplitRow = () => {
+  const distributedTotal = splitAllocations.reduce((sum, amount) => sum + toNumber(amount), 0);
+  const allocationDifference = splitTarget ? Math.round((splitTarget.totalInvestment - distributedTotal) * 100) / 100 : 0;
+  const isAllocationBalanced = Math.abs(allocationDifference) < 0.005;
+  const resizeSplitAllocations = (count: number) => {
+    const safeCount = Math.min(20, Math.max(2, Math.trunc(count) || 2));
+    setSplitCount(safeCount);
+    setSplitAllocations((current) => Array.from({ length: safeCount }, (_, index) => current[index] ?? 0));
+  };
+  const distributeSplitEvenly = () => {
     if (!splitTarget) return;
-    const count = Math.min(20, Math.max(2, Math.trunc(splitCount) || 2));
-    onSplit(splitTarget.id, count);
+    setSplitAllocations(distributeAmountEvenly(splitTarget.totalInvestment, splitCount));
+  };
+  const confirmSplitRow = () => {
+    if (!splitTarget || !isAllocationBalanced) return;
+    onSplit(splitTarget.id, splitAllocations.map((amount) => Math.round(toNumber(amount) * 100) / 100));
     closeSplitDialog();
   };
   useEffect(() => {
@@ -3229,19 +3257,44 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               </div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={closeSplitDialog}>Close</button>
             </div>
-            <p className="split-row-dialog__copy">Creates identical rows and distributes the investment and stored yearly income evenly so portfolio totals stay unchanged.</p>
-            <label className="split-row-dialog__field">
-              <span>Number of rows</span>
-              <input type="number" min="2" max="20" step="1" value={splitCount} onChange={(event) => setSplitCount(Math.min(20, Math.max(2, Math.trunc(toNumber(event.target.value)) || 2)))} autoFocus />
-            </label>
+            <p className="split-row-dialog__copy">Creates identical rows with the investment amounts you assign. Stored yearly income is distributed proportionally so totals stay unchanged.</p>
+            <div className="split-row-dialog__controls">
+              <label className="split-row-dialog__field">
+                <span>Number of rows</span>
+                <input type="number" min="2" max="20" step="1" value={splitCount} onChange={(event) => resizeSplitAllocations(toNumber(event.target.value))} autoFocus />
+              </label>
+              <button className="ghost-button" type="button" onClick={distributeSplitEvenly}>Distribute evenly</button>
+            </div>
+            <div className="split-row-dialog__allocations">
+              {splitAllocations.map((amount, index) => (
+                <label className="split-row-dialog__allocation" key={index}>
+                  <span>Row {index + 1}</span>
+                  <div className="split-row-dialog__currency-input">
+                    <span>$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={amount}
+                      onChange={(event) => setSplitAllocations((current) => current.map((currentAmount, currentIndex) => currentIndex === index ? toNumber(event.target.value) : currentAmount))}
+                      aria-label={`Investment amount for split row ${index + 1}`}
+                    />
+                  </div>
+                </label>
+              ))}
+            </div>
             <div className="split-row-dialog__summary">
               <div><span>Original investment</span><strong>{formatCurrencyDetailed(splitTarget.totalInvestment)}</strong></div>
-              <div><span>Each row</span><strong>{formatCurrencyDetailed(splitTarget.totalInvestment / splitCount)}</strong></div>
-              <div><span>Rows created</span><strong>{splitCount}</strong></div>
+              <div className={!isAllocationBalanced ? "split-row-dialog__summary--warning" : ""}><span>Distributed</span><strong>{formatCurrencyDetailed(distributedTotal)}</strong></div>
+              <div className={!isAllocationBalanced ? "split-row-dialog__summary--warning" : ""}>
+                <span>{allocationDifference < 0 ? "Overallocated" : "Remaining"}</span>
+                <strong>{formatCurrencyDetailed(Math.abs(allocationDifference))}</strong>
+              </div>
             </div>
+            {!isAllocationBalanced && <p className="split-row-dialog__warning">Allocation must equal the original investment before the row can be split.</p>}
             <div className="split-row-dialog__actions">
               <button className="ghost-button" type="button" onClick={closeSplitDialog}>Cancel</button>
-              <button className="primary-button" type="button" onClick={confirmSplitRow}>Split into {splitCount} rows</button>
+              <button className="primary-button" type="button" onClick={confirmSplitRow} disabled={!isAllocationBalanced}>Split into {splitCount} rows</button>
             </div>
           </div>
         </div>,
@@ -3645,14 +3698,16 @@ export default function App() {
     );
   };
 
-  const splitInvestmentRow = (id: number, requestedCount: number) => {
-    const count = Math.min(20, Math.max(2, Math.trunc(requestedCount) || 2));
+  const splitInvestmentRow = (id: number, requestedAllocations: number[]) => {
+    const investmentAmounts = requestedAllocations.slice(0, 20).map((amount) => Math.round(toNumber(amount) * 100) / 100);
+    if (investmentAmounts.length < 2) return;
     setInvestments((current) => {
       const sourceIndex = current.findIndex((row) => row.id === id);
       if (sourceIndex < 0) return current;
       const sourceRow = current[sourceIndex];
-      const investmentAmounts = distributeAmountEvenly(sourceRow.totalInvestment, count);
-      const yearlyIncomeAmounts = distributeAmountEvenly(sourceRow.yearlyIncome, count);
+      const allocatedTotal = investmentAmounts.reduce((sum, amount) => sum + amount, 0);
+      if (Math.abs(allocatedTotal - sourceRow.totalInvestment) >= 0.005) return current;
+      const yearlyIncomeAmounts = distributeAmountProportionally(sourceRow.yearlyIncome, investmentAmounts);
       let nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1));
       const splitRows = investmentAmounts.map((totalInvestment, index) => ({
         ...sourceRow,
