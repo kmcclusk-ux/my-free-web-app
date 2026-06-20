@@ -4988,6 +4988,10 @@ export default function App() {
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
         <aside className="sidebar">
+          <div className="sidebar-history-controls" role="group" aria-label="Change history">
+            <button type="button" onClick={undoWorkbookChange} disabled={!canUndo} title="Undo last change (Ctrl+Z)" aria-label="Undo last change"><span aria-hidden="true">↶</span></button>
+            <button type="button" onClick={redoWorkbookChange} disabled={!canRedo} title="Redo last change (Ctrl+Y or Ctrl+Shift+Z)" aria-label="Redo last change"><span aria-hidden="true">↷</span></button>
+          </div>
           <nav className="sidebar__nav">
             {mainNavItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
             <button className={`nav-item nav-item--advanced-toggle ${isAdvancedNavOpen ? "nav-item--advanced-open" : ""}`} type="button" onClick={() => setIsAdvancedNavOpen((current) => !current)} aria-expanded={isAdvancedNavOpen}>
@@ -5011,16 +5015,6 @@ export default function App() {
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
           <div className="topbar-stack">
-            <div className="history-controls" role="group" aria-label="Change history">
-              <button className="history-control" type="button" onClick={undoWorkbookChange} disabled={!canUndo} title="Undo last change (Ctrl+Z)" aria-label="Undo last change">
-                <span aria-hidden="true">↶</span>
-                <strong>Undo</strong>
-              </button>
-              <button className="history-control" type="button" onClick={redoWorkbookChange} disabled={!canRedo} title="Redo last change (Ctrl+Y or Ctrl+Shift+Z)" aria-label="Redo last change">
-                <span aria-hidden="true">↷</span>
-                <strong>Redo</strong>
-              </button>
-            </div>
             {authEnabled ? (
               authState.status === "signedIn" ? (
                 mcpTokenMessage ? <div className="topbar-chip">{mcpTokenMessage}</div> : null
