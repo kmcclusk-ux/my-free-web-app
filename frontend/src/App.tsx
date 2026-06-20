@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import "./App.css";
 
@@ -197,6 +197,20 @@ type WorkbookResponse = {
   updatedAt?: string | null;
 };
 
+type PortfolioHistorySnapshot = {
+  investments: InvestmentRow[];
+  tickers: TickerRow[];
+  categories: CategoryRow[];
+  taxTreatments: TaxTreatmentRow[];
+  accounts: AccountRow[];
+  accountTaxTypes: AccountTaxTypeRow[];
+  federalSettings: FederalSettings;
+  stateSettings: StateSettings;
+  plannerSettings: PlannerSettings;
+  uiSettings: UiSettings;
+  isWhatIfActive: boolean;
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
@@ -218,6 +232,7 @@ const COGNITO_LOGOUT_URI = import.meta.env.VITE_COGNITO_LOGOUT_URI || COGNITO_RE
 const COGNITO_SCOPES = import.meta.env.VITE_COGNITO_SCOPES || "openid email profile";
 const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
 const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
+const WORKBOOK_HISTORY_LIMIT = 100;
 const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
@@ -3537,8 +3552,74 @@ export default function App() {
   const saveTimeout = useRef<number | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedStorage = useRef(false);
+  const historyRef = useRef<{ past: string[]; present: string; future: string[] }>({ past: [], present: "", future: [] });
+  const historyInitialized = useRef(false);
+  const isApplyingHistory = useRef(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
   const requiresSignIn = authEnabled && authState.status !== "signedIn";
+  const currentHistorySnapshot = useMemo<PortfolioHistorySnapshot>(() => ({
+    investments,
+    tickers,
+    categories,
+    taxTreatments,
+    accounts,
+    accountTaxTypes,
+    federalSettings,
+    stateSettings,
+    plannerSettings,
+    uiSettings,
+    isWhatIfActive,
+  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, isWhatIfActive]);
+  const currentHistorySerialized = useMemo(() => JSON.stringify(currentHistorySnapshot), [currentHistorySnapshot]);
+
+  const resetHistoryTracking = useCallback(() => {
+    historyRef.current = { past: [], present: "", future: [] };
+    historyInitialized.current = false;
+    isApplyingHistory.current = false;
+    setHistoryVersion((version) => version + 1);
+  }, []);
+
+  const applyHistorySnapshot = useCallback((serialized: string) => {
+    const snapshot = JSON.parse(serialized) as PortfolioHistorySnapshot;
+    isApplyingHistory.current = true;
+    setInvestments(snapshot.investments);
+    setTickers(snapshot.tickers);
+    setCategories(snapshot.categories);
+    setTaxTreatments(snapshot.taxTreatments);
+    setAccounts(snapshot.accounts);
+    setAccountTaxTypes(snapshot.accountTaxTypes);
+    setFederalSettings(snapshot.federalSettings);
+    setStateSettings(snapshot.stateSettings);
+    setPlannerSettings(snapshot.plannerSettings);
+    setUiSettings(snapshot.uiSettings);
+    setIsWhatIfActive(snapshot.isWhatIfActive);
+    setStorageState("ready");
+  }, []);
+
+  const undoWorkbookChange = useCallback(() => {
+    const history = historyRef.current;
+    const previous = history.past.pop();
+    if (!previous) return;
+    if (history.present) history.future.push(history.present);
+    history.present = previous;
+    applyHistorySnapshot(previous);
+    setHistoryVersion((version) => version + 1);
+  }, [applyHistorySnapshot]);
+
+  const redoWorkbookChange = useCallback(() => {
+    const history = historyRef.current;
+    const next = history.future.pop();
+    if (!next) return;
+    if (history.present) history.past.push(history.present);
+    history.present = next;
+    applyHistorySnapshot(next);
+    setHistoryVersion((version) => version + 1);
+  }, [applyHistorySnapshot]);
+
+  void historyVersion;
+  const canUndo = historyRef.current.past.length > 0;
+  const canRedo = historyRef.current.future.length > 0;
 
   useEffect(() => {
     if (!authEnabled) return;
@@ -3871,11 +3952,14 @@ export default function App() {
   useEffect(() => {
     if (authEnabled && authState.status !== "signedIn") {
       hasLoadedStorage.current = false;
+      resetHistoryTracking();
       setStorageState(authState.status === "loading" ? "loading" : "ready");
       return;
     }
 
     let cancelled = false;
+    hasLoadedStorage.current = false;
+    resetHistoryTracking();
     setStorageState("loading");
     loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
       if (cancelled) return;
@@ -3918,7 +4002,50 @@ export default function App() {
       hasLoadedStorage.current = true;
     });
     return () => { cancelled = true; };
-  }, [authEnabled, authState.status, authToken]);
+  }, [authEnabled, authState.status, authToken, resetHistoryTracking]);
+
+  useEffect(() => {
+    if (!hasLoadedStorage.current) return;
+    const history = historyRef.current;
+    if (!historyInitialized.current) {
+      history.present = currentHistorySerialized;
+      historyInitialized.current = true;
+      setHistoryVersion((version) => version + 1);
+      return;
+    }
+    if (isApplyingHistory.current) {
+      isApplyingHistory.current = false;
+      history.present = currentHistorySerialized;
+      return;
+    }
+    if (history.present === currentHistorySerialized) return;
+    if (history.present) {
+      history.past.push(history.present);
+      if (history.past.length > WORKBOOK_HISTORY_LIMIT) history.past.shift();
+    }
+    history.present = currentHistorySerialized;
+    history.future = [];
+    setHistoryVersion((version) => version + 1);
+  }, [currentHistorySerialized]);
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], .split-row-dialog")) return;
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redoWorkbookChange();
+        else undoWorkbookChange();
+      } else if (key === "y") {
+        event.preventDefault();
+        redoWorkbookChange();
+      }
+    };
+    document.addEventListener("keydown", handleHistoryShortcut);
+    return () => document.removeEventListener("keydown", handleHistoryShortcut);
+  }, [redoWorkbookChange, undoWorkbookChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4884,6 +5011,16 @@ export default function App() {
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
           <div className="topbar-stack">
+            <div className="history-controls" role="group" aria-label="Change history">
+              <button className="history-control" type="button" onClick={undoWorkbookChange} disabled={!canUndo} title="Undo last change (Ctrl+Z)" aria-label="Undo last change">
+                <span aria-hidden="true">↶</span>
+                <strong>Undo</strong>
+              </button>
+              <button className="history-control" type="button" onClick={redoWorkbookChange} disabled={!canRedo} title="Redo last change (Ctrl+Y or Ctrl+Shift+Z)" aria-label="Redo last change">
+                <span aria-hidden="true">↷</span>
+                <strong>Redo</strong>
+              </button>
+            </div>
             {authEnabled ? (
               authState.status === "signedIn" ? (
                 mcpTokenMessage ? <div className="topbar-chip">{mcpTokenMessage}</div> : null
