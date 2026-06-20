@@ -1878,16 +1878,16 @@ function SnapshotValue({ label, delta, suffix }: { label: string; delta: number;
 function SnapshotToggleIcon({ type }: { type: "afterTax" | "beforeTax" | "monthly" | "yearly" }) {
   if (type === "afterTax") {
     return <svg className="snapshot-coin-stack" viewBox="0 0 20 20" aria-hidden="true">
-      <path className="snapshot-coin snapshot-coin--gold" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--gold" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <ellipse className="snapshot-coin snapshot-coin--gold" cx="10" cy="14.5" rx="6" ry="1.55" />
+      <ellipse className="snapshot-coin snapshot-coin--gold" cx="10" cy="11.2" rx="6" ry="1.55" />
     </svg>;
   }
   if (type === "beforeTax") {
     return <svg className="snapshot-coin-stack" viewBox="0 0 20 20" aria-hidden="true">
-      <path className="snapshot-coin snapshot-coin--gold" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--gold" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--gold" d="M4 6.8c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--gold" d="M4 3.5c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6V5c0 .9-2.7 1.6-6 1.6S4 5.9 4 5z" />
+      <ellipse className="snapshot-coin snapshot-coin--gold" cx="10" cy="14.5" rx="6" ry="1.55" />
+      <ellipse className="snapshot-coin snapshot-coin--gold" cx="10" cy="11.2" rx="6" ry="1.55" />
+      <ellipse className="snapshot-coin snapshot-coin--gold" cx="10" cy="7.9" rx="6" ry="1.55" />
+      <ellipse className="snapshot-coin snapshot-coin--gold" cx="10" cy="4.6" rx="6" ry="1.55" />
     </svg>;
   }
   if (type === "monthly") {
