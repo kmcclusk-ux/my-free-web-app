@@ -1891,9 +1891,19 @@ function SnapshotToggleIcon({ type }: { type: "afterTax" | "beforeTax" | "monthl
     </svg>;
   }
   if (type === "monthly") {
-    return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M6.5 3v3M13.5 3v3M3.5 8h13" /><path d="M7 11h2v2H7z" /></svg>;
+    return <svg className="snapshot-calendar-icon" viewBox="0 0 20 20" aria-hidden="true">
+      <rect className="snapshot-calendar-front" x="3.5" y="4.5" width="13" height="12" rx="1.5" />
+      <path d="M6.5 3v3M13.5 3v3M3.5 8h13" />
+      <path d="M6.5 10.5h1M9.5 10.5h1M12.5 10.5h1M6.5 13.5h1M9.5 13.5h1M12.5 13.5h1" />
+    </svg>;
   }
-  return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M6.5 3v3M13.5 3v3M3.5 8h13" /><path d="M6.5 10.5h1M9.5 10.5h1M12.5 10.5h1M6.5 13.5h1M9.5 13.5h1M12.5 13.5h1" /></svg>;
+  return <svg className="snapshot-calendar-icon snapshot-calendar-icon--stacked" viewBox="0 0 20 20" aria-hidden="true">
+    <rect className="snapshot-calendar-back snapshot-calendar-back--rear" x="1.8" y="1.8" width="12" height="11" rx="1.4" />
+    <rect className="snapshot-calendar-back" x="3.3" y="3.3" width="12" height="11" rx="1.4" />
+    <rect className="snapshot-calendar-front" x="4.8" y="4.8" width="12.5" height="11.5" rx="1.4" />
+    <path d="M7.5 3.5v3M14.4 3.5v3M4.8 8.3h12.5" />
+    <path d="M7.5 10.7h1M10.3 10.7h1M13.1 10.7h1M7.5 13.4h1M10.3 13.4h1M13.1 13.4h1" />
+  </svg>;
 }
 
 function IncomeSnapshotControl({

@@ -350,6 +350,25 @@
   fill: #ef6b6b;
   stroke: #a43d3d;
 }
+.income-snapshot__toggle-button .snapshot-calendar-front {
+  fill: #fff;
+  stroke: currentColor;
+}
+.income-snapshot__toggle-button .snapshot-calendar-back {
+  fill: #dbe4eb;
+  stroke: currentColor;
+  opacity: .82;
+}
+.income-snapshot__toggle-button .snapshot-calendar-back--rear {
+  fill: #cbd7e1;
+  opacity: .68;
+}
+.income-snapshot__toggle-button--active .snapshot-calendar-front {
+  fill: #29434c;
+}
+.income-snapshot__toggle-button--active .snapshot-calendar-back {
+  fill: #49616a;
+}
 .income-snapshot__toggle-button:hover,
 .income-snapshot__toggle-button:focus-visible {
   background: rgba(255, 255, 255, .1);
