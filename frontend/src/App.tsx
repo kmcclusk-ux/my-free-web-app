@@ -77,7 +77,22 @@ type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
-type UiSettings = { investmentFavorites: InvestmentFavorite[] };
+type ModelUiSnapshot = { investmentFavorites: InvestmentFavorite[] };
+type ModelDataSnapshot = {
+  investments: InvestmentRow[];
+  tickers: TickerRow[];
+  categories: CategoryRow[];
+  taxTreatments: TaxTreatmentRow[];
+  accounts: AccountRow[];
+  accountTaxTypes: AccountTaxTypeRow[];
+  federalSettings: FederalSettings;
+  stateSettings: StateSettings;
+  plannerSettings: PlannerSettings;
+  uiSettings: ModelUiSnapshot;
+  isWhatIfActive: boolean;
+};
+type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
+type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[] };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string };
@@ -197,19 +212,7 @@ type WorkbookResponse = {
   updatedAt?: string | null;
 };
 
-type PortfolioHistorySnapshot = {
-  investments: InvestmentRow[];
-  tickers: TickerRow[];
-  categories: CategoryRow[];
-  taxTreatments: TaxTreatmentRow[];
-  accounts: AccountRow[];
-  accountTaxTypes: AccountTaxTypeRow[];
-  federalSettings: FederalSettings;
-  stateSettings: StateSettings;
-  plannerSettings: PlannerSettings;
-  uiSettings: UiSettings;
-  isWhatIfActive: boolean;
-};
+type PortfolioHistorySnapshot = ModelDataSnapshot;
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const WORKSPACE_ID = "default";
@@ -233,6 +236,7 @@ const COGNITO_SCOPES = import.meta.env.VITE_COGNITO_SCOPES || "openid email prof
 const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
 const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
 const WORKBOOK_HISTORY_LIMIT = 100;
+const MODEL_VERSION_LIMIT = 10;
 const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
@@ -761,7 +765,7 @@ const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "def
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, stateIncomeTax: 5153, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 0, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [] };
+const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [] };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1131,6 +1135,42 @@ function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
   }
   return favorites;
 }
+
+function normalizeModelVersions(raw: unknown): ModelVersion[] {
+  if (!Array.isArray(raw)) return [];
+  const versions: ModelVersion[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const obj = entry as Record<string, unknown>;
+    const snapshot = obj.snapshot && typeof obj.snapshot === "object" ? obj.snapshot as Record<string, unknown> : null;
+    const name = normalizeFavoriteName(obj.name);
+    if (!snapshot || !name) continue;
+    if (![snapshot.investments, snapshot.tickers, snapshot.categories, snapshot.taxTreatments, snapshot.accounts, snapshot.accountTaxTypes].every(Array.isArray)) continue;
+    const createdAt = String(obj.createdAt || new Date().toISOString());
+    versions.push({
+      id: String(obj.id || `version-${createdAt}-${versions.length}`),
+      name,
+      createdAt,
+      updatedAt: String(obj.updatedAt || createdAt),
+      snapshot: {
+        investments: snapshot.investments as InvestmentRow[],
+        tickers: snapshot.tickers as TickerRow[],
+        categories: snapshot.categories as CategoryRow[],
+        taxTreatments: snapshot.taxTreatments as TaxTreatmentRow[],
+        accounts: snapshot.accounts as AccountRow[],
+        accountTaxTypes: snapshot.accountTaxTypes as AccountTaxTypeRow[],
+        federalSettings: mergeSettings(initialFederalSettings, snapshot.federalSettings),
+        stateSettings: mergeSettings(initialStateSettings, snapshot.stateSettings),
+        plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
+        uiSettings: {
+          investmentFavorites: normalizeInvestmentFavorites((snapshot.uiSettings as Record<string, unknown> | undefined)?.investmentFavorites),
+        },
+        isWhatIfActive: Boolean(snapshot.isWhatIfActive),
+      },
+    });
+  }
+  return versions.slice(0, MODEL_VERSION_LIMIT);
+}
 function normalizeFilingStatus(value: unknown): FilingStatus {
   const status = String(value || "single").trim().toLowerCase();
   return status === "mfj" || status === "mfs" || status === "hoh" ? status : "single";
@@ -1311,6 +1351,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
   const sectionObj = section as Record<string, unknown>;
   return {
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
+    modelVersions: normalizeModelVersions(sectionObj.modelVersions),
   };
 }
 
@@ -1329,6 +1370,7 @@ function parseWorkbookSettings(settings: unknown) {
       investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
         ? ui.investmentFavorites
         : legacyFavorites,
+      modelVersions: ui.modelVersions || [],
     },
   };
 }
@@ -2035,7 +2077,7 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "split" }
   );
 }
 
-function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" }) {
+function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" }) {
   if (name === "menu") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2051,6 +2093,16 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M9 9h8v8H9z" />
         <path d="M7 15H5V5h10v2" />
+      </svg>
+    );
+  }
+
+  if (name === "history") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 8V4m0 0h4M5 4l3 3" />
+        <path d="M6.5 17.5A8 8 0 1 0 5 8" />
+        <path d="M12 8v4l3 2" />
       </svg>
     );
   }
@@ -3546,6 +3598,11 @@ export default function App() {
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
+  const [versionDialogMode, setVersionDialogMode] = useState<"save" | "restore" | null>(null);
+  const [versionName, setVersionName] = useState("");
+  const [versionDialogError, setVersionDialogError] = useState("");
+  const [renamingVersionId, setRenamingVersionId] = useState("");
+  const [renameVersionValue, setRenameVersionValue] = useState("");
   const [isCameraFlashing, setIsCameraFlashing] = useState(false);
   const [cameraFlashOrigin, setCameraFlashOrigin] = useState({ x: window.innerWidth - 154, y: 108 });
   const [incomeSnapshot, setIncomeSnapshot] = useState<IncomeSnapshot | null>(null);
@@ -3568,9 +3625,9 @@ export default function App() {
     federalSettings,
     stateSettings,
     plannerSettings,
-    uiSettings,
+    uiSettings: { investmentFavorites: uiSettings.investmentFavorites },
     isWhatIfActive,
-  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, isWhatIfActive]);
+  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings.investmentFavorites, isWhatIfActive]);
   const currentHistorySerialized = useMemo(() => JSON.stringify(currentHistorySnapshot), [currentHistorySnapshot]);
 
   const resetHistoryTracking = useCallback(() => {
@@ -3580,9 +3637,8 @@ export default function App() {
     setHistoryVersion((version) => version + 1);
   }, []);
 
-  const applyHistorySnapshot = useCallback((serialized: string) => {
-    const snapshot = JSON.parse(serialized) as PortfolioHistorySnapshot;
-    isApplyingHistory.current = true;
+  const applyModelDataSnapshot = useCallback((snapshot: ModelDataSnapshot, suppressHistory = false) => {
+    if (suppressHistory) isApplyingHistory.current = true;
     setInvestments(snapshot.investments);
     setTickers(snapshot.tickers);
     setCategories(snapshot.categories);
@@ -3592,10 +3648,17 @@ export default function App() {
     setFederalSettings(snapshot.federalSettings);
     setStateSettings(snapshot.stateSettings);
     setPlannerSettings(snapshot.plannerSettings);
-    setUiSettings(snapshot.uiSettings);
+    setUiSettings((current) => ({
+      investmentFavorites: snapshot.uiSettings.investmentFavorites,
+      modelVersions: current.modelVersions,
+    }));
     setIsWhatIfActive(snapshot.isWhatIfActive);
     setStorageState("ready");
   }, []);
+
+  const applyHistorySnapshot = useCallback((serialized: string) => {
+    applyModelDataSnapshot(JSON.parse(serialized) as PortfolioHistorySnapshot, true);
+  }, [applyModelDataSnapshot]);
 
   const undoWorkbookChange = useCallback(() => {
     const history = historyRef.current;
@@ -3659,6 +3722,15 @@ export default function App() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [isTopbarMenuOpen]);
+
+  useEffect(() => {
+    if (!versionDialogMode) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeVersionDialog();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [versionDialogMode]);
 
   const copyChatGptConnectorUrl = async () => {
     if (!authToken) {
@@ -3993,6 +4065,7 @@ export default function App() {
       setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
       setUiSettings({
         investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
+        modelVersions: workbookSettings.ui?.modelVersions || [],
       });
       hasLoadedStorage.current = true;
       setStorageState("ready");
@@ -4163,6 +4236,95 @@ export default function App() {
     window.setTimeout(() => setIsCameraFlashing(true), 0);
     window.setTimeout(() => setIsCameraFlashing(false), 640);
   };
+  const closeVersionDialog = () => {
+    setVersionDialogMode(null);
+    setVersionDialogError("");
+    setRenamingVersionId("");
+    setRenameVersionValue("");
+  };
+  const openSaveVersionDialog = () => {
+    const defaultName = `Version ${new Date().toLocaleString([], { dateStyle: "short", timeStyle: "short" })}`;
+    setIsTopbarMenuOpen(false);
+    setVersionName(defaultName);
+    setVersionDialogError("");
+    setVersionDialogMode("save");
+  };
+  const openRestoreVersionDialog = () => {
+    setIsTopbarMenuOpen(false);
+    setVersionDialogError("");
+    setRenamingVersionId("");
+    setVersionDialogMode("restore");
+  };
+  const saveNamedModelVersion = () => {
+    const name = normalizeFavoriteName(versionName);
+    if (!name) {
+      setVersionDialogError("Enter a version name.");
+      return;
+    }
+    if (uiSettings.modelVersions.some((version) => normalizeLookupKey(version.name) === normalizeLookupKey(name))) {
+      setVersionDialogError("A version with this name already exists.");
+      return;
+    }
+    if (uiSettings.modelVersions.length >= MODEL_VERSION_LIMIT) {
+      setVersionDialogError(`You can save up to ${MODEL_VERSION_LIMIT} versions. Delete one before saving another.`);
+      return;
+    }
+    const now = new Date().toISOString();
+    const nextVersion: ModelVersion = {
+      id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `version-${Date.now()}`,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      snapshot: JSON.parse(currentHistorySerialized) as ModelDataSnapshot,
+    };
+    setUiSettings((current) => ({ ...current, modelVersions: [nextVersion, ...current.modelVersions] }));
+    setStorageState("ready");
+    closeVersionDialog();
+  };
+  const restoreNamedModelVersion = (versionId: string) => {
+    const version = uiSettings.modelVersions.find((entry) => entry.id === versionId);
+    if (!version) {
+      setVersionDialogError("That saved version is no longer available.");
+      return;
+    }
+    applyModelDataSnapshot(JSON.parse(JSON.stringify(version.snapshot)) as ModelDataSnapshot);
+    closeVersionDialog();
+  };
+  const beginRenameModelVersion = (version: ModelVersion) => {
+    setRenamingVersionId(version.id);
+    setRenameVersionValue(version.name);
+    setVersionDialogError("");
+  };
+  const saveRenamedModelVersion = () => {
+    const name = normalizeFavoriteName(renameVersionValue);
+    if (!name) {
+      setVersionDialogError("Enter a version name.");
+      return;
+    }
+    const nameKey = normalizeLookupKey(name);
+    if (uiSettings.modelVersions.some((version) => version.id !== renamingVersionId && normalizeLookupKey(version.name) === nameKey)) {
+      setVersionDialogError("A version with this name already exists.");
+      return;
+    }
+    setUiSettings((current) => ({
+      ...current,
+      modelVersions: current.modelVersions.map((version) => version.id === renamingVersionId
+        ? { ...version, name, updatedAt: new Date().toISOString() }
+        : version),
+    }));
+    setRenamingVersionId("");
+    setRenameVersionValue("");
+    setVersionDialogError("");
+    setStorageState("ready");
+  };
+  const deleteNamedModelVersion = (versionId: string) => {
+    setUiSettings((current) => ({ ...current, modelVersions: current.modelVersions.filter((version) => version.id !== versionId) }));
+    if (renamingVersionId === versionId) {
+      setRenamingVersionId("");
+      setRenameVersionValue("");
+    }
+    setStorageState("ready");
+  };
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
       <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
@@ -4209,6 +4371,14 @@ export default function App() {
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsSheetPanelOpen((current) => !current); }}>
             <TopbarActionIcon name="sheet" />
             <span>{isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
+            <TopbarActionIcon name="copy" />
+            <span>Save Version</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={openRestoreVersionDialog}>
+            <TopbarActionIcon name="history" />
+            <span>Restore Version</span>
           </button>
           <a className="topbar-menu__item" href={CHATGPT_URL} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setIsTopbarMenuOpen(false)}>
             <TopbarActionIcon name="chat" />
@@ -4981,6 +5151,67 @@ export default function App() {
         >
           <span className="camera-flash__source" />
         </div>
+      )}
+      {versionDialogMode && createPortal(
+        <div className="model-version-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeVersionDialog(); }}>
+          <section className="model-version-dialog" role="dialog" aria-modal="true" aria-labelledby="model-version-title">
+            <div className="model-version-dialog__header">
+              <div>
+                <p className="eyebrow">Entire Data Model</p>
+                <h3 id="model-version-title">{versionDialogMode === "save" ? "Save Version" : "Restore Version"}</h3>
+              </div>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={closeVersionDialog}>Close</button>
+            </div>
+            {versionDialogMode === "save" ? (
+              <>
+                <p className="model-version-dialog__copy">Save every investment, account, asset, lookup table, tax setting, planner setting, favorite, and WhatIf selection as one named version.</p>
+                <label className="model-version-dialog__field">
+                  <span>Version name</span>
+                  <input value={versionName} onChange={(event) => { setVersionName(event.target.value); setVersionDialogError(""); }} onKeyDown={(event) => { if (event.key === "Enter") saveNamedModelVersion(); }} autoFocus />
+                </label>
+                <div className="model-version-dialog__capacity">{uiSettings.modelVersions.length} of {MODEL_VERSION_LIMIT} versions saved</div>
+                {versionDialogError && <p className="model-version-dialog__error">{versionDialogError}</p>}
+                <div className="model-version-dialog__actions">
+                  <button className="ghost-button" type="button" onClick={closeVersionDialog}>Cancel</button>
+                  <button className="primary-button" type="button" onClick={saveNamedModelVersion}>Save Version</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="model-version-dialog__copy">Restoring replaces the current data model. You can immediately undo the restore from the header controls.</p>
+                {versionDialogError && <p className="model-version-dialog__error">{versionDialogError}</p>}
+                <div className="model-version-list">
+                  {uiSettings.modelVersions.length === 0 && <div className="model-version-list__empty">No saved versions yet.</div>}
+                  {uiSettings.modelVersions.map((version) => (
+                    <div className="model-version-row" key={version.id}>
+                      <div className="model-version-row__identity">
+                        {renamingVersionId === version.id ? (
+                          <input value={renameVersionValue} onChange={(event) => setRenameVersionValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveRenamedModelVersion(); }} aria-label={`Rename ${version.name}`} autoFocus />
+                        ) : <strong>{version.name}</strong>}
+                        <small>Saved {new Date(version.createdAt).toLocaleString()}</small>
+                      </div>
+                      <div className="model-version-row__actions">
+                        {renamingVersionId === version.id ? (
+                          <>
+                            <button className="ghost-button ghost-button--compact" type="button" onClick={saveRenamedModelVersion}>Save name</button>
+                            <button className="ghost-button ghost-button--compact" type="button" onClick={() => { setRenamingVersionId(""); setRenameVersionValue(""); setVersionDialogError(""); }}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="primary-button primary-button--compact" type="button" onClick={() => restoreNamedModelVersion(version.id)}>Restore</button>
+                            <button className="ghost-button ghost-button--compact" type="button" onClick={() => beginRenameModelVersion(version)}>Rename</button>
+                            <button className="ghost-button ghost-button--compact model-version-row__delete" type="button" onClick={() => deleteNamedModelVersion(version.id)}>Delete</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        </div>,
+        document.body
       )}
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
