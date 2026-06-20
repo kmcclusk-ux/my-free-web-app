@@ -4170,6 +4170,10 @@ export default function App() {
         <AfterTaxUSMark className="app-action-menu__mark" idSuffix="menu" />
         <span className="app-action-menu__brand">AfterTax US</span>
       </button>
+      <div className="header-history-controls" role="group" aria-label="Change history">
+        <button type="button" onClick={undoWorkbookChange} disabled={!canUndo} title="Undo last change (Ctrl+Z)" aria-label="Undo last change"><span aria-hidden="true">↶</span></button>
+        <button type="button" onClick={redoWorkbookChange} disabled={!canRedo} title="Redo last change (Ctrl+Y or Ctrl+Shift+Z)" aria-label="Redo last change"><span aria-hidden="true">↷</span></button>
+      </div>
       {isTopbarMenuOpen && (
         <div className="topbar-menu__panel" role="menu" aria-label="Application actions">
           {authEnabled ? (
@@ -4988,10 +4992,6 @@ export default function App() {
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
         <aside className="sidebar">
-          <div className="sidebar-history-controls" role="group" aria-label="Change history">
-            <button type="button" onClick={undoWorkbookChange} disabled={!canUndo} title="Undo last change (Ctrl+Z)" aria-label="Undo last change"><span aria-hidden="true">↶</span></button>
-            <button type="button" onClick={redoWorkbookChange} disabled={!canRedo} title="Redo last change (Ctrl+Y or Ctrl+Shift+Z)" aria-label="Redo last change"><span aria-hidden="true">↷</span></button>
-          </div>
           <nav className="sidebar__nav">
             {mainNavItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
             <button className={`nav-item nav-item--advanced-toggle ${isAdvancedNavOpen ? "nav-item--advanced-open" : ""}`} type="button" onClick={() => setIsAdvancedNavOpen((current) => !current)} aria-expanded={isAdvancedNavOpen}>
