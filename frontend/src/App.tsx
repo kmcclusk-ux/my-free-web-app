@@ -3266,22 +3266,29 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               <button className="ghost-button" type="button" onClick={distributeSplitEvenly}>Distribute evenly</button>
             </div>
             <div className="split-row-dialog__allocations">
-              {splitAllocations.map((amount, index) => (
-                <label className="split-row-dialog__allocation" key={index}>
-                  <span>Row {index + 1}</span>
-                  <div className="split-row-dialog__currency-input">
-                    <span>$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={amount}
-                      onChange={(event) => setSplitAllocations((current) => current.map((currentAmount, currentIndex) => currentIndex === index ? toNumber(event.target.value) : currentAmount))}
-                      aria-label={`Investment amount for split row ${index + 1}`}
-                    />
-                  </div>
-                </label>
-              ))}
+              <table className="split-row-dialog__allocation-table">
+                <thead><tr><th>Row</th><th>Investment amount</th></tr></thead>
+                <tbody>
+                  {splitAllocations.map((amount, index) => (
+                    <tr key={index}>
+                      <td className="split-row-dialog__row-number">{index + 1}</td>
+                      <td>
+                        <div className="split-row-dialog__currency-input">
+                          <span>$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={amount}
+                            onChange={(event) => setSplitAllocations((current) => current.map((currentAmount, currentIndex) => currentIndex === index ? toNumber(event.target.value) : currentAmount))}
+                            aria-label={`Investment amount for split row ${index + 1}`}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             <div className="split-row-dialog__summary">
               <div><span>Original investment</span><strong>{formatCurrencyDetailed(splitTarget.totalInvestment)}</strong></div>

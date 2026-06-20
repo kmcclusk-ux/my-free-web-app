@@ -3356,32 +3356,76 @@
 }
 
 .split-row-dialog__allocations {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
   max-height: 260px;
   margin-top: 16px;
-  padding: 12px;
   overflow-y: auto;
   border: 1px solid var(--poly-line, #d7dde8);
-  border-radius: 12px;
-  background: #f8fafc;
+  border-radius: 9px;
+  background: #fff;
 }
 
-.split-row-dialog__allocation {
-  display: grid;
-  gap: 5px;
+.split-row-dialog__allocation-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.split-row-dialog__allocation-table th,
+.split-row-dialog__allocation-table td {
+  height: 38px;
+  padding: 0 10px;
+  border-right: 1px solid var(--poly-line, #d7dde8);
+  border-bottom: 1px solid var(--poly-line, #d7dde8);
+  background: #fff;
+}
+
+.split-row-dialog__allocation-table th:last-child,
+.split-row-dialog__allocation-table td:last-child {
+  border-right: 0;
+}
+
+.split-row-dialog__allocation-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.split-row-dialog__allocation-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 32px;
+  background: #eef2f7;
   color: #475467;
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.split-row-dialog__allocation-table th:first-child {
+  width: 64px;
+  text-align: center;
+}
+
+.split-row-dialog__allocation-table th:last-child {
+  text-align: right;
+}
+
+.split-row-dialog__row-number {
+  background: #f8fafc !important;
+  color: #667085;
+  font-size: 12px;
   font-weight: 800;
+  text-align: center;
 }
 
 .split-row-dialog__currency-input {
   display: flex;
   align-items: center;
   overflow: hidden;
-  border: 1px solid var(--poly-line, #d7dde8);
-  border-radius: 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: #fff;
 }
 
@@ -3405,6 +3449,7 @@
   color: #172033;
   font: inherit;
   font-size: 13px;
+  text-align: right;
 }
 
 .split-row-dialog__summary {
@@ -3474,6 +3519,5 @@
 @media (max-width: 600px) {
   .split-row-overlay { padding: 14px; }
   .split-row-dialog__controls { align-items: stretch; flex-direction: column; }
-  .split-row-dialog__allocations { grid-template-columns: 1fr; }
   .split-row-dialog__summary { grid-template-columns: 1fr; }
 }
