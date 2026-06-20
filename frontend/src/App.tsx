@@ -3263,7 +3263,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
               </div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={closeSplitDialog}>Close</button>
             </div>
-            <p className="split-row-dialog__copy">Creates identical rows with the investment amounts you assign. Stored yearly income is distributed proportionally so totals stay unchanged.</p>
+            <p className="split-row-dialog__copy">Creates new rows using the same investment details and the amounts you assign. Stored yearly income is allocated proportionally so the combined totals remain unchanged.</p>
             <div className="split-row-dialog__controls">
               <label className="split-row-dialog__field">
                 <span>Number of rows</span>
