@@ -3298,7 +3298,7 @@
 }
 
 .split-row-dialog {
-  width: min(560px, 100%);
+  width: min(660px, 100%);
   padding: 20px;
   border: 1px solid var(--poly-line, #d7dde8);
   border-radius: 16px;
@@ -3408,8 +3408,13 @@
   text-align: center;
 }
 
-.split-row-dialog__allocation-table th:last-child {
+.split-row-dialog__allocation-table th:nth-child(2) {
   text-align: right;
+}
+
+.split-row-dialog__allocation-table th:last-child {
+  width: 164px;
+  text-align: center;
 }
 
 .split-row-dialog__row-number {
@@ -3418,6 +3423,38 @@
   font-size: 12px;
   font-weight: 800;
   text-align: center;
+}
+
+.split-row-dialog__balance-cell {
+  text-align: center;
+}
+
+.split-row-dialog__balance-button {
+  width: 100%;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-row-dialog__balance-button--subtract {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.split-row-dialog__balance-button:disabled {
+  border-color: #e4e7ec;
+  background: #f2f4f7;
+  color: #98a2b3;
+  cursor: not-allowed;
 }
 
 .split-row-dialog__currency-input {

@@ -2929,6 +2929,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
     if (!splitTarget) return;
     setSplitAllocations(distributeAmountEvenly(splitTarget.totalInvestment, splitCount));
   };
+  const applyAllocationDifferenceToRow = (targetIndex: number) => {
+    if (isAllocationBalanced) return;
+    setSplitAllocations((current) => current.map((amount, index) => index === targetIndex
+      ? Math.max(0, Math.round((toNumber(amount) + allocationDifference) * 100) / 100)
+      : amount));
+  };
   const confirmSplitRow = () => {
     if (!splitTarget || !isAllocationBalanced) return;
     onSplit(splitTarget.id, splitAllocations.map((amount) => Math.round(toNumber(amount) * 100) / 100));
@@ -3267,7 +3273,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
             </div>
             <div className="split-row-dialog__allocations">
               <table className="split-row-dialog__allocation-table">
-                <thead><tr><th>Row</th><th>Investment amount</th></tr></thead>
+                <thead><tr><th>Row</th><th>Investment amount</th><th>Balance</th></tr></thead>
                 <tbody>
                   {splitAllocations.map((amount, index) => (
                     <tr key={index}>
@@ -3284,6 +3290,19 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                             aria-label={`Investment amount for split row ${index + 1}`}
                           />
                         </div>
+                      </td>
+                      <td className="split-row-dialog__balance-cell">
+                        <button
+                          className={`split-row-dialog__balance-button ${allocationDifference < 0 ? "split-row-dialog__balance-button--subtract" : ""}`}
+                          type="button"
+                          disabled={isAllocationBalanced || amount + allocationDifference < -0.005}
+                          onClick={() => applyAllocationDifferenceToRow(index)}
+                          title={amount + allocationDifference < -0.005 ? "This row is too small to absorb the over-allocation" : "Apply the full allocation difference to this row"}
+                        >
+                          {isAllocationBalanced
+                            ? "Balanced"
+                            : `${allocationDifference > 0 ? "Add" : "Subtract"} ${formatCurrencyDetailed(Math.abs(allocationDifference))}`}
+                        </button>
                       </td>
                     </tr>
                   ))}
