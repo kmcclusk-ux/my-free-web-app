@@ -342,13 +342,9 @@
 .income-snapshot__toggle-button .snapshot-coin {
   stroke-width: .75;
 }
-.income-snapshot__toggle-button .snapshot-coin--green {
-  fill: #42c784;
-  stroke: #13764b;
-}
-.income-snapshot__toggle-button .snapshot-coin--red {
-  fill: #ef6b6b;
-  stroke: #a43d3d;
+.income-snapshot__toggle-button .snapshot-coin--gold {
+  fill: #f4c542;
+  stroke: #9a6812;
 }
 .income-snapshot__toggle-button .snapshot-calendar-front {
   fill: #fff;

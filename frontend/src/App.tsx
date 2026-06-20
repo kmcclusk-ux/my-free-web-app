@@ -1878,16 +1878,16 @@ function SnapshotValue({ label, delta, suffix }: { label: string; delta: number;
 function SnapshotToggleIcon({ type }: { type: "afterTax" | "beforeTax" | "monthly" | "yearly" }) {
   if (type === "afterTax") {
     return <svg className="snapshot-coin-stack" viewBox="0 0 20 20" aria-hidden="true">
-      <path className="snapshot-coin snapshot-coin--green" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--green" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--gold" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--gold" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
     </svg>;
   }
   if (type === "beforeTax") {
     return <svg className="snapshot-coin-stack" viewBox="0 0 20 20" aria-hidden="true">
-      <path className="snapshot-coin snapshot-coin--green" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--green" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--red" d="M4 6.8c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
-      <path className="snapshot-coin snapshot-coin--red" d="M4 3.5c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6V5c0 .9-2.7 1.6-6 1.6S4 5.9 4 5z" />
+      <path className="snapshot-coin snapshot-coin--gold" d="M4 13.4c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--gold" d="M4 10.1c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--gold" d="M4 6.8c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6v1.5c0 .9-2.7 1.6-6 1.6s-6-.7-6-1.6z" />
+      <path className="snapshot-coin snapshot-coin--gold" d="M4 3.5c0-.9 2.7-1.6 6-1.6s6 .7 6 1.6V5c0 .9-2.7 1.6-6 1.6S4 5.9 4 5z" />
     </svg>;
   }
   if (type === "monthly") {
