@@ -360,6 +360,11 @@
   background: rgba(82, 214, 169, .22);
   color: #fff;
 }
+.income-snapshot__toggle-button--active:hover,
+.income-snapshot__toggle-button--active:focus-visible {
+  background: rgba(82, 214, 169, .22);
+  color: #fff;
+}
 .income-snapshot__toggle--basis .income-snapshot__toggle-button {
   padding: 0;
 }
@@ -403,6 +408,11 @@
   color: var(--pm-text, #142126);
 }
 .income-snapshot--inline .income-snapshot__toggle-button--active {
+  background: #17313a;
+  color: #fff;
+}
+.income-snapshot--inline .income-snapshot__toggle-button--active:hover,
+.income-snapshot--inline .income-snapshot__toggle-button--active:focus-visible {
   background: #17313a;
   color: #fff;
 }
