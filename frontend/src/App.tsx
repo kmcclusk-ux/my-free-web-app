@@ -5299,6 +5299,7 @@ export default function App() {
                 {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
                 {navItems.find((item) => item.key === activeTab)?.label}
                 {activeTab === "federal" && <span className="content-topbar__tax-total">{formatCurrencyDetailed(federalResult?.tax || 0)}</span>}
+                {activeTab === "state" && <span className="content-topbar__tax-total">{formatCurrencyDetailed(displayedStateResult.tax)}</span>}
               </h2>
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
