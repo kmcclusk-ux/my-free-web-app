@@ -13,7 +13,7 @@ type TabKey =
   | "accountTaxType";
 
 type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
-type TaxResult = { calc: string; tax: number; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string };
+type TaxResult = { calc: string; tax: number; taxableIncome?: number; filingStatus?: FilingStatus; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string };
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
 type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
@@ -4119,12 +4119,17 @@ export default function App() {
   const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome;
   const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
-  const stateGross = flows.stateTaxable + stateSettings.extraStateIncome;
+  const stateGross = flows.stateTaxable + federalSettings.extraOrdinaryIncome + federalSettings.extraPreferredIncome + stateSettings.extraStateIncome;
   const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax + stateSettings.stateIncomeTax;
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
   const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
-  const displayedStateResult = stateResult?.state === selectedStateCode ? stateResult : localStateResult;
+  const hasMatchingStateResult =
+    stateResult?.state === selectedStateCode &&
+    typeof stateResult.taxableIncome === "number" &&
+    Math.abs(stateResult.taxableIncome - stateTaxableAfterDeductions) < 0.01 &&
+    !(stateResult.tax === 0 && localStateResult.tax > 0);
+  const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
   const itemizedFederalDeduction = Math.min(federalSettings.propertyTax + displayedStateResult.tax, federalSettings.saltCap) + federalSettings.mortgageInterest;
   const federalDeduction = Math.max(federalSettings.standardDeduction, itemizedFederalDeduction);
   const federalTaxableAfterDeductions = Math.max(grossFederalTaxable - federalDeduction, 0);
