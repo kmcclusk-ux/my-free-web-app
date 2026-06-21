@@ -1008,6 +1008,11 @@
 .tax-output-disclosure summary::before { content: "▸"; margin-right: 6px; color: #62767a; font-size: .75rem; }
 .tax-output-disclosure[open] summary { margin-bottom: 6px; }
 .tax-output-disclosure[open] summary::before { transform: rotate(90deg); }
+.tax-field-label { display: flex !important; align-items: center; gap: 5px; min-width: 0; }
+.tax-field-label > span { color: inherit; white-space: nowrap; }
+.tax-field-label small { overflow: hidden; color: #7a8b8f; font-size: .58rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.tax-field-label button { flex: 0 0 auto; min-height: 20px; padding: 1px 5px; border: 1px solid rgba(24,49,58,.16); border-radius: 5px; background: rgba(255,255,255,.8); color: #425b62; cursor: pointer; font: inherit; font-size: .58rem; font-weight: 800; line-height: 1; }
+.tax-field-label button:hover { border-color: rgba(24,49,58,.32); background: #fff; }
 .metric-card--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
 .metric-card--warning { background: linear-gradient(135deg, #7f4b29, #c3732c); border-color: transparent; }
 .metric-card--accent span,.metric-card--accent strong,.metric-card--warning span,.metric-card--warning strong { color: #f8faf7; }

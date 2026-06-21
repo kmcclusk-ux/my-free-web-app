@@ -5468,7 +5468,14 @@ export default function App() {
             <div className="form-grid form-grid--compact-wide">
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
               <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => setStateSettings((current) => ({ ...current, extraStateIncome: value }))} /></label>
-              <label><span>Mortgage interest</span><CurrencyInput value={stateSettings.mortgageInterest} onChange={(value) => setStateSettings((current) => ({ ...current, mortgageInterest: value }))} /></label>
+              <label>
+                <span className="tax-field-label">
+                  <span>Mortgage interest</span>
+                  <small>Federal {formatCurrencyDetailed(federalSettings.mortgageInterest)}</small>
+                  <button type="button" onClick={() => setStateSettings((current) => ({ ...current, mortgageInterest: federalSettings.mortgageInterest }))}>Copy</button>
+                </span>
+                <CurrencyInput value={stateSettings.mortgageInterest} onChange={(value) => setStateSettings((current) => ({ ...current, mortgageInterest: value }))} />
+              </label>
               <label><span>Property tax</span><CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} /></label>
               <label><span>State income tax</span><CurrencyInput value={stateSettings.stateIncomeTax} onChange={(value) => setStateSettings((current) => ({ ...current, stateIncomeTax: value }))} /></label>
               <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
