@@ -4025,6 +4025,7 @@ export default function App() {
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
     acc.totalIncome += row.filteredIncome;
+    acc.displayIncome += row.displayFilteredIncome;
     acc.federalOrdinary += row.ordinaryMonthly * 12;
     acc.federalPreferred += row.preferredMonthly * 12;
     acc.stateTaxable += row.stateMonthly * 12;
@@ -4041,7 +4042,7 @@ export default function App() {
     acc.realEstate += row.realEstate;
     acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestmentAmount: 0, totalIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
+  }, { totalInvestmentAmount: 0, totalIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
@@ -4222,7 +4223,7 @@ export default function App() {
   const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
   const displayedStateResult = stateResult?.state === selectedStateCode ? stateResult : localStateResult;
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
-  const totalIncome = flows.totalIncome;
+  const totalIncome = flows.displayIncome;
   const totalTax = calculatedTotalTax;
   const afterTaxIncome = totalIncome - totalTax;
   const monthlyIncome = totalIncome / 12;
