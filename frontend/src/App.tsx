@@ -771,6 +771,11 @@ function toNumber(value: number | string | boolean | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function isPlaceholderAssetSymbol(value: string) {
+  const normalized = normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
+  return ["na", "none", "notapplicable"].includes(normalized);
+}
+
 function getStateTaxRateMarkers(stateCode: string, filingStatus: LocalStateTaxFilingStatus): ThermometerMarker[] {
   const profile = getLocalStateTaxProfile(stateCode);
   const brackets =
@@ -1490,7 +1495,7 @@ function isSameStarterInvestment(row: InvestmentRow, starter: InvestmentRow) {
 function isStarterInvestmentSet(rows: InvestmentRow[]) {
   return rows.length === initialInvestments.length && rows.every((row, index) => isSameStarterInvestment(row, initialInvestments[index]));
 }
-function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fallback?: InvestmentRow): InvestmentRow | null {
+function workbookToInvestmentRow(row: Record<string, unknown>, index: number): InvestmentRow | null {
   const hasAnyInvestmentField =
     workbookField(
       row,
@@ -1517,7 +1522,7 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
     ) !== undefined;
   if (!hasAnyInvestmentField) return null;
 
-  const base: InvestmentRow = fallback || {
+  const base: InvestmentRow = {
     id: index + 1,
     spreadsheetRowNumber: undefined,
     description: "",
@@ -1557,8 +1562,8 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number, fa
     newPercent: newPercentValue !== undefined ? toNumber(newPercentValue) : base.newPercent,
   };
 }
-function workbookToTickerRow(row: Record<string, unknown>, index: number, fallback?: TickerRow): TickerRow {
-  const base = fallback || initialTickers[index] || initialTickers[0];
+function workbookToTickerRow(row: Record<string, unknown>, index: number): TickerRow {
+  const base: TickerRow = { id: index + 1, symbol: "", percentReturn: 0, category: "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" };
   const percentValue = workbookField(row, "dividend", "percent_return", "percentReturn", "percent_return_rate", "percent");
   const extraDataValue = workbookField(row, "extra_data", "extraData");
   const symbol = workbookField(row, "symbol", "ticker") ?? base.symbol;
@@ -1579,15 +1584,15 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number, fallba
     divPayout: workbookField(row, "div_payout", "divPayout") ?? base.divPayout,
   };
 }
-function workbookToCategoryRow(row: Record<string, unknown>, index: number, fallback?: CategoryRow): CategoryRow {
-  const base = fallback || initialCategories[index] || initialCategories[0];
+function workbookToCategoryRow(row: Record<string, unknown>, index: number): CategoryRow {
+  const base: CategoryRow = { id: index + 1, name: "" };
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     name: workbookField(row, "name", "category", "label") ?? base.name,
   };
 }
-function workbookToAccountRow(row: Record<string, unknown>, index: number, fallback?: AccountRow): AccountRow {
-  const base = fallback || initialAccounts[index] || initialAccounts[0];
+function workbookToAccountRow(row: Record<string, unknown>, index: number): AccountRow {
+  const base: AccountRow = { id: index + 1, account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" };
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     account: workbookField(row, "account", "account_name", "account_names") ?? base.account,
@@ -1596,15 +1601,15 @@ function workbookToAccountRow(row: Record<string, unknown>, index: number, fallb
     includeInFreeCashflow: normalizeYesNo(workbookField(row, "include_in_free_cashflow", "includeInFreeCashflow", "include_in_free_cash_flow", "include")),
   };
 }
-function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number, fallback?: TaxTreatmentRow): TaxTreatmentRow {
-  const base = fallback || initialTaxTreatments[index] || initialTaxTreatments[0];
+function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number): TaxTreatmentRow {
+  const base: TaxTreatmentRow = { id: index + 1, label: "" };
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     label: workbookField(row, "label", "tax_treatment") ?? base.label,
   };
 }
-function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number, fallback?: AccountTaxTypeRow): AccountTaxTypeRow {
-  const base = fallback || initialAccountTaxTypes[index] || initialAccountTaxTypes[0];
+function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number): AccountTaxTypeRow {
+  const base: AccountTaxTypeRow = { id: index + 1, taxStatus: "" };
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_status") ?? base.taxStatus,
@@ -4014,11 +4019,11 @@ export default function App() {
   };
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
-    const currentTicker = tickerMap[normalizeLookupKey(row.symbol)];
+    const currentTicker = isPlaceholderAssetSymbol(row.symbol) ? undefined : tickerMap[normalizeLookupKey(row.symbol)];
     const isRowWhatIfActive = isWhatIfActive && row.overrideProposal;
     const effectiveSymbol = isRowWhatIfActive && row.newSymbol ? row.newSymbol : row.symbol;
     const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
-    const effectiveTicker = tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
+    const effectiveTicker = isPlaceholderAssetSymbol(effectiveSymbol) ? undefined : tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
     const totalInvestment = toNumber(row.totalInvestment);
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
     const proposedPercent = normalizeRate(proposedTicker?.percentReturn ?? row.newPercent);
