@@ -35,6 +35,8 @@ type InvestmentRow = {
   newPercent: number;
 };
 
+type AssetTaxTone = "fully-taxable" | "tax-free" | "federal-taxable-state-free" | "federal-free-state-taxable";
+
 type DerivedInvestmentRow = InvestmentRow & {
   monthlyIncome: number;
   currentPercent: number;
@@ -49,6 +51,8 @@ type DerivedInvestmentRow = InvestmentRow & {
   includedTotal: number;
   taxStatus: string;
   taxTreatment: string;
+  currentAssetTaxTone: AssetTaxTone;
+  proposedAssetTaxTone: AssetTaxTone;
   investmentType: string;
   ordinaryMonthly: number;
   preferredMonthly: number;
@@ -1401,6 +1405,17 @@ function formatSignedCurrency(value: number) {
 }
 function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": case "real estate": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; default: return pref ? 0 : amount; } }
 function stateTaxAdjust(amount: number, taxTreatment: string, stateCode = "CA") { const treatment = String(taxTreatment || "").toLowerCase().trim(); if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0; if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0; return amount; }
+function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: string): AssetTaxTone {
+  const normalizedStatus = String(taxStatus || "").trim().toLowerCase();
+  const isTaxableAccount = normalizedStatus === "taxable" || normalizedStatus.includes("taxable");
+  if (!isTaxableAccount) return "tax-free";
+  const federalTaxable = fedTaxAdjust(1, taxTreatment, false) + fedTaxAdjust(1, taxTreatment, true) > 0;
+  const stateTaxable = stateTaxAdjust(1, taxTreatment, stateCode) > 0;
+  if (federalTaxable && stateTaxable) return "fully-taxable";
+  if (federalTaxable) return "federal-taxable-state-free";
+  if (stateTaxable) return "federal-free-state-taxable";
+  return "tax-free";
+}
 function isUnknownCalcError(error: Error) { return /unknown calc/i.test(error.message || ""); }
 async function postTaxCalculation(payload: Record<string, number | string>) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
@@ -3531,7 +3546,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
-                symbol: <td key="symbol"><select value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
+                symbol: <td key="symbol"><select className={`asset-tax-select asset-tax-select--${derived?.currentAssetTaxTone || "fully-taxable"}`} value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
                 normalPercent: <td key="normalPercent"><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>,
                 amount: <td key="amount">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}</td>,
                 year: <td key="year">{derived?.incomeItem ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /> : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}</td>,
@@ -3556,7 +3571,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                 realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
                 override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
-                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><select value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
+                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><select className={`asset-tax-select asset-tax-select--${derived?.proposedAssetTaxTone || "fully-taxable"}`} value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
                 overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{formatPercent(derived?.newPercent || 0)}</div></td>,
                 usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
@@ -4043,6 +4058,8 @@ export default function App() {
     const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
     const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
     const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
+    const currentTaxTreatment = String(currentTicker?.taxTreatment || "income").toLowerCase();
+    const proposedTaxTreatment = String(proposedTicker?.taxTreatment || "income").toLowerCase();
     const taxTreatment = String(effectiveTicker?.taxTreatment || "income").toLowerCase();
     const investmentType = String(effectiveTicker?.category || "").toLowerCase();
     const extraData = toNumber(effectiveTicker?.extraData || 0);
@@ -4064,6 +4081,8 @@ export default function App() {
       includedTotal,
       taxStatus,
       taxTreatment,
+      currentAssetTaxTone: getAssetTaxTone(taxStatus, currentTaxTreatment, selectedStateCode),
+      proposedAssetTaxTone: getAssetTaxTone(taxStatus, proposedTaxTreatment, selectedStateCode),
       investmentType,
       ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, false),
       preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, true),

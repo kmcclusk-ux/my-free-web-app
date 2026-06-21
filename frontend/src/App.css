@@ -1022,6 +1022,11 @@
 .tax-field-label small { overflow: hidden; padding: 2px 5px; border-radius: 5px; background: #dbeafe; color: #1d4ed8; font-size: .58rem; font-weight: 850; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .tax-field-label button { flex: 0 0 auto; min-height: 20px; padding: 1px 5px; border: 1px solid rgba(24,49,58,.16); border-radius: 5px; background: rgba(255,255,255,.8); color: #425b62; cursor: pointer; font: inherit; font-size: .58rem; font-weight: 800; line-height: 1; }
 .tax-field-label button:hover { border-color: rgba(24,49,58,.32); background: #fff; }
+.asset-tax-select { transition: background-color 160ms ease, border-color 160ms ease; }
+.asset-tax-select--fully-taxable { background: #fee2e2; border-color: #f3a6a6; }
+.asset-tax-select--tax-free { background: #dcfce7; border-color: #86d7a2; }
+.asset-tax-select--federal-taxable-state-free { background: linear-gradient(90deg, #fee2e2 0 50%, #dcfce7 50% 100%); border-color: #c9b5a4; }
+.asset-tax-select--federal-free-state-taxable { background: linear-gradient(90deg, #dcfce7 0 50%, #fee2e2 50% 100%); border-color: #c9b5a4; }
 .metric-card--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
 .metric-card--warning { background: linear-gradient(135deg, #7f4b29, #c3732c); border-color: transparent; }
 .metric-card--accent span,.metric-card--accent strong,.metric-card--warning span,.metric-card--warning strong { color: #f8faf7; }
@@ -3855,3 +3860,8 @@
   .model-version-row { grid-template-columns: 1fr; }
   .model-version-row__actions { justify-content: flex-start; flex-wrap: wrap; }
 }
+
+.investments-workspace .sheet-table--workbook select.asset-tax-select--fully-taxable { background: #fee2e2; border-color: #f3a6a6; }
+.investments-workspace .sheet-table--workbook select.asset-tax-select--tax-free { background: #dcfce7; border-color: #86d7a2; }
+.investments-workspace .sheet-table--workbook select.asset-tax-select--federal-taxable-state-free { background: linear-gradient(90deg, #fee2e2 0 50%, #dcfce7 50% 100%); border-color: #c9b5a4; }
+.investments-workspace .sheet-table--workbook select.asset-tax-select--federal-free-state-taxable { background: linear-gradient(90deg, #dcfce7 0 50%, #fee2e2 50% 100%); border-color: #c9b5a4; }
