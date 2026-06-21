@@ -1789,6 +1789,36 @@ function OdometerValue({ value, previousValue, spinning }: { value: string; prev
   );
 }
 
+function TumblingCurrency({ value, className = "" }: { value: number; className?: string }) {
+  const formattedValue = formatCurrencyDetailed(value);
+  const previousNumericValue = useRef(value);
+  const previousDisplayValue = useRef(formattedValue);
+  const [odometerValue, setOdometerValue] = useState({ previous: formattedValue, current: formattedValue });
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    if (Math.abs(value - previousNumericValue.current) > 0.005) {
+      setOdometerValue({ previous: previousDisplayValue.current, current: formattedValue });
+      setIsAnimating(false);
+      window.requestAnimationFrame(() => setIsAnimating(true));
+    }
+    previousNumericValue.current = value;
+    previousDisplayValue.current = formattedValue;
+  }, [formattedValue, value]);
+
+  useEffect(() => {
+    if (!isAnimating) return;
+    const timeoutId = window.setTimeout(() => setIsAnimating(false), 820);
+    return () => window.clearTimeout(timeoutId);
+  }, [isAnimating]);
+
+  return (
+    <span className={`${className} ${isAnimating ? `${className}--changed` : ""}`.trim()}>
+      <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimating} />
+    </span>
+  );
+}
+
 function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
@@ -5298,8 +5328,8 @@ export default function App() {
                 {activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}
                 {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
                 {navItems.find((item) => item.key === activeTab)?.label}
-                {activeTab === "federal" && <span className="content-topbar__tax-total">{formatCurrencyDetailed(federalResult?.tax || 0)}</span>}
-                {activeTab === "state" && <span className="content-topbar__tax-total">{formatCurrencyDetailed(displayedStateResult.tax)}</span>}
+                {activeTab === "federal" && <TumblingCurrency className="content-topbar__tax-total" value={federalResult?.tax || 0} />}
+                {activeTab === "state" && <TumblingCurrency className="content-topbar__tax-total" value={displayedStateResult.tax} />}
               </h2>
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}

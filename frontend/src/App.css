@@ -3377,6 +3377,8 @@
 
 .content-topbar__title { display: inline-flex; align-items: center; gap: 8px; }
 .content-topbar__tax-total { color: #dc2626; font-family: "Geist", "Inter", "SF Pro Display", "Segoe UI", sans-serif; font-size: .88em; font-weight: 850; letter-spacing: -.02em; }
+.content-topbar__tax-total .kpi-pill__value { color: inherit; font: inherit; letter-spacing: inherit; }
+.content-topbar__tax-total--changed .kpi-odometer--spinning { color: #ef4444; text-shadow: 0 0 10px rgba(239,68,68,.25); }
 .nav-item__icon-1040 { position: relative; display: inline-grid; place-items: start start; flex: 0 0 auto; width: 26px; height: 20px; padding: 3px 2px 0 3px; overflow: hidden; border-radius: 2px; border: 1px solid #198754; background: linear-gradient(180deg, #cdeed5 0 23%, #fbfffc 23% 100%); color: #12633d; font-size: .42rem; font-style: normal; font-weight: 950; line-height: 1; letter-spacing: -.035em; box-shadow: 0 1px 2px rgba(16,24,40,.16), inset 0 -1px 0 rgba(25,135,84,.16); transform: rotate(-3deg); transform-origin: center; }
 .nav-item__icon-1040::before { content: ""; position: absolute; left: 3px; right: 3px; top: 9px; height: 8px; background: repeating-linear-gradient(180deg, rgba(25,135,84,.38) 0 1px, transparent 1px 3px), linear-gradient(90deg, transparent 0 3px, rgba(25,135,84,.32) 3px 4px, transparent 4px 11px, rgba(25,135,84,.32) 11px 12px, transparent 12px 100%); }
 .nav-item__icon-1040::after { content: ""; position: absolute; right: 3px; bottom: 2px; width: 5px; height: 5px; border-radius: 1px; border: 1px solid rgba(25,135,84,.58); background: linear-gradient(135deg, transparent 45%, rgba(25,135,84,.58) 46% 55%, transparent 56%); }
