@@ -4118,7 +4118,10 @@ export default function App() {
   const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome;
   const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
-  const stateGross = flows.stateTaxable + federalSettings.extraOrdinaryIncome + federalSettings.extraPreferredIncome + stateSettings.extraStateIncome;
+  const federalTaxableInvestmentIncome = flows.federalOrdinary + flows.federalPreferred;
+  const stateInvestmentAdjustment = flows.stateTaxable - federalTaxableInvestmentIncome;
+  const federalWhatIfIncome = federalSettings.extraOrdinaryIncome + federalSettings.extraPreferredIncome;
+  const stateGross = federalTaxableInvestmentIncome + stateInvestmentAdjustment + federalWhatIfIncome + stateSettings.extraStateIncome;
   const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax;
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
@@ -5524,7 +5527,12 @@ export default function App() {
                 <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
               </div>
               <div className="metric-grid state-tax-panel__tiles">
-                <MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} />
+                <MetricCard label="Total included income" value={formatCurrency(flows.totalIncome)} />
+                <MetricCard label="Federal-taxable investments" value={formatCurrency(federalTaxableInvestmentIncome)} />
+                <MetricCard label="State adjustment" value={formatCurrency(stateInvestmentAdjustment)} />
+                <MetricCard label="State-taxable investments" value={formatCurrency(flows.stateTaxable)} />
+                <MetricCard label="Federal What-If income" value={formatCurrency(federalWhatIfIncome)} />
+                <MetricCard label="State-only extra income" value={formatCurrency(stateSettings.extraStateIncome)} />
                 <MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} />
                 <MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} />
                 <MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} />
