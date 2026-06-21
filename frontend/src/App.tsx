@@ -498,18 +498,6 @@ const federalOrdinaryRateMarkers: Record<FilingStatus, ThermometerMarker[]> = {
     { amount: 626350, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
   ],
 };
-const caTaxRateMarkers: ThermometerMarker[] = [
-  { amount: 21512, label: "2%", detail: "California 2% bracket starts", tone: "state" },
-  { amount: 50998, label: "4%", detail: "California 4% bracket starts", tone: "state" },
-  { amount: 80490, label: "6%", detail: "California 6% bracket starts", tone: "state" },
-  { amount: 111732, label: "8%", detail: "California 8% bracket starts", tone: "state" },
-  { amount: 141212, label: "9.3%", detail: "California 9.3% bracket starts", tone: "state" },
-  { amount: 721318, label: "10.3%", detail: "California 10.3% bracket starts", tone: "state" },
-  { amount: 865574, label: "11.3%", detail: "California 11.3% bracket starts", tone: "state" },
-  { amount: 1000000, label: "+1%", detail: "California mental health surtax starts", tone: "surtax" },
-  { amount: 1442628, label: "12.3%", detail: "California 12.3% bracket starts", tone: "state" },
-];
-
 const categoryLabels = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"];
 const stateOptions: Array<[string, string]> = [
   ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"], ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"], ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"], ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"], ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"], ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"], ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"], ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"], ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"], ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"], ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"], ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
@@ -781,6 +769,25 @@ function toNumber(value: number | string | boolean | null | undefined) {
     .trim();
   const parsed = Number(str);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getStateTaxRateMarkers(stateCode: string, filingStatus: LocalStateTaxFilingStatus): ThermometerMarker[] {
+  const profile = getLocalStateTaxProfile(stateCode);
+  const brackets =
+    filingStatus === "mfj" ? profile.mfj :
+    filingStatus === "mfs" ? profile.mfs ?? profile.single :
+    filingStatus === "hoh" ? profile.hoh ?? profile.single :
+    profile.single;
+
+  return [...brackets]
+    .sort((first, second) => first.threshold - second.threshold)
+    .filter((bracket) => bracket.threshold > 0)
+    .map((bracket) => ({
+      amount: bracket.threshold,
+      label: `${Number((bracket.rate * 100).toFixed(2))}%`,
+      detail: `${profile.name} ${Number((bracket.rate * 100).toFixed(2))}% bracket starts`,
+      tone: "state",
+    }));
 }
 
 function distributeAmountEvenly(total: number, count: number) {
@@ -2255,6 +2262,9 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
     "--thermo-green-end": `${Math.max(0, Math.min(100, (bandThresholds.greenEnd / scaleMax) * 100))}%`,
     "--thermo-yellow-end": `${Math.max(0, Math.min(100, (bandThresholds.yellowEnd / scaleMax) * 100))}%`,
   } as React.CSSProperties;
+  const sortedRateMarkers = [...markers].sort((first, second) => first.amount - second.amount);
+  const lowerBracketBoundary = [...sortedRateMarkers].reverse().find((marker) => marker.amount <= taxableIncome);
+  const upperBracketBoundary = sortedRateMarkers.find((marker) => marker.amount > taxableIncome);
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
@@ -2273,20 +2283,38 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
         <>
           <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`} style={bandStyle}>
             <div className="tax-thermometer__heat" />
-            {visibleMarkers.map((marker) => (
-              <div
-                key={`${marker.label}-${marker.amount}`}
-                className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"}`}
-                style={positionStyle(marker.amount)}
-                title={`${marker.detail}: ${formatCurrency(marker.amount)} (${formatSignedCurrency(taxableIncome - marker.amount)} vs current taxable income)`}
-              >
-                <span className="tax-thermometer__tick-label">
-                  <strong>{marker.label}</strong>
-                  <em>{formatCurrency(marker.amount)}</em>
-                  <small className={taxableIncome >= marker.amount ? "tax-thermometer__distance tax-thermometer__distance--past" : "tax-thermometer__distance tax-thermometer__distance--away"}>{formatSignedCurrency(taxableIncome - marker.amount)}</small>
-                </span>
-              </div>
-            ))}
+            {visibleMarkers.map((marker) => {
+              const isLowerBoundary = lowerBracketBoundary?.amount === marker.amount;
+              const isUpperBoundary = upperBracketBoundary?.amount === marker.amount;
+              const distance = isLowerBoundary
+                ? Math.max(taxableIncome - marker.amount, 0)
+                : Math.max(marker.amount - taxableIncome, 0);
+              const distanceLabel = isLowerBoundary
+                ? `Subtract ${formatCurrencyDetailed(distance)}`
+                : isUpperBoundary
+                  ? `Add ${formatCurrencyDetailed(distance)}`
+                  : "";
+              const titleDistance = isLowerBoundary
+                ? `${distanceLabel} of taxable income to reach the prior bracket boundary`
+                : isUpperBoundary
+                  ? `${distanceLabel} of taxable income to enter the ${marker.label} bracket`
+                  : `${formatSignedCurrency(taxableIncome - marker.amount)} vs current taxable income`;
+
+              return (
+                <div
+                  key={`${marker.label}-${marker.amount}`}
+                  className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"} ${isLowerBoundary || isUpperBoundary ? "tax-thermometer__tick--adjacent" : ""}`.trim()}
+                  style={positionStyle(marker.amount)}
+                  title={`${marker.detail}: ${formatCurrency(marker.amount)} (${titleDistance})`}
+                >
+                  <span className="tax-thermometer__tick-label">
+                    <strong>{marker.label}</strong>
+                    <em>{formatCurrency(marker.amount)}</em>
+                    {distanceLabel && <small className={isLowerBoundary ? "tax-thermometer__distance tax-thermometer__distance--past" : "tax-thermometer__distance tax-thermometer__distance--away"}>{distanceLabel}</small>}
+                  </span>
+                </div>
+              );
+            })}
             {values.map((value) => (
               <div
                 key={`${value.label}-${value.tone}`}
@@ -2333,9 +2361,9 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
   const federal12Threshold = federalMarkers.find((marker) => marker.label === "12%")?.amount || 0;
   const federal22Threshold = federalMarkers.find((marker) => marker.label === "22%")?.amount || federal12Threshold;
-  const stateMarkers = stateCode === "CA" ? caTaxRateMarkers : [];
-  const ca4Threshold = caTaxRateMarkers.find((marker) => marker.label === "4%")?.amount || 0;
-  const ca6Threshold = caTaxRateMarkers.find((marker) => marker.label === "6%")?.amount || ca4Threshold;
+  const stateMarkers = getStateTaxRateMarkers(stateCode, filingStatus);
+  const stateGreenThreshold = stateMarkers[1]?.amount ?? stateMarkers[0]?.amount ?? stateTaxable + 1;
+  const stateYellowThreshold = stateMarkers[2]?.amount ?? stateMarkers[1]?.amount ?? stateMarkers[0]?.amount ?? stateTaxable + 1;
   const federalEffectiveRate = federalTaxable > 0 ? federalTax / federalTaxable : 0;
   const stateEffectiveRate = stateTaxable > 0 ? stateTax / stateTaxable : 0;
   const federalValues: ThermometerValue[] = [
@@ -2360,7 +2388,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   return (
     <div className="tax-thermometer-panel">
       <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" />Federal Tax</span>} titleLabel="Federal Tax" subtitle={`Green <12%, yellow <22%, red above 22% (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} bandThresholds={{ greenEnd: federal12Threshold, yellowEnd: federal22Threshold }} collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
-      <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><StateFlagImage stateCode={stateCode} stateName={stateName} />{stateName} Tax</span>} titleLabel={`${stateName} Tax`} subtitle={stateCode === "CA" ? "Green <4%, yellow <6%, red above 6%" : "State schedule; no visual brackets configured"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={stateCode === "CA" ? { greenEnd: ca4Threshold, yellowEnd: ca6Threshold } : { greenEnd: stateTaxable + 1, yellowEnd: stateTaxable + 1 }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
+      <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><StateFlagImage stateCode={stateCode} stateName={stateName} />{stateName} Tax</span>} titleLabel={`${stateName} Tax`} subtitle={stateMarkers.length ? `Bracket thresholds (${filingStatus.toUpperCase()})` : "No state income-tax bracket changes"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} bandThresholds={{ greenEnd: stateGreenThreshold, yellowEnd: stateYellowThreshold }} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
       <div className={`tax-thermometer-panel__summary ${collapsedSections.summary ? "tax-thermometer-panel__summary--collapsed" : ""}`}>
         <div className="tax-thermometer-panel__summary-heading">
           <div>
