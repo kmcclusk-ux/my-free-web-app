@@ -1010,6 +1010,13 @@
 .tax-output-disclosure summary::before { content: "▸"; margin-right: 6px; color: #62767a; font-size: .75rem; }
 .tax-output-disclosure[open] summary { margin-bottom: 6px; }
 .tax-output-disclosure[open] summary::before { transform: rotate(90deg); }
+.tax-what-if-disclosure { margin-bottom: 8px; }
+.tax-what-if-disclosure summary { display: flex; align-items: center; width: fit-content; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(24,49,58,.2); border-radius: 8px; background: #fff8e7; color: #7a5417; cursor: pointer; font-size: .72rem; font-weight: 850; list-style: none; user-select: none; }
+.tax-what-if-disclosure summary::-webkit-details-marker { display: none; }
+.tax-what-if-disclosure summary::before { content: "▸"; margin-right: 6px; font-size: .75rem; }
+.tax-what-if-disclosure[open] summary { margin-bottom: 6px; }
+.tax-what-if-disclosure[open] summary::before { transform: rotate(90deg); }
+.tax-what-if-disclosure__fields { grid-template-columns: repeat(2, minmax(140px, 220px)); margin-bottom: 8px; }
 .tax-field-label { display: flex !important; align-items: center; gap: 5px; min-width: 0; }
 .tax-field-label > span { color: inherit; white-space: nowrap; }
 .tax-field-label small { overflow: hidden; padding: 2px 5px; border-radius: 5px; background: #dbeafe; color: #1d4ed8; font-size: .58rem; font-weight: 850; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }

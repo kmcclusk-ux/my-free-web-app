@@ -5501,10 +5501,15 @@ export default function App() {
               </div>
             </details>
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
+            <details className="tax-what-if-disclosure">
+              <summary>What-If</summary>
+              <div className="form-grid tax-what-if-disclosure__fields">
+                <label><span>Extra ordinary income</span><CurrencyInput value={federalSettings.extraOrdinaryIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: value }))} /></label>
+                <label><span>Extra preferred income</span><CurrencyInput value={federalSettings.extraPreferredIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: value }))} /></label>
+              </div>
+            </details>
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
-              <label><span>Extra ordinary income</span><CurrencyInput value={federalSettings.extraOrdinaryIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: value }))} /></label>
-              <label><span>Extra preferred income</span><CurrencyInput value={federalSettings.extraPreferredIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: value }))} /></label>
               <label><span>Mortgage interest</span><CurrencyInput value={federalSettings.mortgageInterest} onChange={(value) => setFederalSettings((current) => ({ ...current, mortgageInterest: value }))} /></label>
               <label><span>Property tax</span><CurrencyInput value={federalSettings.propertyTax} onChange={(value) => setFederalSettings((current) => ({ ...current, propertyTax: value }))} /></label>
               <label><span>Standard deduction</span><CurrencyInput value={federalSettings.standardDeduction} onChange={(value) => setFederalSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
