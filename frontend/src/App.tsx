@@ -74,7 +74,7 @@ type AccountRow = { id: number; account: string; taxStatus: string; dividendAccr
 type AccountTaxTypeRow = { id: number; taxStatus: string };
 
 type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
-type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; stateIncomeTax: number; standardDeduction: number };
+type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
 type ModelUiSnapshot = { investmentFavorites: InvestmentFavorite[] };
@@ -751,7 +751,7 @@ const initialAccounts: AccountRow[] = [
 ];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
-const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, stateIncomeTax: 0, standardDeduction: 11000 };
+const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [] };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
@@ -1323,7 +1323,6 @@ function parseStateSettingsSection(section: unknown): Partial<StateSettings> {
 
   setNumberField("mortgageInterest", "mortgage interest");
   setNumberField("propertyTax", "property tax");
-  setNumberField("stateIncomeTax", "state tax");
   setNumberField("standardDeduction", "Standard deduction");
 
   const extraStateIncome = parseNumberFromSection(sectionObj, rows, "extraStateIncome", "Extra state income");
@@ -4120,7 +4119,7 @@ export default function App() {
   const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
   const stateGross = flows.stateTaxable + federalSettings.extraOrdinaryIncome + federalSettings.extraPreferredIncome + stateSettings.extraStateIncome;
-  const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax + stateSettings.stateIncomeTax;
+  const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax;
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
   const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
@@ -5551,7 +5550,6 @@ export default function App() {
                 </span>
                 <CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} />
               </label>
-              <label><span>State income tax</span><CurrencyInput value={stateSettings.stateIncomeTax} onChange={(value) => setStateSettings((current) => ({ ...current, stateIncomeTax: value }))} /></label>
               <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
             </div>
           </Section>
