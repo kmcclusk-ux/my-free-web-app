@@ -5414,25 +5414,28 @@ export default function App() {
 
         {activeTab === "federal" && (
           <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend." className="federal-tax-panel">
-            {federalResult && (
-              <div className="api-grid federal-tax-panel__tiles federal-tax-panel__tiles--result">
-                <MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} />
-                <MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} />
-                <MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} />
-                <MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} />
+            <details className="tax-output-disclosure">
+              <summary>Tax outputs</summary>
+              {federalResult && (
+                <div className="api-grid federal-tax-panel__tiles federal-tax-panel__tiles--result">
+                  <MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} />
+                  <MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} />
+                  <MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} />
+                  <MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} />
+                </div>
+              )}
+              <div className="metric-grid federal-tax-panel__tiles">
+                <MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} />
+                <MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} />
+                <MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} />
+                <MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} />
+                <MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} />
+                <MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} />
+                <MetricCard label="MAGI" value={formatCurrency(magi)} />
+                <MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} />
+                <MetricCard label="NIIT base" value={formatCurrency(niitBase)} />
               </div>
-            )}
-            <div className="metric-grid federal-tax-panel__tiles">
-              <MetricCard label="Ordinary from sheet logic" value={formatCurrency(flows.federalOrdinary)} />
-              <MetricCard label="Preferred from sheet logic" value={formatCurrency(flows.federalPreferred)} />
-              <MetricCard label="Non-invest income" value={formatCurrency(flows.nonInvestmentIncome)} />
-              <MetricCard label="Muni interest" value={formatCurrency(flows.muniIncome)} />
-              <MetricCard label="Ordinary taxable" value={formatCurrency(ordinaryTaxable)} />
-              <MetricCard label="Preferred taxable" value={formatCurrency(prefTaxable)} />
-              <MetricCard label="MAGI" value={formatCurrency(magi)} />
-              <MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} />
-              <MetricCard label="NIIT base" value={formatCurrency(niitBase)} />
-            </div>
+            </details>
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
@@ -5448,15 +5451,18 @@ export default function App() {
         )}
         {activeTab === "state" && (
           <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend." className="state-tax-panel">
-            <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
-              <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
-            </div>
-            <div className="metric-grid state-tax-panel__tiles">
-              <MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} />
-              <MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} />
-              <MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} />
-              <MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} />
-            </div>
+            <details className="tax-output-disclosure">
+              <summary>Tax outputs</summary>
+              <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
+                <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
+              </div>
+              <div className="metric-grid state-tax-panel__tiles">
+                <MetricCard label="State-taxable from sheet logic" value={formatCurrency(flows.stateTaxable)} />
+                <MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} />
+                <MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} />
+                <MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} />
+              </div>
+            </details>
             {stateError && <div className="status-card status-card--error">{stateError}</div>}
             <div className="form-grid form-grid--compact-wide">
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
