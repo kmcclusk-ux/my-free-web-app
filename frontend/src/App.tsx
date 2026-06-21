@@ -5476,7 +5476,14 @@ export default function App() {
                 </span>
                 <CurrencyInput value={stateSettings.mortgageInterest} onChange={(value) => setStateSettings((current) => ({ ...current, mortgageInterest: value }))} />
               </label>
-              <label><span>Property tax</span><CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} /></label>
+              <label>
+                <span className="tax-field-label">
+                  <span>Property tax</span>
+                  <small>Federal {formatCurrencyDetailed(federalSettings.propertyTax)}</small>
+                  <button type="button" onClick={() => setStateSettings((current) => ({ ...current, propertyTax: federalSettings.propertyTax }))}>Copy</button>
+                </span>
+                <CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} />
+              </label>
               <label><span>State income tax</span><CurrencyInput value={stateSettings.stateIncomeTax} onChange={(value) => setStateSettings((current) => ({ ...current, stateIncomeTax: value }))} /></label>
               <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
             </div>

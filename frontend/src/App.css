@@ -1010,7 +1010,7 @@
 .tax-output-disclosure[open] summary::before { transform: rotate(90deg); }
 .tax-field-label { display: flex !important; align-items: center; gap: 5px; min-width: 0; }
 .tax-field-label > span { color: inherit; white-space: nowrap; }
-.tax-field-label small { overflow: hidden; color: #7a8b8f; font-size: .58rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.tax-field-label small { overflow: hidden; padding: 2px 5px; border-radius: 5px; background: #dbeafe; color: #1d4ed8; font-size: .58rem; font-weight: 850; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .tax-field-label button { flex: 0 0 auto; min-height: 20px; padding: 1px 5px; border: 1px solid rgba(24,49,58,.16); border-radius: 5px; background: rgba(255,255,255,.8); color: #425b62; cursor: pointer; font: inherit; font-size: .58rem; font-weight: 800; line-height: 1; }
 .tax-field-label button:hover { border-color: rgba(24,49,58,.32); background: #fff; }
 .metric-card--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
