@@ -1076,6 +1076,90 @@ function AccountSelect({ value, options, onChange, ariaLabel }: { value: string;
   );
 }
 
+function assetTaxToneLabel(tone: AssetTaxTone) {
+  if (tone === "tax-free") return "Federal and state tax-free";
+  if (tone === "federal-taxable-state-free") return "Federal taxable, state tax-free";
+  if (tone === "federal-free-state-taxable") return "Federal tax-free, state taxable";
+  return "Federal and state taxable";
+}
+
+function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, onChange, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; onChange: (value: string) => void; ariaLabel: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const taxToneForOption = (option: string) => getAssetTaxTone(accountTaxStatus, tickerMap[normalizeLookupKey(option)]?.taxTreatment || "income", stateCode);
+  const selectedTone = taxToneForOption(value);
+  const updateMenuPosition = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setMenuStyle({ left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 230) });
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateMenuPosition();
+    const handlePointerDown = (event: PointerEvent) => {
+      if (pickerRef.current?.contains(event.target as Node) || menuRef.current?.contains(event.target as Node)) return;
+      setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setIsOpen(false); };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="account-picker asset-picker" ref={pickerRef}>
+      <button
+        className={`account-picker__trigger asset-picker__trigger asset-tax-select asset-tax-select--${selectedTone}`}
+        type="button"
+        ref={triggerRef}
+        disabled={disabled}
+        onClick={() => {
+          if (!isOpen) updateMenuPosition();
+          setIsOpen((current) => !current);
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={ariaLabel}
+      >
+        {value && <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-hidden="true" />}
+        <span>{value || "Select asset"}</span>
+      </button>
+      {isOpen && !disabled && createPortal(
+        <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
+          {options.map((option) => {
+            const tone = taxToneForOption(option);
+            return (
+              <button
+                className={`account-picker__option asset-picker__option ${option === value ? "account-picker__option--selected" : ""}`.trim()}
+                key={option || "(blank)"}
+                type="button"
+                role="option"
+                aria-selected={option === value}
+                onClick={() => { onChange(option); setIsOpen(false); }}
+              >
+                {option && <span className={`asset-tax-indicator asset-tax-indicator--${tone}`} title={assetTaxToneLabel(tone)} aria-label={assetTaxToneLabel(tone)} />}
+                <span>{option || "Blank"}</span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 function AccountInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <div className="account-input">
@@ -2978,7 +3062,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -3575,12 +3659,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
           <tbody>
             {displayedRows.map((row) => {
               const derived = derivedMap[row.id];
+              const rowTaxStatus = accountTaxStatusByName[normalizeLookupKey(row.account)] || "";
               const investmentCells = {
                 move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
-                symbol: <td key="symbol"><select className={`asset-tax-select asset-tax-select--${derived?.currentAssetTaxTone || "fully-taxable"}`} value={row.symbol} onChange={(event) => onChange(row.id, "symbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
+                symbol: <td key="symbol"><AssetSelect value={row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} onChange={(value) => onChange(row.id, "symbol", value)} ariaLabel={`Asset for ${row.description || row.account || "investment row"}`} /></td>,
                 normalPercent: <td key="normalPercent"><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>,
                 amount: <td key="amount">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}</td>,
                 year: <td key="year">{derived?.incomeItem ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /> : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}</td>,
@@ -3605,7 +3690,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
                 realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
                 override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
-                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><select className={`asset-tax-select asset-tax-select--${derived?.proposedAssetTaxTone || "fully-taxable"}`} value={row.newSymbol} disabled={!row.overrideProposal} onChange={(event) => onChange(row.id, "newSymbol", event.target.value)}>{symbolOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></td>,
+                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><AssetSelect value={row.newSymbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} /></td>,
                 overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{formatPercent(derived?.newPercent || 0)}</div></td>,
                 usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
@@ -3985,7 +4070,8 @@ export default function App() {
       ...tickers
         .map((row) => String(row.symbol || "").trim())
         .filter(Boolean)
-        .filter((value, index, array) => array.indexOf(value) === index),
+        .filter((value, index, array) => array.indexOf(value) === index)
+        .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" })),
     ],
     [tickers]
   );
@@ -5525,6 +5611,8 @@ export default function App() {
             rows={investments}
             accountOptions={accountOptions}
             symbolOptions={symbolOptions}
+            tickerMap={tickerMap}
+            stateCode={selectedStateCode}
             accountTaxStatusByName={accountTaxStatusByName}
             derivedRows={derivedRows}
             favorites={uiSettings.investmentFavorites}

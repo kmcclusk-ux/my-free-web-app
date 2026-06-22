@@ -1028,6 +1028,25 @@
 .asset-tax-select--tax-free { background: #dcfce7; border-color: #86d7a2; }
 .asset-tax-select--federal-taxable-state-free { background: linear-gradient(90deg, #fee2e2 0 50%, #dcfce7 50% 100%); border-color: #c9b5a4; }
 .asset-tax-select--federal-free-state-taxable { background: linear-gradient(90deg, #dcfce7 0 50%, #fee2e2 50% 100%); border-color: #c9b5a4; }
+.asset-picker__trigger { gap: 6px; cursor: pointer; }
+.asset-picker__trigger:disabled { cursor: not-allowed; opacity: .55; }
+.asset-picker__menu { max-height: 320px; }
+.asset-picker__option { gap: 8px; }
+.account-picker__trigger .asset-tax-indicator,
+.account-picker__option .asset-tax-indicator {
+  display: inline-block;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 24, 39, .18);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .34);
+}
+.asset-tax-indicator--fully-taxable { background: #fca5a5; }
+.asset-tax-indicator--tax-free { background: #86efac; }
+.asset-tax-indicator--federal-taxable-state-free { background: linear-gradient(90deg, #fca5a5 0 50%, #86efac 50% 100%); }
+.asset-tax-indicator--federal-free-state-taxable { background: linear-gradient(90deg, #86efac 0 50%, #fca5a5 50% 100%); }
 .metric-card--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
 .metric-card--warning { background: linear-gradient(135deg, #7f4b29, #c3732c); border-color: transparent; }
 .metric-card--accent span,.metric-card--accent strong,.metric-card--warning span,.metric-card--warning strong { color: #f8faf7; }
