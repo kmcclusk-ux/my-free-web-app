@@ -97,7 +97,8 @@ type ModelDataSnapshot = {
   isWhatIfActive: boolean;
 };
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
-type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[] };
+type IncomePrimaryPeriod = "monthly" | "annual";
+type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string };
@@ -759,7 +760,7 @@ const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "def
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [] };
+const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual" };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1368,6 +1369,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
   return {
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
+    incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
   };
 }
 
@@ -1387,6 +1389,7 @@ function parseWorkbookSettings(settings: unknown) {
         ? ui.investmentFavorites
         : legacyFavorites,
       modelVersions: ui.modelVersions || [],
+      incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
     },
   };
 }
@@ -1760,6 +1763,7 @@ type KpiMetricConfig = {
   value: string;
   secondaryValue?: string;
   numericValue?: number;
+  primary?: boolean;
   deltaKind?: "currency" | "percent";
   tone?: "default" | "accent" | "warning" | "sync";
 };
@@ -1847,13 +1851,13 @@ function TumblingCurrency({ value, className = "" }: { value: number; className?
   );
 }
 
-function KpiPill({ label, value, secondaryValue, numericValue, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
+function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
   const [odometerValue, setOdometerValue] = useState({ previous: value, current: value });
   const [isAnimatingValue, setIsAnimatingValue] = useState(false);
-  const isPrimaryMetric = label.toLowerCase() === "after-tax income";
+  const isPrimaryMetric = primary ?? label.toLowerCase() === "after-tax income";
 
   useEffect(() => {
     if (typeof numericValue !== "number" || !Number.isFinite(numericValue)) return;
@@ -2103,6 +2107,24 @@ function CompactKpiHeader({
       </div>
       {children && <div className="kpi-header__actions">{children}</div>}
     </div>
+  );
+}
+
+function IncomePeriodToggle({ period, onToggle }: { period: IncomePrimaryPeriod; onToggle: () => void }) {
+  const isMonthly = period === "monthly";
+  const nextPeriod = isMonthly ? "annual" : "monthly";
+  return (
+    <button
+      className="income-period-toggle"
+      type="button"
+      onClick={onToggle}
+      aria-label={`Make ${nextPeriod} income the larger value`}
+      title={`Make ${nextPeriod} income the larger value`}
+    >
+      <span className="income-period-toggle__primary">{isMonthly ? "MO" : "YR"}</span>
+      <span className="income-period-toggle__swap" aria-hidden="true">⇅</span>
+      <span className="income-period-toggle__secondary">{isMonthly ? "YR" : "MO"}</span>
+    </button>
   );
 }
 
@@ -3787,6 +3809,7 @@ export default function App() {
     setUiSettings((current) => ({
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
       modelVersions: current.modelVersions,
+      incomePrimaryPeriod: current.incomePrimaryPeriod,
     }));
     setIsWhatIfActive(snapshot.isWhatIfActive);
     setStorageState("ready");
@@ -4217,6 +4240,7 @@ export default function App() {
       setUiSettings({
         investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
         modelVersions: workbookSettings.ui?.modelVersions || [],
+        incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
       });
       hasLoadedStorage.current = true;
       setStorageState("ready");
@@ -4537,9 +4561,22 @@ export default function App() {
       )}
     </div>
   );
+  const isMonthlyIncomePrimary = uiSettings.incomePrimaryPeriod === "monthly";
   const kpiMetrics: KpiMetricConfig[] = [
-    { label: "After-tax income", value: formatCurrency(afterTaxIncome), numericValue: afterTaxIncome, tone: "warning" },
-    { label: "Annual income", value: formatCurrency(totalIncome), secondaryValue: `${formatCurrency(monthlyIncome)} monthly`, numericValue: totalIncome },
+    {
+      label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} after-tax income`,
+      value: formatCurrency(isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome),
+      secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? afterTaxIncome : afterTaxMonthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
+      numericValue: isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome,
+      primary: true,
+      tone: "warning",
+    },
+    {
+      label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} income`,
+      value: formatCurrency(isMonthlyIncomePrimary ? monthlyIncome : totalIncome),
+      secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? totalIncome : monthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
+      numericValue: isMonthlyIncomePrimary ? monthlyIncome : totalIncome,
+    },
     { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
   ];
@@ -5373,7 +5410,12 @@ export default function App() {
           {actionMenu}
           <CompactKpiHeader
             metrics={kpiMetrics}
-          />
+          >
+            <IncomePeriodToggle
+              period={uiSettings.incomePrimaryPeriod}
+              onToggle={() => setUiSettings((current) => ({ ...current, incomePrimaryPeriod: current.incomePrimaryPeriod === "monthly" ? "annual" : "monthly" }))}
+            />
+          </CompactKpiHeader>
         </div>
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
