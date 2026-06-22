@@ -1133,7 +1133,6 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
         aria-label={ariaLabel}
       >
         <span>{value || "Select asset"}</span>
-        {value && <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-hidden="true" />}
       </button>
       {isOpen && !disabled && createPortal(
         <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
