@@ -2110,21 +2110,28 @@ function CompactKpiHeader({
   );
 }
 
-function IncomePeriodToggle({ period, onToggle }: { period: IncomePrimaryPeriod; onToggle: () => void }) {
-  const isMonthly = period === "monthly";
-  const nextPeriod = isMonthly ? "annual" : "monthly";
+function IncomePeriodToggle({ period, onChange }: { period: IncomePrimaryPeriod; onChange: (period: IncomePrimaryPeriod) => void }) {
   return (
-    <button
-      className="income-period-toggle"
-      type="button"
-      onClick={onToggle}
-      aria-label={`Make ${nextPeriod} income the larger value`}
-      title={`Make ${nextPeriod} income the larger value`}
-    >
-      <span className="income-period-toggle__primary">{isMonthly ? "MO" : "YR"}</span>
-      <span className="income-period-toggle__swap" aria-hidden="true">⇅</span>
-      <span className="income-period-toggle__secondary">{isMonthly ? "YR" : "MO"}</span>
-    </button>
+    <div className="income-snapshot__toggle income-period-toggle" role="group" aria-label="Primary income period">
+      <button
+        className={`income-snapshot__toggle-button ${period === "monthly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+        type="button"
+        onClick={() => onChange("monthly")}
+        aria-label="Make monthly income the larger value"
+        title="Make monthly income the larger value"
+      >
+        <SnapshotToggleIcon type="monthly" />
+      </button>
+      <button
+        className={`income-snapshot__toggle-button ${period === "annual" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+        type="button"
+        onClick={() => onChange("annual")}
+        aria-label="Make annual income the larger value"
+        title="Make annual income the larger value"
+      >
+        <SnapshotToggleIcon type="yearly" />
+      </button>
+    </div>
   );
 }
 
@@ -5413,7 +5420,7 @@ export default function App() {
           >
             <IncomePeriodToggle
               period={uiSettings.incomePrimaryPeriod}
-              onToggle={() => setUiSettings((current) => ({ ...current, incomePrimaryPeriod: current.incomePrimaryPeriod === "monthly" ? "annual" : "monthly" }))}
+              onChange={(incomePrimaryPeriod) => setUiSettings((current) => ({ ...current, incomePrimaryPeriod }))}
             />
           </CompactKpiHeader>
         </div>
