@@ -800,7 +800,7 @@ function normalizeTickerExportRecord_(record) {
   }
 }
 
-function sheetToRowObjects_(sheet, normalizeRecord) {
+function sheetToRowObjects_(sheet, normalizeRecord, stopAtBlankRow) {
   if (!sheet) return [];
 
   var values = sheet.getDataRange().getDisplayValues();
@@ -824,7 +824,10 @@ function sheetToRowObjects_(sheet, normalizeRecord) {
       return String(cell || '').trim() !== '';
     });
 
-    if (!hasData) continue;
+    if (!hasData) {
+      if (stopAtBlankRow) break;
+      continue;
+    }
 
     var record = {};
     for (var c = 0; c < headers.length; c++) {
@@ -972,7 +975,7 @@ function collectWorkbookExportPayload_() {
   return {
     tabs: {
       investments: sheetToRowObjectsFromLine8UntilEndDescription_(investmentsSheet),
-      tickers: sheetToRowObjects_(tickersSheet, normalizeTickerExportRecord_),
+      tickers: sheetToRowObjects_(tickersSheet, normalizeTickerExportRecord_, true),
       taxTreatment: sheetToRowObjects_(taxTreatmentSheet),
       accounts: sheetToRowObjects_(accountsSheet),
       accountTaxType: sheetToRowObjects_(accountTaxTypeSheet),
