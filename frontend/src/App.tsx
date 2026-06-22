@@ -3410,7 +3410,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
         <div className="confirm-panel" role="alertdialog" aria-modal="true" aria-labelledby="remove-all-confirm-title">
           <div>
             <h3 id="remove-all-confirm-title">Confirm</h3>
-            <p>This can't be undone.</p>
           </div>
           <div className="confirm-panel__actions">
             <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsRemoveConfirmOpen(false)}>Cancel</button>
