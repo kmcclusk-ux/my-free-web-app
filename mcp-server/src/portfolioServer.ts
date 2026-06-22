@@ -418,12 +418,16 @@ function getInvestmentIncome(row: WorkbookRow) {
 }
 
 function getInvestmentIncluded(row: WorkbookRow) {
-  const value = rowValue(row, "includeIncome", "inc", "include_income", "income", "include_investment_income", "use");
+  const value = rowValue(row, "select", "includeIncome", "inc", "include_income", "income", "include_investment_income", "use");
   if (value === undefined) return true;
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   const text = String(value).trim().toLowerCase();
   return text === "1" || text === "true" || text === "yes" || text === "y";
+}
+
+function exposeInvestmentSelect<T extends InvestmentRow>(row: T) {
+  return { ...row, select: getInvestmentIncluded(row) };
 }
 
 function summarizeInvestments(investments: InvestmentRow[]) {
@@ -569,7 +573,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         .filter((row) =>
           category ? getInvestmentCategory(row).toLowerCase() === category.toLowerCase() : true
         )
-        .slice(0, limit ?? 25);
+        .slice(0, limit ?? 25)
+        .map(exposeInvestmentSelect);
 
       return jsonToolResult({
         workspaceId: workbook.workspaceId,
@@ -592,7 +597,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     },
     async ({ workspaceId, query, account, category, symbol, limit }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
-      const sourceRows = toWorkbookRows(workbook.tabs.investments);
+      const sourceRows = toWorkbookRows(workbook.tabs.investments).map(exposeInvestmentSelect);
       const rows = sourceRows
         .filter((row) => rowMatchesQuery(row, query))
         .filter((row) =>
@@ -711,6 +716,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       category: z.string().default("core"),
       totalInvestment: z.number().nonnegative().default(0),
       yearlyIncome: z.number().nonnegative().default(0),
+      select: z.boolean().optional().describe("Select checkbox. Alias for includeIncome."),
       includeIncome: z.boolean().default(true),
       overrideProposal: z.boolean().default(false),
       symbol: z.string().default(""),
@@ -724,6 +730,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       category,
       totalInvestment,
       yearlyIncome,
+      select,
       includeIncome,
       overrideProposal,
       symbol,
@@ -740,7 +747,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         category,
         totalInvestment,
         yearlyIncome,
-        includeIncome,
+        includeIncome: select ?? includeIncome,
         overrideProposal,
         symbol,
         newSymbol: newSymbol || symbol,
@@ -771,6 +778,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         category: z.string().optional(),
         totalInvestment: z.number().nonnegative().optional(),
         yearlyIncome: z.number().nonnegative().optional(),
+        select: z.boolean().optional().describe("Select checkbox. Alias for includeIncome."),
         includeIncome: z.boolean().optional(),
         overrideProposal: z.boolean().optional(),
         symbol: z.string().optional(),
@@ -791,7 +799,11 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         );
       }
 
-      const update = safeInvestmentUpdate(values);
+      const { select, ...requestedValues } = values;
+      const update = safeInvestmentUpdate({
+        ...requestedValues,
+        ...(select !== undefined ? { includeIncome: select } : {}),
+      });
       if (Object.keys(update).length === 0) {
         throw new Error("update_investment received no valid fields to update.");
       }
@@ -814,11 +826,11 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "set_investment_checkbox",
-    "Set one investment checkbox field, such as includeIncome or overrideProposal, by investment row id.",
+    "Set one investment checkbox by row id. Use select for the unlabeled checkmark column; includeIncome remains a compatible alias.",
     {
       workspaceId: z.string().optional(),
       id: z.number(),
-      field: z.enum(["includeIncome", "overrideProposal"]),
+      field: z.enum(["select", "includeIncome", "overrideProposal"]),
       checked: z.boolean(),
     },
     async ({ workspaceId, id, field, checked }) => {
@@ -828,8 +840,9 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         throw new Error(`Investment row ${id} was not found.`);
       }
 
+      const storedField = field === "select" ? "includeIncome" : field;
       workbook.tabs.investments = investments.map((row) =>
-        Number(row.id) === id ? { ...row, [field]: checked } : row
+        Number(row.id) === id ? { ...row, [storedField]: checked } : row
       );
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
@@ -838,6 +851,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         savedAt: saveResult.updatedAt,
         id,
         field,
+        storedField,
         checked,
       });
     }

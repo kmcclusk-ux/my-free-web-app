@@ -29,6 +29,7 @@ type InvestmentRow = {
   totalInvestment: number;
   yearlyIncome: number;
   includeIncome: boolean;
+  select?: boolean;
   overrideProposal: boolean;
   symbol: string;
   newSymbol: string;
@@ -122,6 +123,7 @@ type PortfolioSnapshot = {
     monthlyIncome: number;
     includedTotal: number;
     filteredIncome: number;
+    select: boolean;
     includeIncome: boolean;
     overrideProposal: boolean;
     taxStatus: string;
@@ -166,8 +168,8 @@ type PortfolioSnapshot = {
   };
 };
 type AssistantAction =
-  | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
-  | { type: "setAllCheckboxes"; payload: { checked: boolean; field?: "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
+  | { type: "setCheckbox"; payload: { id: number; checked: boolean; field?: "select" | "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
+  | { type: "setAllCheckboxes"; payload: { checked: boolean; field?: "select" | "includeIncome" | "overrideProposal" }; requiresConfirmation?: boolean }
   | { type: "selectAsset"; payload: { assetId: number | string; matchMode?: "row" | "symbol"; field?: string; column?: string; symbol?: string }; requiresConfirmation?: boolean }
   | { type: "selectAssets"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; selectors?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string; matchMode?: "row" | "symbol"; field?: string; column?: string }; requiresConfirmation?: boolean }
   | { type: "highlightRows"; payload: { assetIds?: Array<number | string>; ids?: Array<number | string>; rowIds?: Array<number | string>; investmentIds?: Array<number | string>; selectors?: Array<number | string>; symbol?: string; selector?: string; assetId?: number | string; description?: string; query?: string; matchMode?: "row" | "symbol"; field?: string; column?: string }; requiresConfirmation?: boolean }
@@ -1675,6 +1677,7 @@ function buildPortfolioSnapshot({
     monthlyIncome: row.monthlyIncome,
     includedTotal: row.includedTotal,
     filteredIncome: row.filteredIncome,
+    select: row.includeIncome,
     includeIncome: row.includeIncome,
     overrideProposal: row.overrideProposal,
     incomeItem: row.incomeItem,
@@ -1718,7 +1721,7 @@ function buildPortfolioSnapshot({
     },
     editableTables: {
       tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType"],
-      investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+      investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "select", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
       tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
       accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
     },
@@ -4746,6 +4749,10 @@ export default function App() {
         yearlyincome: "yearlyIncome",
         annualincome: "yearlyIncome",
         inc: "includeIncome",
+        select: "includeIncome",
+        selected: "includeIncome",
+        checkmark: "includeIncome",
+        checkbox: "includeIncome",
         include: "includeIncome",
         includeincome: "includeIncome",
         use: "includeIncome",
@@ -5042,7 +5049,8 @@ export default function App() {
     if (actionType === "setCheckbox") {
       const id = Number((action as any).payload?.id);
       const checked = (action as any).payload?.checked;
-      const field = ((action as any).payload?.field || "includeIncome") as "includeIncome" | "overrideProposal";
+      const requestedField = (action as any).payload?.field || "includeIncome";
+      const field = requestedField === "select" ? "includeIncome" : requestedField as "includeIncome" | "overrideProposal";
       if (!Number.isFinite(id) || typeof checked !== "boolean" || (field !== "includeIncome" && field !== "overrideProposal")) {
         return { ok: false, message: "Rejected setCheckbox: invalid id, checked value, or checkbox field." };
       }
@@ -5053,7 +5061,8 @@ export default function App() {
 
     if (actionType === "setAllCheckboxes") {
       const payload = (action as any).payload || {};
-      const field = (payload.field || "includeIncome") as "includeIncome" | "overrideProposal";
+      const requestedField = payload.field || "includeIncome";
+      const field = requestedField === "select" ? "includeIncome" : requestedField as "includeIncome" | "overrideProposal";
       const checked = typeof payload.checked === "boolean"
         ? payload.checked
         : typeof payload[field] === "boolean"
