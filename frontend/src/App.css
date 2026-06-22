@@ -1036,6 +1036,7 @@
 .account-picker__option .asset-tax-indicator {
   display: inline-block;
   flex: 0 0 18px;
+  margin-left: auto;
   width: 18px;
   height: 12px;
   overflow: hidden;

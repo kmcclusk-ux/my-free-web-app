@@ -1132,8 +1132,8 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
         aria-expanded={isOpen}
         aria-label={ariaLabel}
       >
-        {value && <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-hidden="true" />}
         <span>{value || "Select asset"}</span>
+        {value && <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-hidden="true" />}
       </button>
       {isOpen && !disabled && createPortal(
         <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
@@ -1148,8 +1148,8 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
                 aria-selected={option === value}
                 onClick={() => { onChange(option); setIsOpen(false); }}
               >
-                {option && <span className={`asset-tax-indicator asset-tax-indicator--${tone}`} title={assetTaxToneLabel(tone)} aria-label={assetTaxToneLabel(tone)} />}
                 <span>{option || "Blank"}</span>
+                {option && <span className={`asset-tax-indicator asset-tax-indicator--${tone}`} title={assetTaxToneLabel(tone)} aria-label={assetTaxToneLabel(tone)} />}
               </button>
             );
           })}
