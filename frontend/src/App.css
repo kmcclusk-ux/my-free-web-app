@@ -3226,6 +3226,22 @@
   --status-text: #9f5b5b;
 }
 
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--deferred:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--non-taxable:not(.investment-row--selected) {
+  --row-bg: rgba(244, 252, 247, .98);
+  --status-color: rgba(31, 157, 104, .58);
+  --status-bg: rgba(31, 157, 104, .06);
+  --status-text: #3d7259;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--taxable:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--partial:not(.investment-row--selected) {
+  --row-bg: rgba(255, 247, 247, .98);
+  --status-color: rgba(208, 90, 90, .58);
+  --status-bg: rgba(208, 90, 90, .06);
+  --status-text: #8f5252;
+}
+
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) td {
   color: #667085;
   font-style: italic;

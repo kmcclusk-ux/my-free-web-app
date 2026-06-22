@@ -3065,6 +3065,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
   }, [selectedAssetIds, displayedRows]);
   const getRowClassName = (row: InvestmentRow) => {
     const classes = ["investment-row"];
+    if (Math.abs(toNumber(row.totalInvestment)) < 0.005) {
+      classes.push("investment-row--zero-investment");
+    }
     if (!row.includeIncome) {
       classes.push("investment-row--excluded");
     }
