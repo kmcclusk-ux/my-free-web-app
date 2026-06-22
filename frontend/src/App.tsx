@@ -250,7 +250,7 @@ const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 58, minWidth: 54 },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 84, minWidth: 82 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
   { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
@@ -2978,7 +2978,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -3574,7 +3574,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, accountTaxStatu
             {displayedRows.map((row) => {
               const derived = derivedMap[row.id];
               const investmentCells = {
-                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
+                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
@@ -5537,6 +5537,10 @@ export default function App() {
             onRenameFavorite={renameFavorite}
             onChange={updateInvestmentRow}
             onAdd={() => addRow(setInvestments, { id: Date.now(), description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: overridePercentForSymbol(symbolOptions[1] || "") })}
+            onRemove={(id) => {
+              setInvestments((current) => current.filter((row) => row.id !== id));
+              setSelectedInvestmentIds((current) => current.filter((selectedId) => selectedId !== id));
+            }}
             onSplit={splitInvestmentRow}
             onReorder={reorderInvestments}
             onRemoveIncluded={() => {

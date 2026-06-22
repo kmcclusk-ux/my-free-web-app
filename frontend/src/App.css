@@ -3408,7 +3408,14 @@
   gap: 3px;
 }
 
-.row-split-button {
+.investments-workspace .drag-handle-heading,
+.investments-workspace .drag-handle-cell {
+  width: 84px;
+  min-width: 82px;
+}
+
+.row-split-button,
+.row-delete-button {
   width: 24px;
   height: 24px;
   display: inline-grid;
@@ -3428,7 +3435,14 @@
   color: var(--poly-blue, #2563eb);
 }
 
-.row-split-button .icon-button__icon {
+.row-delete-button:hover {
+  border-color: #dc2626;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.row-split-button .icon-button__icon,
+.row-delete-button .icon-button__icon {
   width: 14px;
   height: 14px;
   fill: none;
