@@ -254,8 +254,8 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
   { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
-  { id: "symbol", label: "Asset", defaultWidth: 92, minWidth: 84 },
-  { id: "normalPercent", label: "Dividend", defaultWidth: 58, minWidth: 48 },
+  { id: "symbol", label: "Asset", defaultWidth: 124, minWidth: 116 },
+  { id: "normalPercent", label: "Dividend", defaultWidth: 50, minWidth: 46 },
   { id: "amount", label: "Investment", defaultWidth: 104, minWidth: 100 },
   { id: "year", label: "Year", defaultWidth: 82, minWidth: 62 },
   { id: "month", label: "Month", defaultWidth: 54, minWidth: 46 },
@@ -3118,9 +3118,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     try {
       const stored = JSON.parse(window.localStorage.getItem(INVESTMENT_COLUMN_WIDTH_STORAGE_KEY) || "{}") as Partial<Record<InvestmentColumnId, number>>;
       return INVESTMENT_COLUMN_DEFS.reduce((acc, column) => {
-        const storedWidth = stored[column.id];
+        const storedWidth = Number(stored[column.id]);
+        const migratedStoredWidth = column.id === "normalPercent" && storedWidth === 58
+          ? DEFAULT_INVESTMENT_COLUMN_WIDTHS[column.id]
+          : storedWidth;
         acc[column.id] = Number.isFinite(storedWidth)
-          ? Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(INVESTMENT_COLUMN_MIN_WIDTHS[column.id], Number(storedWidth)))
+          ? Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(INVESTMENT_COLUMN_MIN_WIDTHS[column.id], migratedStoredWidth))
           : DEFAULT_INVESTMENT_COLUMN_WIDTHS[column.id];
         return acc;
       }, {} as InvestmentColumnWidths);
