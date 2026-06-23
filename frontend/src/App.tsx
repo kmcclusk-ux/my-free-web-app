@@ -2895,6 +2895,7 @@ function lookupColumnDefaultWidth<T>(column: LookupColumn<T>, rows: T[]) {
 function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onRemoveAll, onReorder, showMoveHeaderLabel = true }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onRemoveAll?: () => void; onReorder: (sourceId: number, targetId: number) => void; showMoveHeaderLabel?: boolean; }) {
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
+  const [isRemoveAllConfirmOpen, setIsRemoveAllConfirmOpen] = useState(false);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -2987,6 +2988,15 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     setDraggingRowId(null);
     setDragOverRowId(null);
   };
+  const allRowsLabel = `${rows.length} ${title.toLowerCase()} row${rows.length === 1 ? "" : "s"}`;
+  const handleRemoveAllRows = () => {
+    if (!onRemoveAll || rows.length === 0) return;
+    setIsRemoveAllConfirmOpen(true);
+  };
+  const confirmRemoveAllRows = () => {
+    onRemoveAll?.();
+    setIsRemoveAllConfirmOpen(false);
+  };
   const renderCell = (row: T, column: LookupColumn<T>) => {
     if (column.type === "checkbox" || column.type === "yesNoCheckbox" || column.type === "invertedYesNoCheckbox") {
       const normalizedYesNo = normalizeYesNo(row[column.key]);
@@ -3031,9 +3041,20 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
       <div className="actions-row">
         <button className="primary-button icon-button action-icon-button" type="button" onClick={onAdd} aria-label="Add row" title="Add row"><RowActionIcon name="add" /></button>
         {onRemoveAll && (
-          <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={onRemoveAll} aria-label={`Delete all ${title} rows`} title={`Delete all ${title} rows`} disabled={rows.length === 0}><RowActionIcon name="delete" /></button>
+          <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveAllRows} aria-label={`Delete all ${title} rows`} title={rows.length === 0 ? `No ${title} rows to delete` : `Delete all ${title} rows`} disabled={rows.length === 0}><RowActionIcon name="delete" /></button>
         )}
       </div>
+      {isRemoveAllConfirmOpen && (
+        <div className="confirm-panel" role="alertdialog" aria-modal="true" aria-labelledby={`${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-delete-all-confirm-title`}>
+          <div>
+            <h3 id={`${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-delete-all-confirm-title`}>Confirm</h3>
+          </div>
+          <div className="confirm-panel__actions">
+            <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsRemoveAllConfirmOpen(false)}>Cancel</button>
+            <button className="primary-button ghost-button--compact" type="button" onClick={confirmRemoveAllRows}>Remove {allRowsLabel}</button>
+          </div>
+        </div>
+      )}
       <div className="table-wrap table-wrap--tall lookup-table-wrap" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--lookup" style={lookupTableStyle}>
           <colgroup>
