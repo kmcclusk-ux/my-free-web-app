@@ -47,15 +47,22 @@ const referenceTableNameSchema = z.enum([
 ]);
 const referenceValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const referenceRowSchema = z.record(referenceValueSchema);
+const investmentValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const investmentRowSchema = z.record(investmentValueSchema);
 
 type InvestmentRow = {
   id?: string | number;
+  spreadsheetRowNumber?: number;
   description?: string;
   symbol?: string;
+  newSymbol?: string;
+  newPercent?: number;
   account?: string;
   category?: string;
   totalInvestment?: number;
   yearlyIncome?: number;
+  includeIncome?: boolean;
+  overrideProposal?: boolean;
   taxTreatment?: string;
   investmentType?: string;
   [key: string]: unknown;
@@ -522,6 +529,101 @@ function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
   ) as Partial<InvestmentRow>;
 }
 
+function investmentFieldAlias(field: string) {
+  const raw = field.trim().toLowerCase();
+  if (raw.includes("%") && /\b(new|what\s*if|override|proposed)\b/.test(raw)) return "newPercent";
+  const normalized = normalizeReferenceKey(field);
+  const aliases: Record<string, string> = {
+    spreadsheetrownumber: "spreadsheetRowNumber",
+    sheetrownumber: "spreadsheetRowNumber",
+    sourcerownumber: "spreadsheetRowNumber",
+    rownumber: "spreadsheetRowNumber",
+    desc: "description",
+    description: "description",
+    account: "account",
+    accnt: "account",
+    accountname: "account",
+    accountnames: "account",
+    category: "category",
+    totalinvestment: "totalInvestment",
+    totalinv: "totalInvestment",
+    totalinvamount: "totalInvestment",
+    investment: "totalInvestment",
+    amount: "totalInvestment",
+    value: "totalInvestment",
+    yearlyincome: "yearlyIncome",
+    yearlyincomeamount: "yearlyIncome",
+    yrinc: "yearlyIncome",
+    yearinc: "yearlyIncome",
+    annualincome: "yearlyIncome",
+    income: "yearlyIncome",
+    includeincome: "includeIncome",
+    includeinvestmentincome: "includeIncome",
+    include: "includeIncome",
+    inc: "includeIncome",
+    use: "includeIncome",
+    select: "includeIncome",
+    selected: "includeIncome",
+    overrideproposal: "overrideProposal",
+    override: "overrideProposal",
+    whatif: "overrideProposal",
+    symbol: "symbol",
+    ticker: "symbol",
+    asset: "symbol",
+    assetid: "symbol",
+    newsymbol: "newSymbol",
+    proposedasset: "newSymbol",
+    proposedsymbol: "newSymbol",
+    new: "newSymbol",
+    newpercent: "newPercent",
+    newpct: "newPercent",
+    newpercentage: "newPercent",
+    newreturn: "newPercent",
+    overridepercent: "newPercent",
+    overridepercentage: "newPercent",
+    whatifpercent: "newPercent",
+    whatifpercentage: "newPercent",
+  };
+  return aliases[normalized] ?? null;
+}
+
+function coerceInvestmentValue(field: string, value: unknown) {
+  if (["spreadsheetRowNumber", "totalInvestment", "yearlyIncome", "newPercent"].includes(field)) return normalizeNumberValue(value);
+  if (["includeIncome", "overrideProposal"].includes(field)) return normalizeBooleanValue(value);
+  return String(value ?? "");
+}
+
+function sanitizeInvestmentValues(values: WorkbookRow) {
+  const sanitized: Partial<InvestmentRow> = {};
+  const rejected: string[] = [];
+  for (const [field, value] of Object.entries(values)) {
+    if (["id", "query", "selector", "workspaceId"].includes(field)) continue;
+    const allowedField = investmentFieldAlias(field);
+    if (!allowedField) {
+      rejected.push(field);
+      continue;
+    }
+    (sanitized as Record<string, unknown>)[allowedField] = coerceInvestmentValue(allowedField, value);
+  }
+  return { sanitized, rejected };
+}
+
+function defaultInvestmentRow(id: number): InvestmentRow {
+  return {
+    id,
+    description: "",
+    account: "",
+    category: "core",
+    totalInvestment: 0,
+    yearlyIncome: 0,
+    includeIncome: true,
+    overrideProposal: false,
+    symbol: "",
+    newSymbol: "",
+    newPercent: 0,
+  };
+}
+
 export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   const resolvedConfig = resolvePortfolioConfig(config);
   const server = new McpServer({
@@ -820,6 +922,55 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
         investment: updatedRow,
+      });
+    }
+  );
+
+  server.tool(
+    "replace_all_investments",
+    "Replace the entire investments table with the supplied rows. Use only when the user explicitly wants to populate AfterTaxUS from scratch or replace all investment rows.",
+    {
+      workspaceId: z.string().optional(),
+      rows: z.array(investmentRowSchema).min(1).describe("Complete replacement investment rows. Spreadsheet-style aliases such as desc, accnt, total inv, yr inc, select/use, symbol, new symbol, and new % are accepted."),
+    },
+    async ({ workspaceId, rows: inputRows }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const previousRows = toInvestmentRows(workbook.tabs.investments);
+      const nextRows: InvestmentRow[] = [];
+      const sanitizedRows = inputRows.map((row) => ({
+        raw: row,
+        ...sanitizeInvestmentValues(row),
+      }));
+      const rejected = sanitizedRows.flatMap((row) => row.rejected);
+      if (rejected.length) {
+        throw new Error(`Unsupported investment field(s): ${[...new Set(rejected)].join(", ")}.`);
+      }
+      if (sanitizedRows.some((row) => Object.keys(row.sanitized).length === 0)) {
+        throw new Error("Every replacement investment row must include at least one valid field.");
+      }
+
+      for (const row of sanitizedRows) {
+        const id = nextWorkbookRowId(nextRows, row.raw.id);
+        const sanitized = row.sanitized;
+        const symbol = String(sanitized.symbol ?? "");
+        const newSymbol = sanitized.newSymbol === undefined ? symbol : String(sanitized.newSymbol ?? "");
+        const nextRow = {
+          ...defaultInvestmentRow(id),
+          ...sanitized,
+          id,
+          newSymbol,
+        };
+        nextRows.push(nextRow);
+      }
+
+      workbook.tabs.investments = nextRows;
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        replacedRows: previousRows.length,
+        totalRows: nextRows.length,
       });
     }
   );
