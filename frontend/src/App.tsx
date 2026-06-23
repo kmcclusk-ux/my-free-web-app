@@ -2093,8 +2093,8 @@ function IncomeSnapshotControl({
             ? { x: iconRect.left + iconRect.width * (17.5 / 24), y: iconRect.top + iconRect.height * (10.1 / 24) }
             : { x: buttonRect.left + buttonRect.width / 2, y: buttonRect.top + buttonRect.height / 2 });
         }}
-        aria-label="Snapshot income baseline"
-        title="Snapshot"
+        aria-label="Set income baseline"
+        title="Set a baseline to compare how income changes as you adjust investments, accounts, and what-if options."
       >
         <svg className="income-snapshot__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M6.5 7.5 8.25 5h7.5l1.75 2.5H20a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5V9A1.5 1.5 0 0 1 4 7.5h2.5Z" />
