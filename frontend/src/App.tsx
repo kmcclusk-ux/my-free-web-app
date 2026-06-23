@@ -2892,7 +2892,7 @@ function lookupColumnDefaultWidth<T>(column: LookupColumn<T>, rows: T[]) {
   return Math.min(LOOKUP_TABLE_MAX_COLUMN_WIDTH, contentWidth);
 }
 
-function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onRemoveAll, onReorder, showMoveHeaderLabel = true }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onRemoveAll?: () => void; onReorder: (sourceId: number, targetId: number) => void; showMoveHeaderLabel?: boolean; }) {
+function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, onChange, onAdd, onRemove, onRemoveAll, onReorder, showMoveHeaderLabel = true, rowDeleteNextToMove = false }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onRemoveAll?: () => void; onReorder: (sourceId: number, targetId: number) => void; showMoveHeaderLabel?: boolean; rowDeleteNextToMove?: boolean; }) {
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const [isRemoveAllConfirmOpen, setIsRemoveAllConfirmOpen] = useState(false);
@@ -2901,7 +2901,9 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const autoScrollFrameRef = useRef<number | null>(null);
   const dropHandledRef = useRef(false);
   const lookupColumnWidths = useMemo(() => columns.map((column) => lookupColumnDefaultWidth(column, rows)), [columns, rows]);
-  const lookupTableWidth = LOOKUP_TABLE_DRAG_COLUMN_WIDTH + lookupColumnWidths.reduce((sum, width) => sum + width, 0) + LOOKUP_TABLE_ACTION_COLUMN_WIDTH;
+  const lookupActionColumnWidth = rowDeleteNextToMove ? 0 : LOOKUP_TABLE_ACTION_COLUMN_WIDTH;
+  const lookupMoveColumnWidth = rowDeleteNextToMove ? LOOKUP_TABLE_DRAG_COLUMN_WIDTH + LOOKUP_TABLE_ACTION_COLUMN_WIDTH : LOOKUP_TABLE_DRAG_COLUMN_WIDTH;
+  const lookupTableWidth = lookupMoveColumnWidth + lookupColumnWidths.reduce((sum, width) => sum + width, 0) + lookupActionColumnWidth;
   const lookupTableStyle = { width: lookupTableWidth, minWidth: lookupTableWidth } as CSSProperties;
   const stopAutoScroll = () => {
     if (autoScrollFrameRef.current !== null) {
@@ -3058,12 +3060,12 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
       <div className="table-wrap table-wrap--tall lookup-table-wrap" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--lookup" style={lookupTableStyle}>
           <colgroup>
-            <col style={{ width: LOOKUP_TABLE_DRAG_COLUMN_WIDTH }} />
+            <col style={{ width: lookupMoveColumnWidth }} />
             {lookupColumnWidths.map((width, index) => <col key={String(columns[index].key)} style={{ width }} />)}
-            <col style={{ width: LOOKUP_TABLE_ACTION_COLUMN_WIDTH }} />
+            {!rowDeleteNextToMove && <col style={{ width: LOOKUP_TABLE_ACTION_COLUMN_WIDTH }} />}
           </colgroup>
           <thead>
-            <tr><th className="drag-handle-heading lookup-drag-heading" aria-label="Move row">{showMoveHeaderLabel ? "Move" : ""}</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}<th /></tr>
+            <tr><th className={`drag-handle-heading lookup-drag-heading ${rowDeleteNextToMove ? "lookup-drag-heading--with-delete" : ""}`.trim()} aria-label="Move row">{showMoveHeaderLabel ? "Move" : ""}</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}{!rowDeleteNextToMove && <th />}</tr>
           </thead>
           <tbody>
             {rows.map((row) => (
@@ -3073,9 +3075,12 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
                 onDragOver={(event) => handleDragOver(event, row.id)}
                 onDrop={(event) => handleDrop(event, row.id)}
               >
-                <td className="drag-handle-cell lookup-drag-cell"><button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></td>
+                <td className={`drag-handle-cell lookup-drag-cell ${rowDeleteNextToMove ? "lookup-drag-cell--with-delete" : ""}`.trim()}>
+                  <button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button>
+                  {rowDeleteNextToMove && <button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger lookup-inline-delete-button" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button>}
+                </td>
                 {columns.map((column) => <td key={String(column.key)}>{renderCell(row, column)}</td>)}
-                <td className="lookup-table__actions"><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td>
+                {!rowDeleteNextToMove && <td className="lookup-table__actions"><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td>}
               </tr>
             ))}
           </tbody>
@@ -5673,9 +5678,9 @@ export default function App() {
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />
         )}
-        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset class, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} showMoveHeaderLabel={false} />}
+        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset class, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} />}
-        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} />}
+        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatment" subtitle="Sheet treatment labels used by ticker rows and row-level tax adjustment logic." rows={taxTreatments} columns={[{ key: "label", label: "Label" }]} onChange={updateCollection(setTaxTreatments)} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "" })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Type" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} />}
 
