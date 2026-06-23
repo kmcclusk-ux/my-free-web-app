@@ -4435,9 +4435,9 @@ export default function App() {
   }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
 
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
-  const totalIncome = flows.displayIncome;
+  const totalIncome = flows.totalIncome;
   const totalTax = calculatedTotalTax;
-  const afterTaxIncome = totalIncome - totalTax;
+  const afterTaxIncome = flows.displayIncome - totalTax;
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
