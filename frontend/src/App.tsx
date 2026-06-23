@@ -10,7 +10,8 @@ type TabKey =
   | "categories"
   | "taxTreatment"
   | "accounts"
-  | "accountTaxType";
+  | "accountTaxType"
+  | "accountType";
 
 type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
 type TaxResult = { calc: string; tax: number; taxableIncome?: number; filingStatus?: FilingStatus; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string };
@@ -77,6 +78,7 @@ type CategoryRow = { id: number; name: string };
 type TaxTreatmentRow = { id: number; label: string };
 type AccountRow = { id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
 type AccountTaxTypeRow = { id: number; taxStatus: string };
+type AccountTypeRow = { id: number; name: string };
 
 type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
@@ -90,6 +92,7 @@ type ModelDataSnapshot = {
   taxTreatments: TaxTreatmentRow[];
   accounts: AccountRow[];
   accountTaxTypes: AccountTaxTypeRow[];
+  accountTypes: AccountTypeRow[];
   federalSettings: FederalSettings;
   stateSettings: StateSettings;
   plannerSettings: PlannerSettings;
@@ -106,7 +109,7 @@ type AuthState =
   | { status: "loading"; user: null; tokens: null; error?: string }
   | { status: "signedOut"; user: null; tokens: null; error?: string }
   | { status: "signedIn"; user: AuthUser; tokens: AuthTokens; error?: string };
-type WorkbookTableId = "investments" | "tickers" | "accounts" | "categories" | "taxTreatment" | "accountTaxType";
+type WorkbookTableId = "investments" | "tickers" | "accounts" | "categories" | "taxTreatment" | "accountTaxType" | "accountType";
 type PortfolioSnapshot = {
   generatedAt: string;
   view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[] };
@@ -141,6 +144,7 @@ type PortfolioSnapshot = {
     categories: CategoryRow[];
     taxTreatment: TaxTreatmentRow[];
     accountTaxType: AccountTaxTypeRow[];
+    accountType: AccountTypeRow[];
   };
   editableTables: {
     tableIds: WorkbookTableId[];
@@ -214,6 +218,7 @@ type WorkbookResponse = {
     taxTreatment: TaxTreatmentRow[];
     accounts: AccountRow[];
     accountTaxType: AccountTaxTypeRow[];
+    accountType: AccountTypeRow[];
   }>;
   settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings; ui: UiSettings }>;
   updatedAt?: string | null;
@@ -466,6 +471,7 @@ const mainNavItems: Array<{ key: TabKey; label: string; meta: string }> = [
 ];
 const advancedNavItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "accountTaxType", label: "Tax Category", meta: "status list" },
+  { key: "accountType", label: "Account Type", meta: "account kinds" },
   { key: "categories", label: "Asset Classes", meta: "asset classes" },
 ];
 const navItems = [...mainNavItems, ...advancedNavItems];
@@ -715,6 +721,7 @@ const initialAccounts: AccountRow[] = [
   { id: 2, account: "Example IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
 ];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
+const initialAccountTypes: AccountTypeRow[] = ["IRA", "401k", "inherited Brokerage", "Brokerage Account"].map((name, index) => ({ id: index + 1, name }));
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
@@ -1219,6 +1226,7 @@ function normalizeModelVersions(raw: unknown): ModelVersion[] {
         taxTreatments: snapshot.taxTreatments as TaxTreatmentRow[],
         accounts: snapshot.accounts as AccountRow[],
         accountTaxTypes: snapshot.accountTaxTypes as AccountTaxTypeRow[],
+        accountTypes: Array.isArray(snapshot.accountTypes) ? snapshot.accountTypes as AccountTypeRow[] : initialAccountTypes,
         federalSettings: mergeSettings(initialFederalSettings, snapshot.federalSettings),
         stateSettings: mergeSettings(initialStateSettings, snapshot.stateSettings),
         plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
@@ -1676,6 +1684,13 @@ function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_status") ?? base.taxStatus,
   };
 }
+function workbookToAccountTypeRow(row: Record<string, unknown>, index: number): AccountTypeRow {
+  const base: AccountTypeRow = { id: index + 1, name: "" };
+  return {
+    id: Number(workbookField(row, "id")) || index + 1,
+    name: workbookField(row, "name", "accountType", "account_type", "type", "label") ?? base.name,
+  };
+}
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
 function buildPortfolioSnapshot({
   activeTab,
@@ -1689,6 +1704,7 @@ function buildPortfolioSnapshot({
   categories,
   taxTreatments,
   accountTaxTypes,
+  accountTypes,
   flows,
   metrics,
 }: {
@@ -1703,6 +1719,7 @@ function buildPortfolioSnapshot({
   categories: CategoryRow[];
   taxTreatments: TaxTreatmentRow[];
   accountTaxTypes: AccountTaxTypeRow[];
+  accountTypes: AccountTypeRow[];
   flows: { totalInvestmentAmount: number; totalIncome: number; cash: number; stocks: number; preferredStock: number; bonds: number; muniBond: number; businessDevelopment: number; coveredCall: number; realEstate: number; bitcoin: number };
   metrics: PortfolioSnapshot["metrics"];
 }): PortfolioSnapshot {
@@ -1762,9 +1779,10 @@ function buildPortfolioSnapshot({
       categories,
       taxTreatment: taxTreatments,
       accountTaxType: accountTaxTypes,
+      accountType: accountTypes,
     },
     editableTables: {
-      tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType"],
+      tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType", "accountType"],
       investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "select", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
       tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
       accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
@@ -3824,6 +3842,7 @@ export default function App() {
   const [taxTreatments, setTaxTreatments] = useState(initialTaxTreatments);
   const [accounts, setAccounts] = useState(initialAccounts);
   const [accountTaxTypes, setAccountTaxTypes] = useState(initialAccountTaxTypes);
+  const [accountTypes, setAccountTypes] = useState(initialAccountTypes);
   const [federalSettings, setFederalSettings] = useState(initialFederalSettings);
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
@@ -3863,12 +3882,13 @@ export default function App() {
     taxTreatments,
     accounts,
     accountTaxTypes,
+    accountTypes,
     federalSettings,
     stateSettings,
     plannerSettings,
     uiSettings: { investmentFavorites: uiSettings.investmentFavorites },
     isWhatIfActive,
-  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings.investmentFavorites, isWhatIfActive]);
+  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings.investmentFavorites, isWhatIfActive]);
   const currentHistorySerialized = useMemo(() => JSON.stringify(currentHistorySnapshot), [currentHistorySnapshot]);
 
   const resetHistoryTracking = useCallback(() => {
@@ -3886,6 +3906,7 @@ export default function App() {
     setTaxTreatments(snapshot.taxTreatments);
     setAccounts(snapshot.accounts);
     setAccountTaxTypes(snapshot.accountTaxTypes);
+    setAccountTypes(snapshot.accountTypes);
     setFederalSettings(snapshot.federalSettings);
     setStateSettings(snapshot.stateSettings);
     setPlannerSettings(snapshot.plannerSettings);
@@ -4318,6 +4339,9 @@ export default function App() {
       setAccountTaxTypes(
         mapWorkbookRows(initialAccountTaxTypes, response.tabs?.accountTaxType, workbookToAccountTaxTypeRow)
       );
+      setAccountTypes(
+        mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow)
+      );
       setFederalSettings(mergeSettings(initialFederalSettings, workbookSettings.federal));
       setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
       setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
@@ -4410,7 +4434,7 @@ export default function App() {
     setStorageState("saving");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
         if (!cancelled) { setStorageState("saved"); }
       }).catch((error: Error) => {
         console.error(error);
@@ -4419,7 +4443,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
 
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
   const totalIncome = flows.totalIncome;
@@ -4676,7 +4700,8 @@ export default function App() {
     categories,
     taxTreatments,
     accountTaxTypes,
-      flows,
+    accountTypes,
+    flows,
     metrics: {
       totalInvestmentAmount: flows.totalInvestmentAmount,
       totalIncome,
@@ -4938,6 +4963,12 @@ export default function App() {
         label: "taxStatus",
         name: "taxStatus",
       },
+      accountType: {
+        accounttype: "name",
+        type: "name",
+        label: "name",
+        name: "name",
+      },
     };
     const alias = commonAliases[config.tableId]?.[normalized] || null;
     return alias && config.allowedFields.includes(alias) ? alias : null;
@@ -4989,6 +5020,10 @@ export default function App() {
       taxstatus: "taxTreatment",
       accounttaxtype: "accountTaxType",
       accounttaxtypes: "accountTaxType",
+      accounttype: "accountType",
+      accounttypes: "accountType",
+      accttype: "accountType",
+      accttypes: "accountType",
     };
     return tableAliases[normalized] || null;
   }
@@ -5072,6 +5107,18 @@ export default function App() {
           booleanFields: [],
           defaultRow: (id) => ({ id, taxStatus: "" }),
         };
+      case "accountType":
+        return {
+          tableId: id,
+          label: "account type",
+          tab: "accountType",
+          rows: asEditable(accountTypes),
+          setRows: wrapSetter(setAccountTypes),
+          allowedFields: ["name"],
+          numericFields: [],
+          booleanFields: [],
+          defaultRow: (id) => ({ id, name: "" }),
+        };
       default:
         return null;
     }
@@ -5112,6 +5159,7 @@ export default function App() {
       categories: "name",
       taxTreatment: "label",
       accountTaxType: "taxStatus",
+      accountType: "name",
     };
     return primaryByTable[config.tableId] || "id";
   }
@@ -5640,6 +5688,7 @@ export default function App() {
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountTaxType" && <LookupTable title="Tax Category" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "accountType" && <LookupTable title="Account Type" subtitle="Reference list for account kinds." rows={accountTypes} columns={[{ key: "name", label: "Account type" }]} onChange={updateCollection(setAccountTypes)} onAdd={() => addRow(setAccountTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setAccountTypes)} onReorder={reorderCollection(setAccountTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
 
         {activeTab === "federal" && (
           <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend." className="federal-tax-panel">
