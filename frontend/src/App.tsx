@@ -2515,7 +2515,10 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
                 style={positionStyle(value.amount)}
                 title={`${value.label}: ${value.value}`}
               >
-                <span>{value.label}</span>
+                <span className="tax-thermometer__value-label">
+                  <em>{value.label}</em>
+                  <strong>{value.value}</strong>
+                </span>
               </div>
             ))}
           </div>

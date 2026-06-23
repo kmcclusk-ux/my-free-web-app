@@ -4019,3 +4019,33 @@
   padding: 1px 3px;
   font-size: .5rem;
 }
+
+.tax-thermometer__value .tax-thermometer__value-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+}
+
+.tax-thermometer__value-label em,
+.tax-thermometer__value-label strong {
+  display: inline;
+  font-style: normal;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tax-thermometer__value-label strong {
+  color: #0f2630;
+  font-weight: 950;
+}
+
+.thermometer-rail .tax-thermometer__value .tax-thermometer__value-label {
+  align-items: flex-start;
+  gap: 2px;
+  flex-direction: column;
+}
+
+.thermometer-rail .tax-thermometer__value-label strong {
+  font-size: .52rem;
+}
