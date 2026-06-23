@@ -462,19 +462,16 @@ function authHeaders(idToken?: string): HeadersInit {
   return idToken ? { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` } : { "Content-Type": "application/json" };
 }
 
-const mainNavItems: Array<{ key: TabKey; label: string; meta: string }> = [
+const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "investments", label: "Investments", meta: "workbook grid" },
   { key: "accounts", label: "Accounts", meta: "tax status" },
   { key: "tickers", label: "Assets", meta: "asset lookups" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "state worksheet" },
-];
-const advancedNavItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "accountTaxType", label: "Tax Category", meta: "status list" },
   { key: "accountType", label: "Account Type", meta: "account kinds" },
   { key: "categories", label: "Asset Classes", meta: "asset classes" },
 ];
-const navItems = [...mainNavItems, ...advancedNavItems];
 
 const federalOrdinaryRateMarkers: Record<FilingStatus, ThermometerMarker[]> = {
   mfj: [
@@ -3828,7 +3825,6 @@ export default function App() {
   const authEnabled = isCognitoEnabled();
   const [authState, setAuthState] = useState<AuthState>(readStoredAuth);
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
-  const [isAdvancedNavOpen, setIsAdvancedNavOpen] = useState(false);
   const [focusGrid, setFocusGrid] = useState(false);
   const [showThermometerRail, setShowThermometerRail] = useState(true);
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
@@ -5553,12 +5549,7 @@ export default function App() {
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
         <aside className="sidebar">
           <nav className="sidebar__nav">
-            {mainNavItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
-            <button className={`nav-item nav-item--advanced-toggle ${isAdvancedNavOpen ? "nav-item--advanced-open" : ""}`} type="button" onClick={() => setIsAdvancedNavOpen((current) => !current)} aria-expanded={isAdvancedNavOpen}>
-              <strong>Advanced</strong>
-              <span>{isAdvancedNavOpen ? "hide lookup tabs" : "show lookup tabs"}</span>
-            </button>
-            {isAdvancedNavOpen && <div className="sidebar__advanced-nav">{advancedNavItems.map((item) => <button key={item.key} className={`nav-item nav-item--advanced ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}</div>}
+            {navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
           </nav>
         </aside>
         <main className="content-panel">
