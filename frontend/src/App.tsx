@@ -505,7 +505,7 @@ const federalOrdinaryRateMarkers: Record<FilingStatus, ThermometerMarker[]> = {
     { amount: 626350, label: "37%", detail: "Federal ordinary 37% bracket starts", tone: "federal" },
   ],
 };
-const categoryLabels = ["social-security", "real estate", "treasury bond", "bond", "munibond", "stock", "preferred stock", "business development", "covered call", "IBOND", "Bitcoin", "cash", "non investment income"];
+const categoryLabels = ["stock", "bond", "treasury bond", "cash", "non investment income"];
 const stateOptions: Array<[string, string]> = [
   ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"], ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"], ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"], ["IN", "Indiana"], ["IA", "Iowa"], ["KS", "Kansas"], ["KY", "Kentucky"], ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"], ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"], ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"], ["NE", "Nebraska"], ["NV", "Nevada"], ["NH", "New Hampshire"], ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"], ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"], ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"], ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"], ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
 ];
@@ -687,15 +687,9 @@ function localStateTax2025(taxableIncome: number, stateCode: string, filingStatu
 
 
 const initialInvestments: InvestmentRow[] = [
-  { id: 1, description: "Social Security", account: "Social Security", category: "core", totalInvestment: 0, yearlyIncome: 10000, includeIncome: true, overrideProposal: false, symbol: "SS", newSymbol: "SS", newPercent: 0 },
-  { id: 2, description: "AUX Social Security", account: "Social Security", category: "core", totalInvestment: 0, yearlyIncome: 24000, includeIncome: true, overrideProposal: false, symbol: "AUX-SS", newSymbol: "SS", newPercent: 0 },
-  { id: 3, description: "Palmetto", account: "rental-Palmetto", category: "core", totalInvestment: 1000, yearlyIncome: 2000, includeIncome: true, overrideProposal: false, symbol: "2767 Palmetto", newSymbol: "2767 Palmetto", newPercent: 0 },
-  { id: 4, description: "Sitio", account: "rental-Sitio", category: "core", totalInvestment: 1000, yearlyIncome: 2000, includeIncome: true, overrideProposal: false, symbol: "7068 Sitio", newSymbol: "7068 Sitio", newPercent: 0 },
-  { id: 5, description: "vanguard - brokerage", account: "vanguard brokerage", category: "core", totalInvestment: 1000, yearlyIncome: 64.7, includeIncome: true, overrideProposal: false, symbol: "BSJS", newSymbol: "BSJS", newPercent: 0 },
-  { id: 6, description: "vanguard - brokerage", account: "vanguard brokerage", category: "core", totalInvestment: 1000, yearlyIncome: 40.1, includeIncome: true, overrideProposal: true, symbol: "BIL", newSymbol: "PFFA", newPercent: 0.0961 },
-  { id: 7, description: "IB", account: "Interactive Brokers", category: "core", totalInvestment: 1000, yearlyIncome: 115.5, includeIncome: true, overrideProposal: false, symbol: "SPYI", newSymbol: "SPYI", newPercent: 0 },
-  { id: 8, description: "IB", account: "Interactive Brokers", category: "core", totalInvestment: 2000, yearlyIncome: 144.6, includeIncome: true, overrideProposal: false, symbol: "NAD", newSymbol: "NAD", newPercent: 0 },
-  { id: 9, description: "deferred comp", account: "Deffered comp - Intuit", category: "core", totalInvestment: 2000, yearlyIncome: 38.8, includeIncome: false, overrideProposal: false, symbol: "ST Cash - Deferred", newSymbol: "ST Cash - Deferred", newPercent: 0 },
+  { id: 1, description: "Example stock fund", account: "Example Brokerage", category: "core", totalInvestment: 10000, yearlyIncome: 120, includeIncome: true, overrideProposal: false, symbol: "VOO", newSymbol: "VOO", newPercent: 0 },
+  { id: 2, description: "Example treasury fund", account: "Example Brokerage", category: "core", totalInvestment: 5000, yearlyIncome: 200, includeIncome: true, overrideProposal: false, symbol: "SGOV", newSymbol: "SGOV", newPercent: 0 },
+  { id: 3, description: "Example IRA bond fund", account: "Example IRA", category: "core", totalInvestment: 8000, yearlyIncome: 320, includeIncome: true, overrideProposal: false, symbol: "BND", newSymbol: "BND", newPercent: 0 },
 ];
 
 function isDefaultIncomeTicker(row: Pick<TickerRow, "category" | "taxTreatment">) {
@@ -708,53 +702,18 @@ function isDefaultIncomeTicker(row: Pick<TickerRow, "category" | "taxTreatment">
 }
 
 const initialTickers: TickerRow[] = ([
-  { id: 1, symbol: "SS", percentReturn: 0, category: "social-security", taxTreatment: "ss-85-fed", extraData: 0, description: "social security", exDividend: "", divPayout: "" },
-  { id: 2, symbol: "AUX-SS", percentReturn: 0, category: "social-security", taxTreatment: "tax free", extraData: 0, description: "aux SS", exDividend: "", divPayout: "" },
-  { id: 3, symbol: "BIL", percentReturn: 0.0401, category: "cash", taxTreatment: "state tax free", extraData: 0, description: "short term treasury ETF", exDividend: "", divPayout: "" },
-  { id: 4, symbol: "FLOT", percentReturn: 0.0478, category: "cash", taxTreatment: "non-qualified-div", extraData: 0, description: "short term ETF", exDividend: "", divPayout: "" },
-  { id: 5, symbol: "PFFA", percentReturn: 0.0961, category: "preferred stock", taxTreatment: "non-qualified-div", extraData: 0, description: "Preferred stock ETF", exDividend: "", divPayout: "" },
-  { id: 6, symbol: "BSJS", percentReturn: 0.0647, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "fixed duration", exDividend: "", divPayout: "" },
-  { id: 7, symbol: "BSJQ", percentReturn: 0.061, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "fixed duration", exDividend: "", divPayout: "" },
-  { id: 8, symbol: "BSJT", percentReturn: 0.0673, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "fixed duration", exDividend: "", divPayout: "" },
-  { id: 9, symbol: "SPYI", percentReturn: 0.1155, category: "covered call", taxTreatment: "hold", extraData: 0, description: "covered call ETF", exDividend: "", divPayout: "" },
-  { id: 10, symbol: "NAD", percentReturn: 0.0723, category: "munibond", taxTreatment: "tax free", extraData: 0, description: "municipal bond fund", exDividend: "", divPayout: "" },
-  { id: 11, symbol: "MO", percentReturn: 0.0737, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "equity dividend", exDividend: "", divPayout: "" },
-  { id: 12, symbol: "CASH", percentReturn: 0.01, category: "cash", taxTreatment: "income", extraData: 0, description: "cash sweep", exDividend: "", divPayout: "" },
-  { id: 13, symbol: "non investment income", percentReturn: 0, category: "non investment income", taxTreatment: "income", extraData: 0, description: "ordinary non-investment income", exDividend: "", divPayout: "" },
-  { id: 14, symbol: "DEFERRED-CASH", percentReturn: 0.035, category: "cash", taxTreatment: "income", extraData: 0, description: "deferred cash", exDividend: "", divPayout: "" },
-  { id: 15, symbol: "RENTAL", percentReturn: 0, category: "real estate", taxTreatment: "real estate", extraData: 0, description: "rental property income", exDividend: "", divPayout: "" },
-  { id: 16, symbol: "SPY", percentReturn: 0.012, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "S&P 500 ETF", exDividend: "", divPayout: "" },
-  { id: 17, symbol: "VOO", percentReturn: 0.012, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "S&P 500 ETF", exDividend: "", divPayout: "" },
-  { id: 18, symbol: "VTI", percentReturn: 0.013, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "total stock market ETF", exDividend: "", divPayout: "" },
-  { id: 19, symbol: "QQQ", percentReturn: 0.007, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "Nasdaq 100 ETF", exDividend: "", divPayout: "" },
-  { id: 20, symbol: "IWM", percentReturn: 0.012, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "small-cap ETF", exDividend: "", divPayout: "" },
-  { id: 21, symbol: "SCHD", percentReturn: 0.035, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "dividend equity ETF", exDividend: "", divPayout: "" },
-  { id: 22, symbol: "BND", percentReturn: 0.04, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "total bond market ETF", exDividend: "", divPayout: "" },
-  { id: 23, symbol: "SGOV", percentReturn: 0.04, category: "treasury bond", taxTreatment: "state tax free", extraData: 0, description: "short-term treasury ETF", exDividend: "", divPayout: "" },
-  { id: 24, symbol: "VNQ", percentReturn: 0.035, category: "real estate", taxTreatment: "non-qualified-div", extraData: 0, description: "real estate ETF", exDividend: "", divPayout: "" },
+  { id: 1, symbol: "VOO", percentReturn: 0.012, category: "stock", taxTreatment: "qualified-div", extraData: 0, description: "Example S&P 500 ETF", exDividend: "", divPayout: "" },
+  { id: 2, symbol: "SGOV", percentReturn: 0.04, category: "treasury bond", taxTreatment: "state tax free", extraData: 0, description: "Example short-term treasury ETF", exDividend: "", divPayout: "" },
+  { id: 3, symbol: "BND", percentReturn: 0.04, category: "bond", taxTreatment: "non-qualified-div", extraData: 0, description: "Example bond market ETF", exDividend: "", divPayout: "" },
+  { id: 4, symbol: "CASH", percentReturn: 0.01, category: "cash", taxTreatment: "income", extraData: 0, description: "Example cash sweep", exDividend: "", divPayout: "" },
+  { id: 5, symbol: "non investment income", percentReturn: 0, category: "non investment income", taxTreatment: "income", extraData: 0, description: "Example ordinary non-investment income", exDividend: "", divPayout: "" },
 ] as Array<Omit<TickerRow, "incomeItem">>).map((row) => ({ ...row, incomeItem: isDefaultIncomeTicker(row) }));
 
 const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
 const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label }));
 const initialAccounts: AccountRow[] = [
-  { id: 1, account: "Social Security", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 2, account: "Vanguard Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 3, account: "Vanguard IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 4, account: "Schwab Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 5, account: "Interactive Brokers", taxStatus: "taxable", dividendAccrued: "yes", includeInFreeCashflow: "yes" },
-  { id: 6, account: "Merrill Edge", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 7, account: "Fidelity Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 8, account: "Fidelity IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 9, account: "E*TRADE Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 10, account: "E*TRADE IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 11, account: "Schwab IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 12, account: "Robinhood Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 13, account: "TD Ameritrade Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 14, account: "TreasuryDirect", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 15, account: "Employer 401(k)", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "no" },
-  { id: 16, account: "Roth IRA", taxStatus: "tax-free", dividendAccrued: "no", includeInFreeCashflow: "no" },
-  { id: 17, account: "Deferred Compensation", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "no" },
-  { id: 18, account: "Rental Property", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 1, account: "Example Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 2, account: "Example IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
 ];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
