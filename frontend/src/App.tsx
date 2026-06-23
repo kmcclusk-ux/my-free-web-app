@@ -76,9 +76,9 @@ type DerivedInvestmentRow = InvestmentRow & {
 type TickerRow = { id: number; symbol: string; percentReturn: number; category: string; taxTreatment: string; incomeItem: boolean; extraData: number; description: string; exDividend: string; divPayout: string };
 type CategoryRow = { id: number; name: string };
 type TaxTreatmentRow = { id: number; label: string };
-type AccountRow = { id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
+type AccountRow = { id: number; account: string; accountType: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
 type AccountTaxTypeRow = { id: number; taxStatus: string };
-type AccountTypeRow = { id: number; name: string };
+type AccountTypeRow = { id: number; name: string; taxStatus: string };
 
 type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
@@ -138,7 +138,7 @@ type PortfolioSnapshot = {
     newPercent: number;
     allocationPercent: number;
   }>;
-  accounts: Array<{ id: number; account: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string }>;
+  accounts: Array<{ id: number; account: string; accountType: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string }>;
   referenceTables: {
     tickers: TickerRow[];
     categories: CategoryRow[];
@@ -713,12 +713,17 @@ const initialTickers: TickerRow[] = ([
 
 const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
 const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label }));
-const initialAccounts: AccountRow[] = [
-  { id: 1, account: "Example Brokerage", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-  { id: 2, account: "Example IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
-];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
-const initialAccountTypes: AccountTypeRow[] = ["IRA", "401k", "inherited Brokerage", "Brokerage Account"].map((name, index) => ({ id: index + 1, name }));
+const initialAccountTypes: AccountTypeRow[] = [
+  { id: 1, name: "IRA", taxStatus: "deferred" },
+  { id: 2, name: "401k", taxStatus: "deferred" },
+  { id: 3, name: "inherited Brokerage", taxStatus: "taxable" },
+  { id: 4, name: "Brokerage Account", taxStatus: "taxable" },
+];
+const initialAccounts: AccountRow[] = [
+  { id: 1, account: "Example Brokerage", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+  { id: 2, account: "Example IRA", accountType: "IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
+];
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
@@ -901,13 +906,42 @@ function buildAccountLookupMap(rows: AccountRow[]) {
   }
   return map;
 }
-function buildAccountTaxStatusMap(rows: AccountRow[]) {
+function inferAccountTypeFromAccountName(accountName: string) {
+  const key = normalizeLookupKey(accountName);
+  if (!key) return "";
+  if (key.includes("401k") || key.includes("401")) return "401k";
+  if (key.includes("inherited") && key.includes("brokerage")) return "inherited Brokerage";
+  if (key.includes("ira")) return "IRA";
+  if (key.includes("brokerage")) return "Brokerage Account";
+  return "";
+}
+function inferAccountTypeTaxStatus(typeName: string) {
+  const key = normalizeLookupKey(typeName);
+  if (!key) return "";
+  if (key.includes("401") || key.includes("ira")) return "deferred";
+  if (key.includes("brokerage")) return "taxable";
+  return "";
+}
+function buildAccountTypeTaxStatusMap(rows: AccountTypeRow[]) {
   const map: Record<string, string> = {};
+  for (const row of rows) {
+    const key = normalizeLookupKey(row.name);
+    if (!key) continue;
+    if (!map[key]) {
+      map[key] = String(row.taxStatus || inferAccountTypeTaxStatus(row.name) || "");
+    }
+  }
+  return map;
+}
+function buildAccountTaxStatusMap(rows: AccountRow[], accountTypes: AccountTypeRow[]) {
+  const map: Record<string, string> = {};
+  const accountTypeTaxStatusByName = buildAccountTypeTaxStatusMap(accountTypes);
   for (const row of rows) {
     const key = normalizeLookupKey(row.account);
     if (!key) continue;
     if (!map[key]) {
-      map[key] = String(row.taxStatus || "");
+      const accountType = row.accountType || inferAccountTypeFromAccountName(row.account);
+      map[key] = accountTypeTaxStatusByName[normalizeLookupKey(accountType)] || String(row.taxStatus || "");
     }
   }
   return map;
@@ -1658,10 +1692,13 @@ function workbookToCategoryRow(row: Record<string, unknown>, index: number): Cat
   };
 }
 function workbookToAccountRow(row: Record<string, unknown>, index: number): AccountRow {
-  const base: AccountRow = { id: index + 1, account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" };
+  const base: AccountRow = { id: index + 1, account: "", accountType: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" };
+  const account = workbookField(row, "account", "account_name", "account_names") ?? base.account;
+  const accountType = workbookField(row, "account_type", "accountType", "type") ?? inferAccountTypeFromAccountName(account);
   return {
     id: Number(workbookField(row, "id")) || index + 1,
-    account: workbookField(row, "account", "account_name", "account_names") ?? base.account,
+    account,
+    accountType,
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_treatment") ?? base.taxStatus,
     dividendAccrued: workbookField(row, "dividend_accrued", "dividendAccrued") ?? base.dividendAccrued,
     includeInFreeCashflow: normalizeYesNo(workbookField(row, "include_in_free_cashflow", "includeInFreeCashflow", "include_in_free_cash_flow", "include")),
@@ -1682,10 +1719,12 @@ function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number
   };
 }
 function workbookToAccountTypeRow(row: Record<string, unknown>, index: number): AccountTypeRow {
-  const base: AccountTypeRow = { id: index + 1, name: "" };
+  const base: AccountTypeRow = { id: index + 1, name: "", taxStatus: "" };
+  const name = workbookField(row, "name", "accountType", "account_type", "type", "label") ?? base.name;
   return {
     id: Number(workbookField(row, "id")) || index + 1,
-    name: workbookField(row, "name", "accountType", "account_type", "type", "label") ?? base.name,
+    name,
+    taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_treatment", "status") ?? inferAccountTypeTaxStatus(name),
   };
 }
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
@@ -1770,7 +1809,7 @@ function buildPortfolioSnapshot({
     generatedAt: new Date().toISOString(),
     view: { activeTab, focusGrid, filters, sort, selectedAssetIds },
     holdings,
-    accounts: accounts.map((row) => ({ id: row.id, account: row.account, taxStatus: row.taxStatus, dividendAccrued: row.dividendAccrued, includeInFreeCashflow: row.includeInFreeCashflow })),
+    accounts: accounts.map((row) => ({ id: row.id, account: row.account, accountType: row.accountType || inferAccountTypeFromAccountName(row.account), taxStatus: row.taxStatus, dividendAccrued: row.dividendAccrued, includeInFreeCashflow: row.includeInFreeCashflow })),
     referenceTables: {
       tickers,
       categories,
@@ -1782,7 +1821,7 @@ function buildPortfolioSnapshot({
       tableIds: ["investments", "tickers", "accounts", "categories", "taxTreatment", "accountTaxType", "accountType"],
       investmentFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "select", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
       tickerFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
-      accountFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
+      accountFields: ["account", "accountType", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
     },
     assetClasses,
     metrics,
@@ -4041,16 +4080,25 @@ export default function App() {
     [tickers]
   );
   const accountMap = useMemo(() => buildAccountLookupMap(accounts), [accounts]);
-  const accountTaxStatusByName = useMemo(() => buildAccountTaxStatusMap(accounts), [accounts]);
+  const accountTaxStatusByName = useMemo(() => buildAccountTaxStatusMap(accounts, accountTypes), [accounts, accountTypes]);
   const accountTaxStatusOptions = useMemo(() => {
     const values = accountTaxTypes
       .map((row) => String(row.taxStatus || "").trim())
       .filter(Boolean);
-    const fromAccounts = accounts
+    const fromAccountTypes = accountTypes
       .map((row) => String(row.taxStatus || "").trim())
       .filter(Boolean);
+    return ["", ...new Set([...values, ...fromAccountTypes])];
+  }, [accountTaxTypes, accountTypes]);
+  const accountTypeOptions = useMemo(() => {
+    const values = accountTypes
+      .map((row) => String(row.name || "").trim())
+      .filter(Boolean);
+    const fromAccounts = accounts
+      .map((row) => String(row.accountType || "").trim())
+      .filter(Boolean);
     return ["", ...new Set([...values, ...fromAccounts])];
-  }, [accountTaxTypes, accounts]);
+  }, [accountTypes, accounts]);
   const taxTreatmentOptions = useMemo(() => {
     const values = taxTreatments
       .map((row) => String(row.label || "").trim())
@@ -4934,6 +4982,8 @@ export default function App() {
         account: "account",
         accountname: "account",
         accountnames: "account",
+        accounttype: "accountType",
+        type: "accountType",
         taxstatus: "taxStatus",
         taxtreatment: "taxStatus",
         dividendaccrued: "dividendAccrued",
@@ -4964,6 +5014,9 @@ export default function App() {
         type: "name",
         label: "name",
         name: "name",
+        taxstatus: "taxStatus",
+        taxtreatment: "taxStatus",
+        status: "taxStatus",
       },
     };
     const alias = commonAliases[config.tableId]?.[normalized] || null;
@@ -5062,10 +5115,10 @@ export default function App() {
           tab: "accounts",
           rows: asEditable(accounts),
           setRows: wrapSetter(setAccounts),
-          allowedFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
+          allowedFields: ["account", "accountType", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
           numericFields: [],
           booleanFields: [],
-          defaultRow: (id) => ({ id, account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }),
+          defaultRow: (id) => ({ id, account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }),
         };
       case "categories":
         return {
@@ -5110,10 +5163,10 @@ export default function App() {
           tab: "accountType",
           rows: asEditable(accountTypes),
           setRows: wrapSetter(setAccountTypes),
-          allowedFields: ["name"],
+          allowedFields: ["name", "taxStatus"],
           numericFields: [],
           booleanFields: [],
-          defaultRow: (id) => ({ id, name: "" }),
+          defaultRow: (id) => ({ id, name: "", taxStatus: "" }),
         };
       default:
         return null;
@@ -5677,9 +5730,9 @@ export default function App() {
         )}
         {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset class, tax treatment, income-item flag, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "incomeItem", label: "Income item", type: "checkbox" }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"], ["incomeItem"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
-        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Tax status and cashflow inclusion come directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Account type drives the investment tax status; cashflow inclusion comes directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "accountType", label: "Account type", type: "select", options: accountTypeOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountTaxType" && <LookupTable title="Tax Category" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
-        {activeTab === "accountType" && <LookupTable title="Account Type" subtitle="Reference list for account kinds." rows={accountTypes} columns={[{ key: "name", label: "Account type" }]} onChange={updateCollection(setAccountTypes)} onAdd={() => addRow(setAccountTypes, { id: Date.now(), name: "" })} onRemove={removeRow(setAccountTypes)} onReorder={reorderCollection(setAccountTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "accountType" && <LookupTable title="Account Type" subtitle="Reference list for account kinds and the tax status each account type contributes to investments." rows={accountTypes} columns={[{ key: "name", label: "Account type" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }]} onChange={updateCollection(setAccountTypes)} onAdd={() => addRow(setAccountTypes, { id: Date.now(), name: "", taxStatus: "" })} onRemove={removeRow(setAccountTypes)} onReorder={reorderCollection(setAccountTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
 
         {activeTab === "federal" && (
           <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend." className="federal-tax-panel">
