@@ -3944,6 +3944,7 @@
 
 .tax-thermometer__heat {
   z-index: 2;
+  border-radius: 999px;
   background: rgba(255, 255, 255, .28) !important;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .56), 0 1px 8px rgba(15, 23, 42, .08);
   pointer-events: none;
@@ -3974,7 +3975,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transform: translateX(-8px);
+  transform: translateX(-16px);
   max-width: calc(100% - 4px);
   padding: 1px 4px;
   border-radius: 999px;
@@ -4019,7 +4020,7 @@
 .thermometer-rail .tax-thermometer__rate-band span {
   padding: 1px 3px;
   font-size: .5rem;
-  transform: translateX(-11px);
+  transform: translateX(-20px);
 }
 
 .tax-thermometer__value .tax-thermometer__value-label {
