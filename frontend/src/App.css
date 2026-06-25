@@ -3939,6 +3939,7 @@
 
 .tax-thermometer__track {
   isolation: isolate;
+  border: 1px solid rgba(0, 0, 0, .82) !important;
   background: rgba(248, 250, 252, .82) !important;
 }
 
