@@ -3974,6 +3974,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transform: translateX(-8px);
   max-width: calc(100% - 4px);
   padding: 1px 4px;
   border-radius: 999px;
@@ -4018,6 +4019,7 @@
 .thermometer-rail .tax-thermometer__rate-band span {
   padding: 1px 3px;
   font-size: .5rem;
+  transform: translateX(-11px);
 }
 
 .tax-thermometer__value .tax-thermometer__value-label {
