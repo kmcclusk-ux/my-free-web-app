@@ -2289,16 +2289,33 @@ function buildThermometerRateBands(markers: ThermometerMarker[], scaleMax: numbe
 function rateBandStyle(band: ThermometerRateBand, scaleMax: number) {
   const start = Math.max(0, Math.min(100, (band.start / scaleMax) * 100));
   const end = Math.max(start, Math.min(100, (band.end / scaleMax) * 100));
+  const { background, border } = rateBandColors(band);
+  return {
+    "--rate-start": `${start}%`,
+    "--rate-size": `${end - start}%`,
+    "--rate-band-bg": background,
+    "--rate-band-border": border,
+  } as React.CSSProperties;
+}
+
+function rateBandColors(band: ThermometerRateBand) {
   const position = band.colorTotal <= 1 ? 0 : band.colorIndex / (band.colorTotal - 1);
   const hue = Math.round(145 - position * 145);
   const saturation = Math.round(58 + position * 14);
   const lightness = Math.round(85 - position * 14);
   return {
-    "--rate-start": `${start}%`,
-    "--rate-size": `${end - start}%`,
-    "--rate-band-bg": `hsl(${hue} ${saturation}% ${lightness}% / .82)`,
-    "--rate-band-border": `hsl(${hue} ${saturation}% ${Math.max(34, lightness - 26)}% / .42)`,
-  } as React.CSSProperties;
+    background: `hsl(${hue} ${saturation}% ${lightness}% / .82)`,
+    border: `hsl(${hue} ${saturation}% ${Math.max(34, lightness - 26)}% / .42)`,
+  };
+}
+
+function rateBandGradientStops(bands: ThermometerRateBand[], scaleMax: number) {
+  if (bands.length === 0) return "rgba(248, 250, 252, .82) 0% 100%";
+  return bands.map((band) => {
+    const start = Math.max(0, Math.min(100, (band.start / scaleMax) * 100));
+    const end = Math.max(start, Math.min(100, (band.end / scaleMax) * 100));
+    return `${rateBandColors(band).background} ${start}% ${end}%`;
+  }).join(", ");
 }
 
 function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
@@ -2451,6 +2468,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
   const lowerBracketBoundary = [...sortedRateMarkers].reverse().find((marker) => marker.amount <= taxableIncome);
   const upperBracketBoundary = sortedRateMarkers.find((marker) => marker.amount > taxableIncome);
   const rateBands = buildThermometerRateBands(markers, scaleMax, baseRateLabel);
+  const trackStyle = { "--rate-gradient-stops": rateBandGradientStops(rateBands, scaleMax) } as React.CSSProperties;
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
@@ -2467,7 +2485,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
       </div>
       {!collapsed && (
         <>
-          <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`}>
+          <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`} style={trackStyle}>
             {rateBands.map((band) => (
               <div
                 key={`${band.label}-${band.start}-${band.end}`}

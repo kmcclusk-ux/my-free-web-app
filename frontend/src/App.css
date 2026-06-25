@@ -3940,8 +3940,28 @@
 
 .tax-thermometer__track {
   isolation: isolate;
-  border: 1px solid rgba(0, 0, 0, .82) !important;
+  border: 0 !important;
   background: rgba(248, 250, 252, .82) !important;
+}
+
+.tax-thermometer__track::before,
+.tax-thermometer__track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.tax-thermometer__track::before {
+  z-index: 0;
+  background: linear-gradient(90deg, var(--rate-gradient-stops));
+  overflow: hidden;
+}
+
+.tax-thermometer__track::after {
+  z-index: 8;
+  border: 1px solid rgba(0, 0, 0, .86);
 }
 
 .tax-thermometer__heat {
@@ -3964,7 +3984,7 @@
   justify-content: center;
   min-width: 0;
   overflow: hidden;
-  background: var(--rate-band-bg);
+  background: transparent;
   border-right: 1px solid var(--rate-band-border);
 }
 
@@ -4018,6 +4038,10 @@
   height: var(--rate-size);
   border-right: 0;
   border-top: 1px solid var(--rate-band-border);
+}
+
+.thermometer-rail .tax-thermometer__track::before {
+  background: linear-gradient(0deg, var(--rate-gradient-stops));
 }
 
 .thermometer-rail .tax-thermometer__rate-band--first {
