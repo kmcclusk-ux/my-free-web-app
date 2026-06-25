@@ -2471,7 +2471,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
             {rateBands.map((band) => (
               <div
                 key={`${band.label}-${band.start}-${band.end}`}
-                className={`tax-thermometer__rate-band ${band.end - band.start < scaleMax * 0.055 ? "tax-thermometer__rate-band--compact" : ""}`}
+                className={`tax-thermometer__rate-band ${band.index === 0 ? "tax-thermometer__rate-band--first" : ""} ${band.index === band.total - 1 ? "tax-thermometer__rate-band--last" : ""} ${band.end - band.start < scaleMax * 0.055 ? "tax-thermometer__rate-band--compact" : ""}`.trim()}
                 style={rateBandStyle(band, scaleMax)}
                 title={`${band.label} bracket: ${formatCurrency(band.start)} to ${band.end >= scaleMax ? `${formatCurrency(scaleMax)}+` : formatCurrency(band.end)}`}
               >

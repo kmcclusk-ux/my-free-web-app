@@ -3968,12 +3968,12 @@
   border-right: 1px solid var(--rate-band-border);
 }
 
-.tax-thermometer__rate-band:first-child {
+.tax-thermometer__rate-band--first {
   border-top-left-radius: inherit;
   border-bottom-left-radius: inherit;
 }
 
-.tax-thermometer__rate-band:last-of-type {
+.tax-thermometer__rate-band--last {
   border-top-right-radius: inherit;
   border-bottom-right-radius: inherit;
 }
@@ -4020,11 +4020,11 @@
   border-top: 1px solid var(--rate-band-border);
 }
 
-.thermometer-rail .tax-thermometer__rate-band:first-child {
+.thermometer-rail .tax-thermometer__rate-band--first {
   border-radius: 0 0 999px 999px;
 }
 
-.thermometer-rail .tax-thermometer__rate-band:last-of-type {
+.thermometer-rail .tax-thermometer__rate-band--last {
   border-radius: 999px 999px 0 0;
 }
 
