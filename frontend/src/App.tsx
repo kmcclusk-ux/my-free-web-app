@@ -5662,9 +5662,11 @@ export default function App() {
               <h2 className={activeTab === "federal" ? "content-topbar__title content-topbar__title--federal" : activeTab === "state" ? "content-topbar__title content-topbar__title--state" : "content-topbar__title"}>
                 {activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}
                 {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
-                {navItems.find((item) => item.key === activeTab)?.label}
-                {activeTab === "federal" && <TumblingCurrency className="content-topbar__tax-total" value={federalResult?.tax || 0} />}
-                {activeTab === "state" && <TumblingCurrency className="content-topbar__tax-total" value={displayedStateResult.tax} />}
+                <span className="content-topbar__title-stack">
+                  <span>{navItems.find((item) => item.key === activeTab)?.label}</span>
+                  {activeTab === "federal" && <TumblingCurrency className="content-topbar__tax-total" value={federalResult?.tax || 0} />}
+                  {activeTab === "state" && <TumblingCurrency className="content-topbar__tax-total" value={displayedStateResult.tax} />}
+                </span>
               </h2>
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}

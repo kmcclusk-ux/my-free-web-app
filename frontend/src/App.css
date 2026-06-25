@@ -3447,6 +3447,7 @@
 
 
 .content-topbar__title { display: inline-flex; align-items: center; gap: 8px; }
+.content-topbar__title-stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; line-height: 1; }
 .content-topbar__tax-total { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 9px; border: 1px solid #111; border-radius: 999px; background: #fff7f7; color: #dc2626; font-family: "Geist", "Inter", "SF Pro Display", "Segoe UI", sans-serif; font-size: .88em; font-weight: 850; letter-spacing: -.02em; }
 .content-topbar__tax-total .kpi-pill__value { color: inherit; font: inherit; letter-spacing: inherit; }
 .content-topbar__tax-total--changed .kpi-odometer--spinning { color: #ef4444; text-shadow: 0 0 10px rgba(239,68,68,.25); }
