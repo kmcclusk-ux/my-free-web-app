@@ -3973,6 +3973,11 @@
   border-bottom-left-radius: inherit;
 }
 
+.tax-thermometer__rate-band:last-of-type {
+  border-top-right-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
 .tax-thermometer__rate-band span {
   display: inline-flex;
   align-items: center;
@@ -4017,6 +4022,10 @@
 
 .thermometer-rail .tax-thermometer__rate-band:first-child {
   border-radius: 0 0 999px 999px;
+}
+
+.thermometer-rail .tax-thermometer__rate-band:last-of-type {
+  border-radius: 999px 999px 0 0;
 }
 
 .thermometer-rail .tax-thermometer__rate-band span {
