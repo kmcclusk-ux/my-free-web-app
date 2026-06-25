@@ -20,7 +20,7 @@ type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
 type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
 type ThermometerValue = { amount: number; label: string; value: string; tone: string };
 type ThermometerStat = { label: string; value: string; tone?: string };
-type ThermometerRateBand = { start: number; end: number; label: string; index: number; total: number };
+type ThermometerRateBand = { start: number; end: number; label: string; index: number; total: number; colorIndex: number; colorTotal: number };
 
 type InvestmentRow = {
   id: number;
@@ -2270,10 +2270,8 @@ function getThermometerScale(values: ThermometerValue[], markers: ThermometerMar
 }
 
 function buildThermometerRateBands(markers: ThermometerMarker[], scaleMax: number, baseRateLabel: string): ThermometerRateBand[] {
-  const sortedMarkers = [...markers]
-    .filter((marker) => marker.amount < scaleMax)
-    .sort((first, second) => first.amount - second.amount);
-  const bands = [
+  const sortedMarkers = [...markers].sort((first, second) => first.amount - second.amount);
+  const allBands = [
     { start: 0, end: sortedMarkers[0]?.amount ?? scaleMax, label: baseRateLabel },
     ...sortedMarkers.map((marker, index) => ({
       start: marker.amount,
@@ -2281,13 +2279,17 @@ function buildThermometerRateBands(markers: ThermometerMarker[], scaleMax: numbe
       label: marker.label,
     })),
   ].filter((band) => band.end > band.start);
-  return bands.map((band, index) => ({ ...band, index, total: bands.length }));
+  const visibleBands = allBands
+    .map((band, colorIndex) => ({ ...band, colorIndex, colorTotal: allBands.length }))
+    .filter((band) => band.start < scaleMax)
+    .map((band) => ({ ...band, end: Math.min(band.end, scaleMax) }));
+  return visibleBands.map((band, index) => ({ ...band, index, total: visibleBands.length }));
 }
 
 function rateBandStyle(band: ThermometerRateBand, scaleMax: number) {
   const start = Math.max(0, Math.min(100, (band.start / scaleMax) * 100));
   const end = Math.max(start, Math.min(100, (band.end / scaleMax) * 100));
-  const position = band.total <= 1 ? 0 : band.index / (band.total - 1);
+  const position = band.colorTotal <= 1 ? 0 : band.colorIndex / (band.colorTotal - 1);
   const hue = Math.round(145 - position * 145);
   const saturation = Math.round(58 + position * 14);
   const lightness = Math.round(85 - position * 14);
@@ -2448,7 +2450,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
   const sortedRateMarkers = [...markers].sort((first, second) => first.amount - second.amount);
   const lowerBracketBoundary = [...sortedRateMarkers].reverse().find((marker) => marker.amount <= taxableIncome);
   const upperBracketBoundary = sortedRateMarkers.find((marker) => marker.amount > taxableIncome);
-  const rateBands = buildThermometerRateBands(visibleMarkers, scaleMax, baseRateLabel);
+  const rateBands = buildThermometerRateBands(markers, scaleMax, baseRateLabel);
 
   return (
     <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
