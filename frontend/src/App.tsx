@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import "./App.css";
 
@@ -2513,19 +2513,30 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
                 : isUpperBoundary
                   ? `${distanceLabel} of taxable income to enter the ${marker.label} bracket`
                   : `${formatSignedCurrency(taxableIncome - marker.amount)} vs current taxable income`;
+              const distanceBubbleAmount = (taxableIncome + marker.amount) / 2;
 
               return (
-                <div
-                  key={`${marker.label}-${marker.amount}`}
-                  className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"} ${isLowerBoundary || isUpperBoundary ? "tax-thermometer__tick--adjacent" : ""}`.trim()}
-                  style={positionStyle(marker.amount)}
-                  title={`${marker.detail}: ${formatCurrency(marker.amount)} (${titleDistance})`}
-                >
-                  <span className="tax-thermometer__tick-label">
-                    <strong>{formatCurrency(marker.amount)}</strong>
-                    {distanceLabel && <small className={isLowerBoundary ? "tax-thermometer__distance tax-thermometer__distance--past" : "tax-thermometer__distance tax-thermometer__distance--away"}>{distanceLabel}</small>}
-                  </span>
-                </div>
+                <Fragment key={`${marker.label}-${marker.amount}`}>
+                  <div
+                    className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"} ${isLowerBoundary || isUpperBoundary ? "tax-thermometer__tick--adjacent" : ""}`.trim()}
+                    style={positionStyle(marker.amount)}
+                    title={`${marker.detail}: ${formatCurrency(marker.amount)} (${titleDistance})`}
+                  >
+                    <span className="tax-thermometer__tick-label">
+                      <strong>{formatCurrency(marker.amount)}</strong>
+                    </span>
+                  </div>
+                  {distanceLabel && (
+                    <div
+                      className={`tax-thermometer__distance-bubble ${isLowerBoundary ? "tax-thermometer__distance-bubble--past" : "tax-thermometer__distance-bubble--away"}`}
+                      style={positionStyle(distanceBubbleAmount)}
+                      title={titleDistance}
+                    >
+                      <span className="tax-thermometer__distance-arrow">{isLowerBoundary ? "↓" : "↑"}</span>
+                      <span>{distanceLabel}</span>
+                    </div>
+                  )}
+                </Fragment>
               );
             })}
             {values.map((value) => (
