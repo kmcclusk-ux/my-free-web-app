@@ -887,7 +887,7 @@
 .tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
 .tax-thermometer__tick--surtax span, .tax-thermometer__tick--surtax strong { color: #7f4b29; }
 .tax-thermometer__value { position: absolute; top: 38px; left: var(--thermo-position); width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); transition: left 640ms cubic-bezier(.22, 1, .36, 1), bottom 640ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms ease; will-change: left, bottom; }
-.tax-thermometer__value span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
+.tax-thermometer__value > span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
 .tax-thermometer__value--income { background: #17313a; }
 .tax-thermometer__value--taxable { background: #2f7480; }
 .tax-thermometer__value--tax { background: #c3732c; }
@@ -912,7 +912,7 @@
 .impact-strip .tax-thermometer__tick { top: 7px; bottom: 5px; }
 .impact-strip .tax-thermometer__tick span { top: -10px; font-size: .52rem; }
 .impact-strip .tax-thermometer__value { top: 24px; width: 9px; height: 9px; }
-.impact-strip .tax-thermometer__value span { display: none; }
+.impact-strip .tax-thermometer__value > span { display: none; }
 .impact-strip .tax-thermometer__stats { gap: 4px 8px; margin-top: 5px; }
 .impact-strip .tax-thermometer__stats strong { font-size: .68rem; }
 .thermometer-rail .tax-thermometer-panel { display: flex; flex-direction: column; gap: 8px; }
@@ -978,7 +978,7 @@
 }
 .thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label { border-color: rgba(17,24,39,.34); background: #fff; box-shadow: 0 2px 6px rgba(17,24,39,.12); }
 .thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
-.thermometer-rail .tax-thermometer__value span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 1px 5px; font-size: .55rem; }
+.thermometer-rail .tax-thermometer__value > span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 3px 6px; font-size: .55rem; }
 .thermometer-rail .tax-thermometer__stats { display: grid; gap: 4px; margin-top: 8px; }
 .thermometer-rail .tax-thermometer__stats div { justify-content: space-between; gap: 4px; }
 .thermometer-rail .tax-thermometer__stats span { font-size: .58rem; }
@@ -4099,6 +4099,11 @@
 }
 
 .tax-thermometer__value-label strong span {
+  position: static;
+  transform: none;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   display: block;
 }
 
