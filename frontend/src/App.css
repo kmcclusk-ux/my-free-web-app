@@ -1038,7 +1038,7 @@
 .thermometer-rail .tax-thermometer__track { width: 58px; height: 538px; margin: 0 auto; background: linear-gradient(0deg, rgba(31, 157, 104, .20) 0 var(--thermo-green-end), rgba(245, 165, 36, .24) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .24) var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__heat { inset: 10px 20px; background: linear-gradient(0deg, #1f9d68 0 var(--thermo-green-end), #f5a524 var(--thermo-green-end) var(--thermo-yellow-end), #e5484d var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__tick { top: auto; bottom: var(--thermo-position); left: 50%; width: 72px; height: 1px; transform: translate(-50%, 50%); }
-.thermometer-rail .tax-thermometer__tick span { top: 50%; right: auto; left: calc(50% + 11px); transform: translateY(-50%); }
+.thermometer-rail .tax-thermometer__tick span { top: 50%; right: auto; left: calc(50% + 7px); transform: translateY(-50%); }
 .thermometer-rail .tax-thermometer__tick-label {
   min-width: 78px;
   padding: 3px 5px;
@@ -1056,7 +1056,18 @@
   font-size: .49rem;
   font-weight: 850;
 }
-.thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label { border-color: rgba(17,24,39,.34); background: #fff; box-shadow: 0 2px 6px rgba(17,24,39,.12); }
+.thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label { position: relative; border-color: rgba(17,24,39,.34); background: #fff; box-shadow: 0 2px 6px rgba(17,24,39,.12); }
+.thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label::before {
+  content: "←";
+  position: absolute;
+  top: 50%;
+  left: -16px;
+  color: rgba(17,24,39,.72);
+  font-size: .72rem;
+  font-weight: 950;
+  line-height: 1;
+  transform: translateY(-50%);
+}
 .thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
 .thermometer-rail .tax-thermometer__value > span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 3px 6px; font-size: .55rem; }
 .thermometer-rail .tax-thermometer__stats { display: grid; gap: 4px; margin-top: 8px; }
