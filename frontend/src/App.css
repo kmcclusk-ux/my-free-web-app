@@ -1042,8 +1042,10 @@
 .thermometer-rail .tax-thermometer__tick-label {
   min-width: 78px;
   padding: 3px 5px;
-  border: 1px solid rgba(24,49,58,.08);
+  border: 1px solid rgba(17,24,39,.34);
   border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(17,24,39,.12);
   text-align: left;
 }
 .thermometer-rail .tax-thermometer__tick-label strong {
