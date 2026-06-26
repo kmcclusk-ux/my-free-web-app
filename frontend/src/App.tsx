@@ -2537,7 +2537,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
               >
                 <span className="tax-thermometer__value-label">
                   <em>{value.label}</em>
-                  <strong>{value.value}</strong>
+                  <strong>{value.value.split("\n").map((line) => <span key={line}>{line}</span>)}</strong>
                 </span>
               </div>
             ))}
@@ -2628,7 +2628,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { amount: stateTaxable, label: `${stateCode} taxable`, value: formatCurrencyDetailed(stateTaxable), tone: "taxable" },
   ];
   const combinedValues: ThermometerValue[] = [
-    { amount: combinedTaxable, label: "Combined base", value: `${formatCurrencyDetailed(combinedTaxable)} @ ${formatPercent(combinedEffectiveRate)}`, tone: "tax" },
+    { amount: combinedTaxable, label: "Taxable income", value: `Federal: ${formatCurrencyDetailed(federalTaxable)}\nState: ${formatCurrencyDetailed(stateTaxable)}`, tone: "tax" },
   ];
   const combinedMarkers = buildCombinedTaxRateMarkers(federalMarkers, stateMarkers, stateCode, stateName, stateBaseRateLabel, filingStatus);
   const federalStats: ThermometerStat[] = [

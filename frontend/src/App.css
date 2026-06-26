@@ -4098,6 +4098,10 @@
   font-weight: 950;
 }
 
+.tax-thermometer__value-label strong span {
+  display: block;
+}
+
 .thermometer-rail .tax-thermometer__value .tax-thermometer__value-label {
   align-items: flex-start;
   gap: 2px;
