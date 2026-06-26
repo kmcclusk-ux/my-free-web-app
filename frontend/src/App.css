@@ -4246,7 +4246,7 @@
   display: block;
 }
 .tax-thermometer__value-label .tax-thermometer__value-line {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 5px;
 }
