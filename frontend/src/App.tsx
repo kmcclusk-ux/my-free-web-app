@@ -2610,8 +2610,68 @@ function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateM
     });
 }
 
+type TaxThermometerMode = "combined" | "federal" | "state";
+
+function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mode: TaxThermometerMode; onChange: (mode: TaxThermometerMode) => void; stateCode: string; stateName: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef<HTMLDivElement | null>(null);
+  const options: Array<{ mode: TaxThermometerMode; label: string; icons: React.ReactNode }> = [
+    { mode: "combined", label: `Fed + ${stateName}`, icons: <><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /><span>+</span><StateFlagImage stateCode={stateCode} stateName={stateName} /></> },
+    { mode: "federal", label: "Fed Only", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
+    { mode: "state", label: `${stateName} Only`, icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
+  ];
+  const selected = options.find((option) => option.mode === mode) || options[0];
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!selectRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="tax-thermometer-mode-select" ref={selectRef}>
+      <button className="tax-thermometer-mode-select__button" type="button" aria-haspopup="listbox" aria-expanded={isOpen} onClick={() => setIsOpen((current) => !current)}>
+        <span className="tax-thermometer-mode-select__icons">{selected.icons}</span>
+        <span className="tax-thermometer-mode-select__label">{selected.label}</span>
+        <span className="tax-thermometer-mode-select__chevron">▾</span>
+      </button>
+      {isOpen && (
+        <div className="tax-thermometer-mode-select__menu" role="listbox">
+          {options.map((option) => (
+            <button
+              key={option.mode}
+              className={`tax-thermometer-mode-select__option ${option.mode === mode ? "tax-thermometer-mode-select__option--selected" : ""}`.trim()}
+              type="button"
+              role="option"
+              aria-selected={option.mode === mode}
+              onClick={() => {
+                onChange(option.mode);
+                setIsOpen(false);
+              }}
+            >
+              <span className="tax-thermometer-mode-select__icons">{option.icons}</span>
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, stateCode, stateName }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; stateCode: string; stateName: string }) {
-  const [collapsedSections, setCollapsedSections] = useState({ federal: true, state: true, combined: false });
+  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>("combined");
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const totalTax = federalTax + stateTax;
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
   const stateMarkers = getStateTaxRateMarkers(stateCode, filingStatus);
@@ -2641,12 +2701,52 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { label: "Effective", value: formatPercent(stateEffectiveRate), tone: "taxable" },
     { label: "Top bracket", value: stateMarkers.length ? getReachedTaxRateLabel(stateMarkers, stateTaxable, "1%") : "state schedule", tone: "income" },
   ];
+  const selectedThermometer =
+    thermometerMode === "federal"
+      ? {
+        titleLabel: "Federal Tax",
+        subtitle: `Bracket thresholds (${filingStatus.toUpperCase()})`,
+        taxableIncome: federalTaxable,
+        values: federalValues,
+        markers: federalMarkers,
+        stats: federalStats,
+        footerLabel: "Federal taxable income",
+        footerValue: formatCurrencyDetailed(federalTaxable),
+        baseRateLabel: "10%",
+        currentRateLabel: undefined,
+        total: federalTax,
+      }
+      : thermometerMode === "state"
+        ? {
+          titleLabel: `${stateName} Tax`,
+          subtitle: stateMarkers.length ? `Bracket thresholds (${filingStatus.toUpperCase()})` : "No state income-tax bracket changes",
+          taxableIncome: stateTaxable,
+          values: stateValues,
+          markers: stateMarkers,
+          stats: stateStats,
+          footerLabel: `${stateCode} taxable income`,
+          footerValue: formatCurrencyDetailed(stateTaxable),
+          baseRateLabel: stateBaseRateLabel,
+          currentRateLabel: undefined,
+          total: stateTax,
+        }
+        : {
+          titleLabel: "Federal + State",
+          subtitle: "Combined federal + state thresholds",
+          taxableIncome: combinedTaxable,
+          values: combinedValues,
+          markers: combinedMarkers,
+          stats: [],
+          footerLabel: "",
+          footerValue: "",
+          baseRateLabel: combinedBaseRateLabel,
+          currentRateLabel: formatPercent(combinedEffectiveRate),
+          total: totalTax,
+        };
 
   return (
     <div className="tax-thermometer-panel">
-      <TaxThermometer title={<span className="tax-thermometer__title-with-flag tax-thermometer__title-with-tax"><span><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> + <StateFlagImage stateCode={stateCode} stateName={stateName} /></span><small>{formatCurrencyDetailed(totalTax)}</small></span>} titleLabel="Federal + State" subtitle="Combined federal + state thresholds" taxableIncome={combinedTaxable} values={combinedValues} markers={combinedMarkers} stats={[]} footerLabel="" footerValue="" baseRateLabel={combinedBaseRateLabel} currentRateLabel={formatPercent(combinedEffectiveRate)} collapsed={collapsedSections.combined} onToggle={() => setCollapsedSections((current) => ({ ...current, combined: !current.combined }))} />
-      <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" />Federal Tax</span>} titleLabel="Federal Tax" subtitle={`Bracket thresholds (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} baseRateLabel="10%" collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
-      <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><StateFlagImage stateCode={stateCode} stateName={stateName} />{stateName} Tax</span>} titleLabel={`${stateName} Tax`} subtitle={stateMarkers.length ? `Bracket thresholds (${filingStatus.toUpperCase()})` : "No state income-tax bracket changes"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} baseRateLabel={stateBaseRateLabel} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
+      <TaxThermometer title={<span className="tax-thermometer__title-with-tax"><TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} /><small>{formatCurrencyDetailed(selectedThermometer.total)}</small></span>} titleLabel={selectedThermometer.titleLabel} subtitle={selectedThermometer.subtitle} taxableIncome={selectedThermometer.taxableIncome} values={selectedThermometer.values} markers={selectedThermometer.markers} stats={selectedThermometer.stats} footerLabel={selectedThermometer.footerLabel} footerValue={selectedThermometer.footerValue} baseRateLabel={selectedThermometer.baseRateLabel} currentRateLabel={selectedThermometer.currentRateLabel} collapsed={isCollapsed} onToggle={() => setIsCollapsed((current) => !current)} />
     </div>
   );
 }
