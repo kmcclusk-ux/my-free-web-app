@@ -2693,10 +2693,22 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const combinedEffectiveRate = federalEffectiveRate + stateEffectiveRate;
   const combinedBaseRateLabel = formatPercent(0.10 + rateLabelToDecimal(stateBaseRateLabel));
   const federalValues: ThermometerValue[] = [
-    { amount: federalTaxable, label: "Fed taxable", value: formatCurrencyDetailed(federalTaxable), tone: "taxable" },
+    {
+      amount: federalTaxable,
+      label: "Taxable income",
+      value: formatCurrencyDetailed(federalTaxable),
+      tone: "tax",
+      content: <span className="tax-thermometer__value-line"><img className="tax-thermometer__value-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" />{formatCurrencyDetailed(federalTaxable)}</span>,
+    },
   ];
   const stateValues: ThermometerValue[] = [
-    { amount: stateTaxable, label: `${stateCode} taxable`, value: formatCurrencyDetailed(stateTaxable), tone: "taxable" },
+    {
+      amount: stateTaxable,
+      label: "Taxable income",
+      value: formatCurrencyDetailed(stateTaxable),
+      tone: "tax",
+      content: <span className="tax-thermometer__value-line"><StateFlagImage stateCode={stateCode} stateName={stateName} />{formatCurrencyDetailed(stateTaxable)}</span>,
+    },
   ];
   const combinedValues: ThermometerValue[] = [
     {
