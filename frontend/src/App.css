@@ -1094,14 +1094,14 @@
   transform: translateY(50%);
 }
 .thermometer-rail .tax-thermometer__distance-bubble--away {
-  border-color: rgba(22, 101, 52, .24);
-  background: #dcfce7;
-  color: #14532d;
-}
-.thermometer-rail .tax-thermometer__distance-bubble--past {
   border-color: rgba(185, 28, 28, .22);
   background: #fee2e2;
   color: #7f1d1d;
+}
+.thermometer-rail .tax-thermometer__distance-bubble--past {
+  border-color: rgba(22, 101, 52, .24);
+  background: #dcfce7;
+  color: #14532d;
 }
 .thermometer-rail .tax-thermometer__distance-arrow {
   color: currentColor;
