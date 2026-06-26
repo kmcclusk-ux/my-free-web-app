@@ -948,6 +948,18 @@
   font-weight: 950;
   line-height: 1;
 }
+.tax-thermometer__title-value {
+  width: max-content;
+  margin: -4px auto 10px;
+  color: #b42318;
+  font-size: .82rem;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+.thermometer-rail .tax-thermometer__title-value {
+  margin: -2px auto 7px;
+}
 .tax-thermometer-mode-select {
   position: relative;
   z-index: 30;
