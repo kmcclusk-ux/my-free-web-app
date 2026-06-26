@@ -1040,7 +1040,9 @@
 .thermometer-rail .tax-thermometer__tick { top: auto; bottom: var(--thermo-position); left: 50%; width: 72px; height: 1px; transform: translate(-50%, 50%); }
 .thermometer-rail .tax-thermometer__tick span { top: 50%; right: auto; left: calc(100% - 4px); transform: translateY(-50%); }
 .thermometer-rail .tax-thermometer__tick-label {
+  box-sizing: border-box;
   min-width: 78px;
+  width: max-content;
   padding: 3px 5px;
   border: 1px solid rgba(17,24,39,.34);
   border-radius: 8px;
@@ -2846,6 +2848,10 @@
 .thermometer-rail .tax-thermometer {
   border-radius: 13px;
   background: #fff;
+}
+
+.thermometer-rail .tax-thermometer {
+  overflow: visible;
 }
 
 .tax-thermometer-panel__summary-grid > div {
