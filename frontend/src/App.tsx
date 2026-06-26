@@ -2460,7 +2460,7 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
   );
 }
 
-function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, baseRateLabel, collapsed, onToggle }: { title: React.ReactNode; titleLabel?: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; baseRateLabel: string; collapsed: boolean; onToggle: () => void }) {
+function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, baseRateLabel, currentRateLabel, collapsed, onToggle }: { title: React.ReactNode; titleLabel?: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; baseRateLabel: string; currentRateLabel?: string; collapsed: boolean; onToggle: () => void }) {
   const labelText = titleLabel || (typeof title === "string" ? title : "Tax thermometer");
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
@@ -2493,7 +2493,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
                 style={rateBandStyle(band, scaleMax)}
                 title={`${band.label} bracket: ${formatCurrency(band.start)} to ${band.end >= scaleMax ? `${formatCurrency(scaleMax)}+` : formatCurrency(band.end)}`}
               >
-                <span>{band.label}</span>
+                <span>{currentRateLabel && taxableIncome >= band.start && taxableIncome <= band.end ? currentRateLabel : band.label}</span>
               </div>
             ))}
             <div className="tax-thermometer__heat" />
@@ -2645,7 +2645,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
 
   return (
     <div className="tax-thermometer-panel">
-      <TaxThermometer title={<span className="tax-thermometer__title-with-flag">Federal <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> State <StateFlagImage stateCode={stateCode} stateName={stateName} /></span>} titleLabel="Federal State" subtitle="Combined federal + state thresholds" taxableIncome={combinedTaxable} values={combinedValues} markers={combinedMarkers} stats={combinedStats} footerLabel="Combined taxable base" footerValue={formatCurrencyDetailed(combinedTaxable)} baseRateLabel={combinedBaseRateLabel} collapsed={collapsedSections.combined} onToggle={() => setCollapsedSections((current) => ({ ...current, combined: !current.combined }))} />
+      <TaxThermometer title={<span className="tax-thermometer__title-with-flag">Federal <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> + State <StateFlagImage stateCode={stateCode} stateName={stateName} /></span>} titleLabel="Federal + State" subtitle="Combined federal + state thresholds" taxableIncome={combinedTaxable} values={combinedValues} markers={combinedMarkers} stats={combinedStats} footerLabel="Combined taxable base" footerValue={formatCurrencyDetailed(combinedTaxable)} baseRateLabel={combinedBaseRateLabel} currentRateLabel={formatPercent(combinedEffectiveRate)} collapsed={collapsedSections.combined} onToggle={() => setCollapsedSections((current) => ({ ...current, combined: !current.combined }))} />
       <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" />Federal Tax</span>} titleLabel="Federal Tax" subtitle={`Bracket thresholds (${filingStatus.toUpperCase()})`} taxableIncome={federalTaxable} values={federalValues} markers={federalMarkers} stats={federalStats} footerLabel="Federal taxable income" footerValue={formatCurrencyDetailed(federalTaxable)} baseRateLabel="10%" collapsed={collapsedSections.federal} onToggle={() => setCollapsedSections((current) => ({ ...current, federal: !current.federal }))} />
       <TaxThermometer title={<span className="tax-thermometer__title-with-flag"><StateFlagImage stateCode={stateCode} stateName={stateName} />{stateName} Tax</span>} titleLabel={`${stateName} Tax`} subtitle={stateMarkers.length ? `Bracket thresholds (${filingStatus.toUpperCase()})` : "No state income-tax bracket changes"} taxableIncome={stateTaxable} values={stateValues} markers={stateMarkers} stats={stateStats} footerLabel={`${stateCode} taxable income`} footerValue={formatCurrencyDetailed(stateTaxable)} baseRateLabel={stateBaseRateLabel} collapsed={collapsedSections.state} onToggle={() => setCollapsedSections((current) => ({ ...current, state: !current.state }))} />
     </div>

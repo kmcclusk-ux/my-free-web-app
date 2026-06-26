@@ -4004,15 +4004,16 @@
   justify-content: center;
   transform: translateX(-16px);
   max-width: calc(100% - 4px);
-  padding: 1px 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .46);
-  color: rgba(15, 23, 42, .78);
+  padding: 2px 5px;
+  border: 1px solid rgba(15, 23, 42, .38);
+  border-radius: 4px;
+  background: #fff;
+  color: #10242d;
   font-size: .58rem;
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, .08);
+  box-shadow: 0 2px 5px rgba(15, 23, 42, .16);
 }
 
 .tax-thermometer__rate-band--compact span {
@@ -4053,7 +4054,7 @@
 }
 
 .thermometer-rail .tax-thermometer__rate-band span {
-  padding: 1px 3px;
+  padding: 2px 4px;
   font-size: .5rem;
   transform: translateX(-20px);
 }
