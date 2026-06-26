@@ -2497,6 +2497,14 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
                 <span>{currentRateLabel && taxableIncome >= band.start && taxableIncome <= band.end ? currentRateLabel : band.label}</span>
               </div>
             ))}
+            {values.map((value) => (
+              <div
+                key={`${value.label}-${value.tone}-fill`}
+                className={`tax-thermometer__value-fill tax-thermometer__value-fill--${value.tone}`}
+                style={positionStyle(value.amount)}
+                aria-hidden="true"
+              />
+            ))}
             <div className="tax-thermometer__heat" />
             {visibleMarkers.map((marker) => {
               const isLowerBoundary = lowerBracketBoundary?.amount === marker.amount;

@@ -4201,6 +4201,34 @@
   z-index: 4;
 }
 
+.tax-thermometer__value-fill {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--thermo-position);
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(196, 139, 58, .66), rgba(196, 139, 58, .36));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
+  pointer-events: none;
+  transition: width 640ms cubic-bezier(.22, 1, .36, 1), height 640ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.tax-thermometer__value-fill--income,
+.tax-thermometer__value-fill--taxable,
+.tax-thermometer__value-fill--tax {
+  background: linear-gradient(90deg, rgba(196, 139, 58, .72), rgba(196, 139, 58, .38));
+}
+
+.tax-thermometer__value {
+  width: 0;
+  height: 0;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+
 .tax-thermometer__tick span {
   z-index: 5;
 }
@@ -4233,6 +4261,17 @@
   padding: 2px 4px;
   font-size: .5rem;
   transform: translateX(-36px);
+}
+
+.thermometer-rail .tax-thermometer__value-fill {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  height: var(--thermo-position);
+  border-radius: 0 0 999px 999px;
+  background: linear-gradient(0deg, rgba(196, 139, 58, .72), rgba(196, 139, 58, .36));
 }
 
 .tax-thermometer__value .tax-thermometer__value-label {
