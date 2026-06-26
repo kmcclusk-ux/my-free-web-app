@@ -2580,27 +2580,27 @@ function getReachedTaxRateValue(markers: ThermometerMarker[], taxableIncome: num
   return rateLabelToDecimal(getReachedTaxRateLabel(markers, taxableIncome, fallback));
 }
 
-function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateMarkers: ThermometerMarker[], stateCode: string, stateName: string, stateBaseRateLabel: string, combinedTaxable: number) {
-  const federalThresholds = new Set(federalMarkers.map((marker) => marker.amount));
-  const combinedThresholdFloor = Math.min(100000, Math.max(25000, combinedTaxable * 0.25));
+function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateMarkers: ThermometerMarker[], stateCode: string, stateName: string, stateBaseRateLabel: string, filingStatus: FilingStatus) {
+  const niitThreshold = niitThresholdForStatus(filingStatus);
   const thresholdRows = [
     ...federalMarkers.map((marker) => ({ amount: marker.amount, source: "Federal" })),
     ...stateMarkers.map((marker) => ({ amount: marker.amount, source: stateCode })),
+    { amount: niitThreshold, source: "NIIT" },
   ]
     .filter((row) => row.amount > 0)
     .sort((left, right) => left.amount - right.amount);
   const uniqueThresholds = thresholdRows.filter((row, index, rows) => index === 0 || row.amount !== rows[index - 1].amount);
-  const nextThresholdAboveCurrent = uniqueThresholds.find((row) => row.amount > combinedTaxable)?.amount;
 
   return uniqueThresholds
-    .filter((row) => federalThresholds.has(row.amount) || row.amount >= combinedThresholdFloor || row.amount === nextThresholdAboveCurrent)
     .map((row) => {
       const federalRate = getReachedTaxRateValue(federalMarkers, row.amount, "10%");
       const stateRate = getReachedTaxRateValue(stateMarkers, row.amount, stateBaseRateLabel);
+      const niitRate = row.amount >= niitThreshold ? 0.038 : 0;
+      const sourceLabel = row.source === "NIIT" ? "NIIT investment-income threshold" : `${row.source} threshold`;
       return {
         amount: row.amount,
-        label: formatPercent(federalRate + stateRate),
-        detail: `Combined federal + ${stateName} marginal rate starts (${row.source} threshold)`,
+        label: formatPercent(federalRate + stateRate + niitRate),
+        detail: `Combined federal + ${stateName} marginal rate starts (${sourceLabel})`,
         tone: "tax",
       };
     });
@@ -2626,7 +2626,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const combinedValues: ThermometerValue[] = [
     { amount: combinedTaxable, label: "Combined base", value: `${formatCurrencyDetailed(combinedTaxable)} @ ${formatPercent(combinedEffectiveRate)}`, tone: "tax" },
   ];
-  const combinedMarkers = buildCombinedTaxRateMarkers(federalMarkers, stateMarkers, stateCode, stateName, stateBaseRateLabel, combinedTaxable);
+  const combinedMarkers = buildCombinedTaxRateMarkers(federalMarkers, stateMarkers, stateCode, stateName, stateBaseRateLabel, filingStatus);
   const federalStats: ThermometerStat[] = [
     { label: "Federal tax", value: formatCurrencyDetailed(federalTax), tone: "tax" },
     { label: "Effective", value: formatPercent(federalEffectiveRate), tone: "taxable" },
