@@ -1108,6 +1108,13 @@
 }
 .thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
 .thermometer-rail .tax-thermometer__value > span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 3px 6px; font-size: .55rem; }
+.thermometer-rail .tax-thermometer__value--tax > span {
+  background: #111827;
+  color: #fff;
+}
+.thermometer-rail .tax-thermometer__value--tax .tax-thermometer__value-label strong {
+  color: #fff;
+}
 .thermometer-rail .tax-thermometer__stats { display: grid; gap: 4px; margin-top: 8px; }
 .thermometer-rail .tax-thermometer__stats div { justify-content: space-between; gap: 4px; }
 .thermometer-rail .tax-thermometer__stats span { font-size: .58rem; }
