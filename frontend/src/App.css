@@ -4245,6 +4245,20 @@
   background: transparent;
   display: block;
 }
+.tax-thermometer__value-label .tax-thermometer__value-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tax-thermometer__value-label .tax-thermometer__value-flag,
+.tax-thermometer__value-label .state-flag-image {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.35);
+}
 
 .thermometer-rail .tax-thermometer__value .tax-thermometer__value-label {
   align-items: flex-start;

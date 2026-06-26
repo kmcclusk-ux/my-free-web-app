@@ -18,7 +18,7 @@ type TaxResult = { calc: string; tax: number; taxableIncome?: number; filingStat
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
 type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
-type ThermometerValue = { amount: number; label: string; value: string; tone: string };
+type ThermometerValue = { amount: number; label: string; value: string; tone: string; content?: React.ReactNode };
 type ThermometerStat = { label: string; value: string; tone?: string };
 type ThermometerRateBand = { start: number; end: number; label: string; index: number; total: number; colorIndex: number; colorTotal: number };
 
@@ -2548,7 +2548,7 @@ function TaxThermometer({ title, titleLabel, subtitle, taxableIncome, values, ma
               >
                 <span className="tax-thermometer__value-label">
                   <em>{value.label}</em>
-                  <strong>{value.value.split("\n").map((line) => <span key={line}>{line}</span>)}</strong>
+                  <strong>{value.content || value.value.split("\n").map((line) => <span key={line}>{line}</span>)}</strong>
                 </span>
               </div>
             ))}
@@ -2699,7 +2699,18 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { amount: stateTaxable, label: `${stateCode} taxable`, value: formatCurrencyDetailed(stateTaxable), tone: "taxable" },
   ];
   const combinedValues: ThermometerValue[] = [
-    { amount: combinedTaxable, label: "Taxable income", value: `Federal: ${formatCurrencyDetailed(federalTaxable)}\nState: ${formatCurrencyDetailed(stateTaxable)}`, tone: "tax" },
+    {
+      amount: combinedTaxable,
+      label: "Taxable income",
+      value: `Federal: ${formatCurrencyDetailed(federalTaxable)}\nState: ${formatCurrencyDetailed(stateTaxable)}`,
+      tone: "tax",
+      content: (
+        <>
+          <span className="tax-thermometer__value-line"><img className="tax-thermometer__value-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" />{formatCurrencyDetailed(federalTaxable)}</span>
+          <span className="tax-thermometer__value-line"><StateFlagImage stateCode={stateCode} stateName={stateName} />{formatCurrencyDetailed(stateTaxable)}</span>
+        </>
+      ),
+    },
   ];
   const combinedMarkers = buildCombinedTaxRateMarkers(federalMarkers, stateMarkers, stateCode, stateName, stateBaseRateLabel, filingStatus);
   const federalStats: ThermometerStat[] = [
