@@ -2637,8 +2637,8 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   const selectRef = useRef<HTMLDivElement | null>(null);
   const options: Array<{ mode: TaxThermometerMode; label: string; icons: React.ReactNode }> = [
     { mode: "combined", label: `Fed + ${stateName}`, icons: <><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /><span>+</span><StateFlagImage stateCode={stateCode} stateName={stateName} /></> },
-    { mode: "federal", label: "Fed Only", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
-    { mode: "state", label: `${stateName} Only`, icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
+    { mode: "federal", label: "Federal", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
+    { mode: "state", label: stateName, icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
   ];
   const selected = options.find((option) => option.mode === mode) || options[0];
 
