@@ -1038,7 +1038,7 @@
 .thermometer-rail .tax-thermometer__track { width: 58px; height: 538px; margin: 0 auto; background: linear-gradient(0deg, rgba(31, 157, 104, .20) 0 var(--thermo-green-end), rgba(245, 165, 36, .24) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .24) var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__heat { inset: 10px 20px; background: linear-gradient(0deg, #1f9d68 0 var(--thermo-green-end), #f5a524 var(--thermo-green-end) var(--thermo-yellow-end), #e5484d var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__tick { top: auto; bottom: var(--thermo-position); left: 50%; width: 72px; height: 1px; transform: translate(-50%, 50%); }
-.thermometer-rail .tax-thermometer__tick span { top: 50%; right: auto; left: calc(100% + 4px); transform: translateY(-50%); }
+.thermometer-rail .tax-thermometer__tick span { top: 50%; right: auto; left: calc(50% + 11px); transform: translateY(-50%); }
 .thermometer-rail .tax-thermometer__tick-label {
   min-width: 78px;
   padding: 3px 5px;
