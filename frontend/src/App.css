@@ -4326,3 +4326,50 @@
 .thermometer-rail .tax-thermometer__value-label strong {
   font-size: .52rem;
 }
+
+.tax-what-if-disclosure__tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.tax-what-if-table {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 12px;
+  background: rgba(255,255,255,.74);
+}
+.tax-what-if-table__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #17313a;
+}
+.tax-what-if-table__heading strong { font-size: .78rem; }
+.tax-what-if-table__heading span {
+  color: #b42318;
+  font-size: .78rem;
+  font-weight: 900;
+}
+.tax-what-if-table__grid {
+  display: grid;
+  grid-template-columns: minmax(90px, .7fr) minmax(130px, 1fr) 30px;
+  gap: 5px;
+  align-items: center;
+}
+.tax-what-if-table__grid--header {
+  color: #62767a;
+  font-size: .64rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.tax-what-if-table__grid input,
+.tax-what-if-table__grid select {
+  min-height: 30px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  font-size: .76rem;
+}

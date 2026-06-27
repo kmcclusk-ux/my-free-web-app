@@ -81,7 +81,8 @@ type AccountRow = { id: number; account: string; accountType: string; taxStatus:
 type AccountTaxTypeRow = { id: number; taxStatus: string };
 type AccountTypeRow = { id: number; name: string; taxStatus: string };
 
-type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
+type TaxWhatIfItem = { id: number; amount: number; incomeType: string };
+type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
@@ -207,7 +208,7 @@ type AssistantTableConfig = {
   booleanFields: string[];
   defaultRow: (id: number) => AssistantEditableRow;
 };
-type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus">;
+type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "extraOrdinaryItems" | "extraPreferredItems">;
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -725,7 +726,12 @@ const initialAccounts: AccountRow[] = [
   { id: 1, account: "Example Brokerage", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
   { id: 2, account: "Example IRA", accountType: "IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
 ];
-const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
+const ordinaryWhatIfTypes = ["W2 wages", "Ordinary dividends", "Interest income", "Business income", "Rental income", "Other ordinary income"];
+const preferredWhatIfTypes = ["Long-term capital gains", "Qualified dividends", "Section 1250 gain", "Collectibles gain", "Other preferred income"];
+const newTaxWhatIfItem = (incomeType: string): TaxWhatIfItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount: 0, incomeType });
+const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWhatIfTypes[0]);
+const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
+const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual" };
@@ -1740,6 +1746,10 @@ function workbookToAccountTypeRow(row: Record<string, unknown>, index: number): 
   };
 }
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
+function sumTaxWhatIfItems(items: TaxWhatIfItem[] | undefined, legacyAmount = 0) {
+  const itemTotal = Array.isArray(items) ? items.reduce((total, item) => total + toNumber(item.amount), 0) : 0;
+  return itemTotal > 0 ? itemTotal : toNumber(legacyAmount);
+}
 function buildPortfolioSnapshot({
   activeTab,
   focusGrid,
@@ -1862,6 +1872,41 @@ function CurrencyInput({ value, onChange }: { value: number; onChange: (value: n
       onBlur={() => setIsFocused(false)}
       onChange={(event) => onChange(parseCurrencyInput(event.target.value))}
     />
+  );
+}
+
+function TaxWhatIfMiniTable({ title, total, rows, typeOptions, onChange }: { title: string; total: number; rows: TaxWhatIfItem[]; typeOptions: string[]; onChange: (rows: TaxWhatIfItem[]) => void }) {
+  const safeRows = rows.length ? rows : [newTaxWhatIfItem(typeOptions[0] || "Other")];
+  const updateRow = (id: number, values: Partial<TaxWhatIfItem>) => {
+    onChange(safeRows.map((row) => row.id === id ? { ...row, ...values } : row));
+  };
+  const removeRow = (id: number) => {
+    const nextRows = safeRows.filter((row) => row.id !== id);
+    onChange(nextRows.length ? nextRows : [newTaxWhatIfItem(typeOptions[0] || "Other")]);
+  };
+
+  return (
+    <div className="tax-what-if-table">
+      <div className="tax-what-if-table__heading">
+        <strong>{title}</strong>
+        <span>{formatCurrencyDetailed(total)}</span>
+      </div>
+      <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
+        <span>Amount</span>
+        <span>Type</span>
+        <span aria-hidden="true" />
+      </div>
+      {safeRows.map((row) => (
+        <div className="tax-what-if-table__grid" key={row.id}>
+          <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
+          <select value={row.incomeType} onChange={(event) => updateRow(row.id, { incomeType: event.target.value })}>
+            {typeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+          <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label={`Remove ${title} row`}>×</button>
+        </div>
+      ))}
+      <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newTaxWhatIfItem(typeOptions[0] || "Other")])}>+ Add row</button>
+    </div>
   );
 }
 
@@ -4545,8 +4590,10 @@ export default function App() {
     [investments, derivedRows, tickerMap]
   );
 
-  const effectiveExtraOrdinaryIncome = isFederalTaxWhatIfOpen ? federalSettings.extraOrdinaryIncome : 0;
-  const effectiveExtraPreferredIncome = isFederalTaxWhatIfOpen ? federalSettings.extraPreferredIncome : 0;
+  const extraOrdinaryWhatIfTotal = sumTaxWhatIfItems(federalSettings.extraOrdinaryItems, federalSettings.extraOrdinaryIncome);
+  const extraPreferredWhatIfTotal = sumTaxWhatIfItems(federalSettings.extraPreferredItems, federalSettings.extraPreferredIncome);
+  const effectiveExtraOrdinaryIncome = isFederalTaxWhatIfOpen ? extraOrdinaryWhatIfTotal : 0;
+  const effectiveExtraPreferredIncome = isFederalTaxWhatIfOpen ? extraPreferredWhatIfTotal : 0;
   const effectiveExtraStateIncome = isStateTaxWhatIfOpen ? stateSettings.extraStateIncome : 0;
   const ordinaryBeforeDeductions = flows.federalOrdinary + effectiveExtraOrdinaryIncome;
   const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
@@ -5998,9 +6045,21 @@ export default function App() {
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
             <details className="tax-what-if-disclosure" open={isFederalTaxWhatIfOpen} onToggle={(event) => setIsFederalTaxWhatIfOpen(event.currentTarget.open)}>
               <summary>What-If</summary>
-              <div className="form-grid tax-what-if-disclosure__fields">
-                <label><span>Extra ordinary income</span><CurrencyInput value={federalSettings.extraOrdinaryIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: value }))} /></label>
-                <label><span>Extra preferred income</span><CurrencyInput value={federalSettings.extraPreferredIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraPreferredIncome: value }))} /></label>
+              <div className="tax-what-if-disclosure__fields tax-what-if-disclosure__tables">
+                <TaxWhatIfMiniTable
+                  title="Extra ordinary income"
+                  total={extraOrdinaryWhatIfTotal}
+                  rows={federalSettings.extraOrdinaryItems}
+                  typeOptions={ordinaryWhatIfTypes}
+                  onChange={(rows) => setFederalSettings((current) => ({ ...current, extraOrdinaryItems: rows, extraOrdinaryIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
+                />
+                <TaxWhatIfMiniTable
+                  title="Extra preferred income"
+                  total={extraPreferredWhatIfTotal}
+                  rows={federalSettings.extraPreferredItems}
+                  typeOptions={preferredWhatIfTypes}
+                  onChange={(rows) => setFederalSettings((current) => ({ ...current, extraPreferredItems: rows, extraPreferredIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
+                />
               </div>
             </details>
             <div className="form-grid">
