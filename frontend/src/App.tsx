@@ -2173,6 +2173,7 @@ type KpiMetricConfig = {
   primary?: boolean;
   deltaKind?: "currency" | "percent";
   tone?: "default" | "accent" | "warning" | "sync";
+  details?: React.ReactNode;
 };
 
 type IncomeSnapshotValues = {
@@ -2258,7 +2259,7 @@ function TumblingCurrency({ value, className = "" }: { value: number; className?
   );
 }
 
-function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default" }: KpiMetricConfig) {
+function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
@@ -2296,7 +2297,7 @@ function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKin
         : formatCurrency(Math.abs(deltaValue));
 
   return (
-    <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}>
+    <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()} tabIndex={details ? 0 : undefined}>
       <span>{label}</span>
       <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
       {secondaryValue && <small>{secondaryValue}</small>}
@@ -2305,6 +2306,7 @@ function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKin
           {deltaValue >= 0 ? "↑" : "↓"} {deltaValue >= 0 ? "+" : "-"}{formattedDelta}
         </em>
       )}
+      {details && <div className="kpi-pill__details" role="tooltip">{details}</div>}
     </div>
   );
 }
@@ -5201,6 +5203,67 @@ export default function App() {
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
+  const hiddenFromAfterTaxIncome = flows.totalIncome - flows.displayIncome;
+  const federalTaxTotal = federalResult?.tax || 0;
+  const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
+  const federalPreferredTax = federalResult?.prefTax || 0;
+  const federalNiit = federalResult?.niit || 0;
+  const afterTaxBreakdownDetails = (
+    <div className="tax-breakdown-popover">
+      <div className="tax-breakdown-popover__header">
+        <strong>After-tax income breakdown</strong>
+        <span>Annual values from the current workbook and tax settings.</span>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Income math</h4>
+        <div><span>Total included income for taxes</span><strong>{formatCurrencyDetailed(flows.totalIncome)}</strong></div>
+        <div><span>Excluded from after-tax income display</span><strong>-{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
+        <div><span>Income used for after-tax KPI</span><strong>{formatCurrencyDetailed(flows.displayIncome)}</strong></div>
+        <div><span>Federal + state taxes</span><strong>-{formatCurrencyDetailed(totalTax)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>After-tax income</span><strong>{formatCurrencyDetailed(afterTaxIncome)}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Federal taxable income</h4>
+        <div><span>Ordinary income before deductions</span><strong>{formatCurrencyDetailed(ordinaryBeforeDeductions)}</strong></div>
+        <div><span>Preferred income before deductions</span><strong>{formatCurrencyDetailed(preferredBeforeDeductions)}</strong></div>
+        <div><span>Gross federal taxable income</span><strong>{formatCurrencyDetailed(grossFederalTaxable)}</strong></div>
+        <div><span>Above-line deductions</span><strong>-{formatCurrencyDetailed(federalAboveLineDeductionSummary.total)}</strong></div>
+        {federalAboveLineDeductionSummary.capitalLossRaw > 0 && <div><span>Capital loss used above-line</span><strong>{formatCurrencyDetailed(federalAboveLineDeductionSummary.capitalLossDeduction)}</strong></div>}
+        <div><span>After above-line deductions</span><strong>{formatCurrencyDetailed(federalTaxableBeforeStandardOrItemized)}</strong></div>
+        <div><span>{federalSettings.deductionMode === "itemized" ? "Itemized deduction" : "Standard deduction"}</span><strong>-{formatCurrencyDetailed(federalDeduction)}</strong></div>
+        {federalSettings.deductionMode === "itemized" && (
+          <>
+            <div><span>Mortgage interest</span><strong>{formatCurrencyDetailed(federalDeductionSummary.mortgageInterest)}</strong></div>
+            <div><span>SALT deduction used</span><strong>{formatCurrencyDetailed(federalDeductionSummary.saltDeduction)}</strong></div>
+            <div><span>Capital loss used itemized</span><strong>{formatCurrencyDetailed(federalDeductionSummary.capitalLossDeduction)}</strong></div>
+            <div><span>Other itemized deductions</span><strong>{formatCurrencyDetailed(federalDeductionSummary.otherItemized)}</strong></div>
+          </>
+        )}
+        <div className="tax-breakdown-popover__total"><span>Federal taxable after deductions</span><strong>{formatCurrencyDetailed(federalTaxableAfterDeductions)}</strong></div>
+        <div><span>Ordinary taxable</span><strong>{formatCurrencyDetailed(ordinaryTaxable)}</strong></div>
+        <div><span>Preferred taxable</span><strong>{formatCurrencyDetailed(prefTaxable)}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>State taxable income</h4>
+        <div><span>Federal-taxable investments</span><strong>{formatCurrencyDetailed(federalTaxableInvestmentIncome)}</strong></div>
+        <div><span>State taxability adjustment</span><strong>{formatSignedCurrency(stateInvestmentAdjustment)}</strong></div>
+        <div><span>Federal What-If income</span><strong>{formatCurrencyDetailed(federalWhatIfIncome)}</strong></div>
+        <div><span>{selectedStateCode} extra income</span><strong>{formatCurrencyDetailed(effectiveExtraStateIncome)}</strong></div>
+        <div><span>{selectedStateCode} gross income</span><strong>{formatCurrencyDetailed(stateGross)}</strong></div>
+        <div><span>{selectedStateCode} deduction used</span><strong>-{formatCurrencyDetailed(stateDeduction)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>{selectedStateCode} taxable after deductions</span><strong>{formatCurrencyDetailed(stateTaxableAfterDeductions)}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Taxes removed</h4>
+        <div><span>Federal ordinary tax</span><strong>{formatCurrencyDetailed(federalOrdinaryTax)}</strong></div>
+        <div><span>Federal preferred tax</span><strong>{formatCurrencyDetailed(federalPreferredTax)}</strong></div>
+        <div><span>NIIT</span><strong>{formatCurrencyDetailed(federalNiit)}</strong></div>
+        <div><span>Federal total</span><strong>{formatCurrencyDetailed(federalTaxTotal)}</strong></div>
+        <div><span>{selectedStateCode} state tax</span><strong>{formatCurrencyDetailed(displayedStateResult.tax)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Total tax removed</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+      </div>
+    </div>
+  );
   const currentIncomeSnapshot: IncomeSnapshotValues = {
     beforeTaxAnnual: totalIncome,
     beforeTaxMonthly: monthlyIncome,
@@ -5435,6 +5498,7 @@ export default function App() {
       numericValue: isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome,
       primary: true,
       tone: "warning",
+      details: afterTaxBreakdownDetails,
     },
     {
       label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} income`,

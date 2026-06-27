@@ -732,6 +732,109 @@
   text-transform: none;
   white-space: nowrap;
 }
+.kpi-pill--has-details {
+  position: relative;
+  cursor: help;
+  outline: none;
+}
+.kpi-pill__details {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 5200;
+  width: min(560px, calc(100vw - 28px));
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--poly-line, rgba(17, 24, 39, .12));
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, .24);
+  color: #172033;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.kpi-pill--has-details:hover .kpi-pill__details,
+.kpi-pill--has-details:focus-within .kpi-pill__details,
+.kpi-pill--has-details:focus .kpi-pill__details {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.tax-breakdown-popover {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  color: #172033;
+  font-size: .76rem;
+  line-height: 1.25;
+}
+.tax-breakdown-popover__header {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(17, 24, 39, .10);
+}
+.tax-breakdown-popover__header strong {
+  color: #111827;
+  font-size: .95rem;
+}
+.tax-breakdown-popover__header span {
+  color: #667085;
+  font-size: .72rem;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+.tax-breakdown-popover__section {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(17, 24, 39, .08);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.tax-breakdown-popover__section h4 {
+  margin: 0 0 4px;
+  color: #111827;
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.tax-breakdown-popover__section div:not(.tax-breakdown-popover__total),
+.tax-breakdown-popover__total {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tax-breakdown-popover__section div:not(.tax-breakdown-popover__total) {
+  color: #52616a;
+}
+.tax-breakdown-popover__section span {
+  min-width: 0;
+  color: inherit;
+  font-size: .72rem;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+.tax-breakdown-popover__section strong {
+  flex: 0 0 auto;
+  color: #172033;
+  font-size: .76rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tax-breakdown-popover__total {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(17, 24, 39, .10);
+  color: #111827;
+  font-weight: 900;
+}
 @keyframes kpi-odometer-roll {
   0% {
     filter: blur(0);
@@ -5051,4 +5154,78 @@ html.aftertaxus-dark-mode #root {
 .app-shell--dark .state-flag-select__button .state-flag-image {
   border-color: rgba(248, 250, 252, .38) !important;
   box-shadow: 0 3px 8px rgba(0, 0, 0, .28);
+}
+
+.app-shell--dark .kpi-pill__details {
+  border-color: rgba(226, 232, 240, .18);
+  background: rgba(15, 23, 42, .98);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .46);
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-breakdown-popover {
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-breakdown-popover__header {
+  border-color: rgba(226, 232, 240, .14);
+}
+
+.app-shell--dark .tax-breakdown-popover__header strong,
+.app-shell--dark .tax-breakdown-popover__section h4,
+.app-shell--dark .tax-breakdown-popover__section strong,
+.app-shell--dark .tax-breakdown-popover__total {
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-breakdown-popover__header span,
+.app-shell--dark .tax-breakdown-popover__section div:not(.tax-breakdown-popover__total),
+.app-shell--dark .tax-breakdown-popover__section span {
+  color: #cbd5e1;
+}
+
+.app-shell--dark .tax-breakdown-popover__section {
+  border-color: rgba(226, 232, 240, .12);
+  background: rgba(2, 6, 23, .58);
+}
+
+.app-shell--dark .tax-breakdown-popover__total {
+  border-color: rgba(226, 232, 240, .14);
+}
+
+.kpi-pill .tax-breakdown-popover span,
+.app-top-nav .kpi-pill .tax-breakdown-popover span {
+  overflow: visible;
+  color: inherit;
+  font-size: .72rem;
+  font-weight: inherit;
+  letter-spacing: normal;
+  line-height: 1.25;
+  text-overflow: clip;
+  text-transform: none;
+  white-space: normal;
+}
+
+.kpi-pill .tax-breakdown-popover strong,
+.app-top-nav .kpi-pill .tax-breakdown-popover strong {
+  overflow: visible;
+  color: #172033;
+  font-size: .76rem;
+  letter-spacing: normal;
+  line-height: 1.25;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.kpi-pill .tax-breakdown-popover__header strong,
+.app-top-nav .kpi-pill .tax-breakdown-popover__header strong {
+  color: #111827;
+  font-size: .95rem;
+}
+
+.app-shell--dark .kpi-pill .tax-breakdown-popover strong,
+.app-shell--dark .app-top-nav .kpi-pill .tax-breakdown-popover strong,
+.app-shell--dark .kpi-pill .tax-breakdown-popover__header strong,
+.app-shell--dark .app-top-nav .kpi-pill .tax-breakdown-popover__header strong {
+  color: #f8fafc;
 }
