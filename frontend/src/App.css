@@ -4209,7 +4209,7 @@
   left: 10px;
   width: max(0px, calc(var(--thermo-position) - 10px));
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(196, 32, 26, .82), rgba(196, 32, 26, .46));
+  background: #c4201a;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
   pointer-events: none;
   transition: width 640ms cubic-bezier(.22, 1, .36, 1), height 640ms cubic-bezier(.22, 1, .36, 1);
@@ -4218,7 +4218,7 @@
 .tax-thermometer__value-fill--income,
 .tax-thermometer__value-fill--taxable,
 .tax-thermometer__value-fill--tax {
-  background: linear-gradient(90deg, rgba(196, 32, 26, .86), rgba(196, 32, 26, .48));
+  background: #c4201a;
 }
 
 .tax-thermometer__value {
@@ -4271,7 +4271,7 @@
   width: auto;
   height: max(0px, calc(var(--thermo-position) - 10px));
   border-radius: 999px;
-  background: linear-gradient(0deg, rgba(196, 32, 26, .86), rgba(196, 32, 26, .48));
+  background: #c4201a;
 }
 
 .tax-thermometer__value .tax-thermometer__value-label {
