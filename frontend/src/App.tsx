@@ -1276,7 +1276,7 @@ function normalizeModelVersions(raw: unknown): ModelVersion[] {
         accounts: snapshot.accounts as AccountRow[],
         accountTaxTypes: snapshot.accountTaxTypes as AccountTaxTypeRow[],
         accountTypes: Array.isArray(snapshot.accountTypes) ? snapshot.accountTypes as AccountTypeRow[] : initialAccountTypes,
-        federalSettings: mergeSettings(initialFederalSettings, snapshot.federalSettings),
+        federalSettings: normalizeFederalSettings(snapshot.federalSettings),
         stateSettings: mergeSettings(initialStateSettings, snapshot.stateSettings),
         plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
         uiSettings: {
@@ -1394,6 +1394,38 @@ function parseStringFromSection(
   return undefined;
 }
 
+function normalizeTaxWhatIfItems(raw: unknown, defaultType: string, legacyAmount = 0): TaxWhatIfItem[] {
+  const sourceRows = Array.isArray(raw) ? raw : [];
+  const rows = sourceRows
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const obj = entry as Record<string, unknown>;
+      const amount = toNumber(obj.amount as number | string | boolean | null | undefined);
+      const incomeType = String(obj.incomeType || defaultType).trim() || defaultType;
+      return {
+        id: Number(obj.id) || Date.now() + index,
+        amount,
+        incomeType,
+      };
+    })
+    .filter((row): row is TaxWhatIfItem => Boolean(row));
+  if (rows.length > 0) return rows;
+  return [{ id: Date.now(), amount: toNumber(legacyAmount), incomeType: defaultType }];
+}
+
+function normalizeFederalSettings(raw: unknown): FederalSettings {
+  const merged = mergeSettings(initialFederalSettings, raw) as FederalSettings;
+  const extraOrdinaryItems = normalizeTaxWhatIfItems(merged.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
+  const extraPreferredItems = normalizeTaxWhatIfItems(merged.extraPreferredItems, preferredWhatIfTypes[0], merged.extraPreferredIncome);
+  return {
+    ...merged,
+    extraOrdinaryItems,
+    extraPreferredItems,
+    extraOrdinaryIncome: extraOrdinaryItems.reduce((total, row) => total + toNumber(row.amount), 0),
+    extraPreferredIncome: extraPreferredItems.reduce((total, row) => total + toNumber(row.amount), 0),
+  };
+}
+
 function parseFederalSettingsSection(section: unknown): Partial<FederalSettings> {
   const sectionObj = section && typeof section === "object" ? (section as SettingsSection) : undefined;
   const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
@@ -1410,6 +1442,12 @@ function parseFederalSettingsSection(section: unknown): Partial<FederalSettings>
   setNumberField("propertyTax", "Property tax");
   setNumberField("standardDeduction", "Standard deduction");
   setNumberField("saltCap", "SALT cap");
+  const extraOrdinaryIncome = parseNumberFromSection(sectionObj, rows, "extraOrdinaryIncome", "Extra ordinary income");
+  const extraPreferredIncome = parseNumberFromSection(sectionObj, rows, "extraPreferredIncome", "Extra preferred income");
+  if (extraOrdinaryIncome !== undefined) result.extraOrdinaryIncome = extraOrdinaryIncome;
+  if (extraPreferredIncome !== undefined) result.extraPreferredIncome = extraPreferredIncome;
+  result.extraOrdinaryItems = normalizeTaxWhatIfItems(sectionObj?.extraOrdinaryItems, ordinaryWhatIfTypes[0], result.extraOrdinaryIncome || 0);
+  result.extraPreferredItems = normalizeTaxWhatIfItems(sectionObj?.extraPreferredItems, preferredWhatIfTypes[0], result.extraPreferredIncome || 0);
 
   const filingValue = parseStringFromSection(sectionObj, rows, "filingStatus", "Filing status");
   if (filingValue) {
@@ -4218,7 +4256,7 @@ export default function App() {
     setAccounts(snapshot.accounts);
     setAccountTaxTypes(snapshot.accountTaxTypes);
     setAccountTypes(snapshot.accountTypes);
-    setFederalSettings(snapshot.federalSettings);
+    setFederalSettings(normalizeFederalSettings(snapshot.federalSettings));
     setStateSettings(snapshot.stateSettings);
     setPlannerSettings(snapshot.plannerSettings);
     setUiSettings((current) => ({
@@ -4667,7 +4705,7 @@ export default function App() {
       setAccountTypes(
         mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow)
       );
-      setFederalSettings(mergeSettings(initialFederalSettings, workbookSettings.federal));
+      setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
       setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
       setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
       setUiSettings({
