@@ -3673,12 +3673,11 @@
 
 .investments-workspace .drag-handle-heading,
 .investments-workspace .drag-handle-cell {
-  width: 110px;
-  min-width: 108px;
+  width: 84px;
+  min-width: 82px;
 }
 
 .row-split-button,
-.row-find-button,
 .row-delete-button {
   width: 24px;
   height: 24px;
@@ -3699,12 +3698,6 @@
   color: var(--poly-blue, #2563eb);
 }
 
-.row-find-button:hover {
-  border-color: #0f766e;
-  background: #ecfdf5;
-  color: #0f766e;
-}
-
 .row-delete-button:hover {
   border-color: #dc2626;
   background: #fff1f2;
@@ -3712,7 +3705,6 @@
 }
 
 .row-split-button .icon-button__icon,
-.row-find-button .icon-button__icon,
 .row-delete-button .icon-button__icon {
   width: 14px;
   height: 14px;
