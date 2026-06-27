@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
+import { calculateDisplayedAfterTaxIncome, federalCombinedTax2025 } from "./taxMath";
 import "./App.css";
 
 type TabKey =
@@ -60,6 +61,10 @@ type DerivedInvestmentRow = InvestmentRow & {
   ordinaryMonthly: number;
   preferredMonthly: number;
   stateMonthly: number;
+  displayOrdinaryMonthly: number;
+  displayPreferredMonthly: number;
+  displayStateMonthly: number;
+  displayNonInvestmentIncome: number;
   nonTaxableMonthly: number;
   nonInvestmentIncome: number;
   cash: number;
@@ -4929,6 +4934,15 @@ export default function App() {
     const investmentType = String(effectiveTicker?.category || "").toLowerCase();
     const extraData = toNumber(effectiveTicker?.extraData || 0);
     const taxableMonthlyBase = isTaxableAccount && row.includeIncome ? filteredIncome / 12 : 0;
+    const displayTaxableMonthlyBase = isTaxableAccount && row.includeIncome && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
+    const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false);
+    const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true);
+    const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode);
+    const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false);
+    const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true);
+    const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode);
+    const nonInvestmentIncome = ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0;
+    const displayNonInvestmentIncome = includeInAfterTaxIncome ? nonInvestmentIncome : 0;
     return {
       ...row,
       yearlyIncome,
@@ -4949,11 +4963,15 @@ export default function App() {
       currentAssetTaxTone: getAssetTaxTone(taxStatus, currentTaxTreatment, selectedStateCode),
       proposedAssetTaxTone: getAssetTaxTone(taxStatus, proposedTaxTreatment, selectedStateCode),
       investmentType,
-      ordinaryMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, false),
-      preferredMonthly: fedTaxAdjust(taxableMonthlyBase, taxTreatment, true),
-      stateMonthly: stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode),
+      ordinaryMonthly,
+      preferredMonthly,
+      stateMonthly,
+      displayOrdinaryMonthly,
+      displayPreferredMonthly,
+      displayStateMonthly,
       nonTaxableMonthly: !isTaxableAccount && row.includeIncome ? monthlyIncome : 0,
-      nonInvestmentIncome: ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0,
+      nonInvestmentIncome,
+      displayNonInvestmentIncome,
       cash: investmentType === "cash" ? includedTotal : 0,
       stocks: investmentType === "stock" ? includedTotal : 0,
       preferredStock: investmentType === "preferred stock" ? includedTotal : 0,
@@ -4974,8 +4992,12 @@ export default function App() {
     acc.federalOrdinary += row.ordinaryMonthly * 12;
     acc.federalPreferred += row.preferredMonthly * 12;
     acc.stateTaxable += row.stateMonthly * 12;
+    acc.displayFederalOrdinary += row.displayOrdinaryMonthly * 12;
+    acc.displayFederalPreferred += row.displayPreferredMonthly * 12;
+    acc.displayStateTaxable += row.displayStateMonthly * 12;
     acc.nonTaxableIncome += row.nonTaxableMonthly * 12;
     acc.nonInvestmentIncome += row.nonInvestmentIncome;
+    acc.displayNonInvestmentIncome += row.displayNonInvestmentIncome;
     acc.muniIncome += row.muniInterest;
     acc.cash += row.cash;
     acc.stocks += row.stocks;
@@ -4987,7 +5009,7 @@ export default function App() {
     acc.realEstate += row.realEstate;
     acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestmentAmount: 0, totalIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
+  }, { totalInvestmentAmount: 0, totalIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
@@ -5038,6 +5060,29 @@ export default function App() {
   const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome, 0);
   const niitThreshold = niitThresholdForStatus(federalSettings.filingStatus);
   const niitBase = Math.max(Math.min(netInvestmentIncome, Math.max(magi - niitThreshold, 0)), 0);
+  const displayedFederalTaxableBeforeDeductions = flows.displayFederalOrdinary + flows.displayFederalPreferred;
+  const excludedStateGross = Math.max(stateGross - flows.displayStateTaxable, 0);
+  const excludedStateTaxableAfterDeductions = Math.max(excludedStateGross - stateDeduction, 0);
+  const excludedStateTax = localStateTax2025(excludedStateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus).tax;
+  const excludedFederalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, excludedStateTax, federalSettings.saltCap);
+  const excludedFederalDeduction = federalSettings.deductionMode === "itemized" ? excludedFederalDeductionSummary.itemizedDeduction : federalSettings.standardDeduction;
+  const excludedFederalOrdinaryBeforeDeductions = Math.max(ordinaryBeforeDeductions - flows.displayFederalOrdinary, 0);
+  const excludedFederalPreferredBeforeDeductions = Math.max(preferredBeforeDeductions - flows.displayFederalPreferred, 0);
+  const excludedFederalGrossTaxable = excludedFederalOrdinaryBeforeDeductions + excludedFederalPreferredBeforeDeductions;
+  const excludedFederalAfterAboveLineDeductions = Math.max(excludedFederalGrossTaxable - federalAboveLineDeductionSummary.total, 0);
+  const excludedFederalTaxableAfterDeductions = Math.max(excludedFederalAfterAboveLineDeductions - excludedFederalDeduction, 0);
+  const excludedFederalPrefTaxable = Math.min(excludedFederalPreferredBeforeDeductions, excludedFederalTaxableAfterDeductions);
+  const excludedFederalOrdinaryTaxable = Math.max(excludedFederalTaxableAfterDeductions - excludedFederalPrefTaxable, 0);
+  const excludedNonInvestmentIncome = Math.max(flows.nonInvestmentIncome - flows.displayNonInvestmentIncome, 0);
+  const excludedFederalNetInvestmentIncome = Math.max(excludedFederalGrossTaxable - excludedNonInvestmentIncome, 0);
+  const excludedFederalTax = federalCombinedTax2025({
+    ordinaryTaxable: excludedFederalOrdinaryTaxable,
+    preferredTaxable: excludedFederalPrefTaxable,
+    filingStatus: federalSettings.filingStatus,
+    magi: excludedFederalGrossTaxable,
+    netInvestmentIncome: excludedFederalNetInvestmentIncome,
+  }).tax;
+  const excludedOnlyTax = excludedFederalTax + excludedStateTax;
   const hasRealData = useMemo(
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
     [investments]
@@ -5200,7 +5245,8 @@ export default function App() {
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
   const totalIncome = flows.totalIncome;
   const totalTax = calculatedTotalTax;
-  const afterTaxIncome = flows.displayIncome - totalTax;
+  const taxAttributedToDisplayedIncome = Math.max(totalTax - excludedOnlyTax, 0);
+  const afterTaxIncome = calculateDisplayedAfterTaxIncome(flows.displayIncome, totalTax, excludedOnlyTax);
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
@@ -5229,11 +5275,13 @@ export default function App() {
         <div><span>Total included income for taxes</span><strong>{formatCurrencyDetailed(flows.totalIncome)}</strong></div>
         <div><span>Excluded from after-tax income display</span><strong>-{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
         <div><span>Income used for after-tax KPI</span><strong>{formatCurrencyDetailed(flows.displayIncome)}</strong></div>
-        <div><span>Federal + state taxes</span><strong>-{formatCurrencyDetailed(totalTax)}</strong></div>
+        <div><span>Tax on excluded-only baseline</span><strong>{formatCurrencyDetailed(excludedOnlyTax)}</strong></div>
+        <div><span>Tax attributed to displayed income</span><strong>-{formatCurrencyDetailed(taxAttributedToDisplayedIncome)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>After-tax income</span><strong>{formatCurrencyDetailed(afterTaxIncome)}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Federal taxable income</h4>
+        <div><span>Displayed federal-taxable before deductions</span><strong>{formatCurrencyDetailed(displayedFederalTaxableBeforeDeductions)}</strong></div>
         <div><span>Ordinary income before deductions</span><strong>{formatCurrencyDetailed(ordinaryBeforeDeductions)}</strong></div>
         <div><span>Preferred income before deductions</span><strong>{formatCurrencyDetailed(preferredBeforeDeductions)}</strong></div>
         <div><span>Gross federal taxable income</span><strong>{formatCurrencyDetailed(grossFederalTaxable)}</strong></div>
