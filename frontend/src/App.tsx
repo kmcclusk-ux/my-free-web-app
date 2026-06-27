@@ -106,7 +106,7 @@ type ModelDataSnapshot = {
 };
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod };
+type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string };
@@ -757,7 +757,7 @@ const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferred
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem(blankDeductionType)], deductionItems: [newDeductionItem(blankDeductionType)], mortgageInterest: 0, propertyTax: 0, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual" };
+const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1630,6 +1630,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
     incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
+    darkMode: sectionObj.darkMode === true,
   };
 }
 
@@ -1650,6 +1651,7 @@ function parseWorkbookSettings(settings: unknown) {
         : legacyFavorites,
       modelVersions: ui.modelVersions || [],
       incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
+      darkMode: ui.darkMode === true,
     },
   };
 }
@@ -2700,7 +2702,7 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | 
   );
 }
 
-function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" }) {
+function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" }) {
   if (name === "menu") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2726,6 +2728,14 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
         <path d="M5 8V4m0 0h4M5 4l3 3" />
         <path d="M6.5 17.5A8 8 0 1 0 5 8" />
         <path d="M12 8v4l3 2" />
+      </svg>
+    );
+  }
+
+  if (name === "theme") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M15.5 3.5a7.5 7.5 0 1 0 5 9.4 6 6 0 0 1-7.4-7.4 7.6 7.6 0 0 1 2.4-2z" />
       </svg>
     );
   }
@@ -4625,6 +4635,7 @@ export default function App() {
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
       modelVersions: current.modelVersions,
       incomePrimaryPeriod: current.incomePrimaryPeriod,
+      darkMode: current.darkMode,
     }));
     setIsWhatIfActive(snapshot.isWhatIfActive);
     setStorageState("ready");
@@ -5077,6 +5088,7 @@ export default function App() {
         investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
         modelVersions: workbookSettings.ui?.modelVersions || [],
         incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
+        darkMode: workbookSettings.ui?.darkMode === true,
       });
       hasLoadedStorage.current = true;
       setStorageState("ready");
@@ -5111,6 +5123,13 @@ export default function App() {
     history.future = [];
     setHistoryVersion((version) => version + 1);
   }, [currentHistorySerialized]);
+
+  useEffect(() => {
+    document.documentElement.style.colorScheme = uiSettings.darkMode ? "dark" : "light";
+    return () => {
+      document.documentElement.style.colorScheme = "";
+    };
+  }, [uiSettings.darkMode]);
 
   useEffect(() => {
     const handleHistoryShortcut = (event: KeyboardEvent) => {
@@ -5334,6 +5353,10 @@ export default function App() {
     }
     setStorageState("ready");
   };
+  const toggleDarkMode = () => {
+    setUiSettings((current) => ({ ...current, darkMode: !current.darkMode }));
+    setIsTopbarMenuOpen(false);
+  };
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
       <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
@@ -5380,6 +5403,10 @@ export default function App() {
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setIsSheetPanelOpen((current) => !current); }}>
             <TopbarActionIcon name="sheet" />
             <span>{isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitemcheckbox" aria-checked={uiSettings.darkMode} onClick={toggleDarkMode}>
+            <TopbarActionIcon name="theme" />
+            <span>{uiSettings.darkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -6199,7 +6226,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${uiSettings.darkMode ? "app-shell--dark" : ""}`}>
       {isCameraFlashing && (
         <div
           className="camera-flash"

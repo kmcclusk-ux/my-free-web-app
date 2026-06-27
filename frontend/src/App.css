@@ -4565,3 +4565,237 @@
 .tax-deduction-mode {
   margin-bottom: 8px;
 }
+
+.app-shell--dark {
+  --poly-bg: #07111f;
+  --poly-canvas: #0b1220;
+  --poly-surface: #111827;
+  --poly-surface-soft: #172033;
+  --poly-ink: #f8fafc;
+  --poly-muted: #cbd5e1;
+  --poly-faint: #94a3b8;
+  --poly-line: rgba(226, 232, 240, .14);
+  --poly-line-strong: rgba(226, 232, 240, .24);
+  --poly-blue: #60a5fa;
+  --poly-blue-strong: #93c5fd;
+  --poly-blue-soft: rgba(96, 165, 250, .16);
+  --poly-green: #34d399;
+  --poly-green-soft: rgba(52, 211, 153, .16);
+  --poly-red: #fb7185;
+  --poly-red-soft: rgba(251, 113, 133, .16);
+  --poly-amber: #fbbf24;
+  --poly-amber-soft: rgba(251, 191, 36, .16);
+  --poly-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 18px 44px rgba(0, 0, 0, .34);
+  --poly-shadow-tight: 0 1px 1px rgba(0, 0, 0, .22), 0 10px 28px rgba(0, 0, 0, .26);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% -8%, rgba(96, 165, 250, .16), transparent 28%),
+    radial-gradient(circle at 90% 2%, rgba(52, 211, 153, .10), transparent 24%),
+    linear-gradient(180deg, var(--poly-bg), var(--poly-canvas) 56%, #020617);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .portfolio-workstation__sticky,
+.app-shell--dark .content-topbar {
+  background: linear-gradient(180deg, rgba(7, 17, 31, .94), rgba(7, 17, 31, .74));
+  border-color: rgba(226, 232, 240, .10);
+}
+
+.app-shell--dark .sidebar,
+.app-shell--dark .sheet-section,
+.app-shell--dark .metric-card,
+.app-shell--dark .table-wrap,
+.app-shell--dark .tax-thermometer-panel,
+.app-shell--dark .tax-output-disclosure,
+.app-shell--dark .tax-what-if-disclosure,
+.app-shell--dark .ai-panel,
+.app-shell--dark .assistant-panel,
+.app-shell--dark .favorites-panel,
+.app-shell--dark .confirm-panel,
+.app-shell--dark .symbol-finder-panel,
+.app-shell--dark .split-row-dialog,
+.app-shell--dark .model-version-dialog,
+.app-shell--dark .topbar-menu__panel {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .94);
+  box-shadow: var(--poly-shadow);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .sidebar {
+  background: rgba(15, 23, 42, .82);
+}
+
+.app-shell--dark .nav-item {
+  color: var(--poly-muted);
+}
+
+.app-shell--dark .nav-item:hover,
+.app-shell--dark .topbar-menu__item:hover,
+.app-shell--dark .ghost-button:hover,
+.app-shell--dark .favorites-item:hover,
+.app-shell--dark .symbol-finder-result:hover {
+  background: rgba(96, 165, 250, .16);
+  color: var(--poly-blue-strong);
+}
+
+.app-shell--dark .nav-item--active,
+.app-shell--dark .topbar-menu__item[aria-checked="true"] {
+  background: var(--poly-blue-soft);
+  color: var(--poly-blue-strong);
+}
+
+.app-shell--dark .topbar-menu__item,
+.app-shell--dark .app-action-menu__brand,
+.app-shell--dark .content-topbar__title,
+.app-shell--dark .section-heading h2,
+.app-shell--dark .metric-card strong,
+.app-shell--dark .sheet-table,
+.app-shell--dark .readonly-cell,
+.app-shell--dark .model-version-row__identity strong,
+.app-shell--dark .tax-what-if-table__summary strong {
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .ghost-button,
+.app-shell--dark .row-delete-button,
+.app-shell--dark .row-split-button,
+.app-shell--dark .symbol-finder-result,
+.app-shell--dark .favorites-item,
+.app-shell--dark .model-version-row,
+.app-shell--dark .split-row-dialog__allocation-table,
+.app-shell--dark .split-row-dialog__balance-button {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .86);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .form-grid input,
+.app-shell--dark .form-grid select,
+.app-shell--dark .sheet-table input,
+.app-shell--dark .sheet-table select,
+.app-shell--dark .assistant-panel__composer textarea,
+.app-shell--dark .model-version-dialog__field input,
+.app-shell--dark .model-version-row__identity input,
+.app-shell--dark .symbol-finder-panel__controls input,
+.app-shell--dark .symbol-finder-panel__controls select,
+.app-shell--dark .tax-what-if-table__grid input,
+.app-shell--dark .tax-what-if-table__grid select {
+  border-color: var(--poly-line);
+  background-color: rgba(2, 6, 23, .70);
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .04);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .form-grid input:hover,
+.app-shell--dark .form-grid select:hover,
+.app-shell--dark .sheet-table input:hover,
+.app-shell--dark .sheet-table select:hover {
+  background-color: rgba(15, 23, 42, .96);
+}
+
+.app-shell--dark .sheet-table th,
+.app-shell--dark .sheet-table--workbook thead th:nth-child(1),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(2),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(3),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(4),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(5) {
+  background: rgba(30, 41, 59, .98);
+  color: var(--poly-muted);
+  border-color: var(--poly-line);
+}
+
+.app-shell--dark .sheet-table td {
+  border-color: rgba(226, 232, 240, .08);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr {
+  --row-bg: rgba(15, 23, 42, .86);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr:nth-child(even) {
+  --row-bg: rgba(19, 28, 45, .88);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr td,
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(1),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(2),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(3),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(4),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(5) {
+  background: var(--row-bg);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--deferred,
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--non-taxable {
+  --row-bg: rgba(20, 83, 45, .36);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--partial,
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--taxable {
+  --row-bg: rgba(127, 29, 29, .34);
+}
+
+.app-shell--dark .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--deferred td .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--non-taxable td .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--partial td .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--taxable td .readonly-cell {
+  background: rgba(2, 6, 23, .42);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .sheet-table--workbook tfoot th,
+.app-shell--dark .sheet-table--workbook tfoot td,
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(1),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(1),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(2),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(2),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(3),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(3),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(4),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(4),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(5),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(5) {
+  background: rgba(30, 41, 59, .98);
+  border-color: var(--poly-line-strong);
+}
+
+.app-shell--dark .account-picker__menu,
+.app-shell--dark .state-flag-select__menu,
+.app-shell--dark .tax-thermometer-mode-select__menu {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .98);
+  color: var(--poly-ink);
+  box-shadow: var(--poly-shadow);
+}
+
+.app-shell--dark .tax-thermometer-mode-select__trigger,
+.app-shell--dark .state-flag-select__button,
+.app-shell--dark .account-picker__trigger,
+.app-shell--dark .asset-picker__option,
+.app-shell--dark .state-flag-select__option,
+.app-shell--dark .tax-thermometer-mode-select__option {
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .status-card,
+.app-shell--dark .view-state-strip,
+.app-shell--dark .symbol-finder-panel__empty,
+.app-shell--dark .model-version-list__empty {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .78);
+  color: var(--poly-muted);
+}
+
+.app-shell--dark .topbar-chip,
+.app-shell--dark .section-heading p,
+.app-shell--dark .form-grid span,
+.app-shell--dark .metric-card span,
+.app-shell--dark .topbar-menu__label small,
+.app-shell--dark .symbol-finder-result span,
+.app-shell--dark .model-version-row__identity small,
+.app-shell--dark .split-row-dialog__copy,
+.app-shell--dark .tax-what-if-table__summary {
+  color: var(--poly-muted);
+}
