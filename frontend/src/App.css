@@ -5296,3 +5296,67 @@ html.aftertaxus-dark-mode #root {
   box-shadow: 0 18px 44px rgba(0, 0, 0, .40);
   color: #f8fafc !important;
 }
+
+.app-shell--dark .lookup-table-wrap,
+.app-shell--dark .sheet-table--lookup {
+  background: #0f172a !important;
+}
+
+.app-shell--dark .sheet-table--lookup th,
+.app-shell--dark .sheet-table--lookup thead th,
+.app-shell--dark .sheet-table--lookup thead th:last-child,
+.app-shell--dark .sheet-table--lookup thead .lookup-drag-heading {
+  border-color: rgba(226, 232, 240, .14) !important;
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .sheet-table--lookup td,
+.app-shell--dark .sheet-table--lookup .lookup-table__actions,
+.app-shell--dark .sheet-table--lookup .lookup-drag-cell {
+  border-color: rgba(226, 232, 240, .10) !important;
+  background: #111827 !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) td,
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) .lookup-table__actions,
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) .lookup-drag-cell {
+  background: #121c2d !important;
+}
+
+.app-shell--dark .sheet-table--lookup input,
+.app-shell--dark .sheet-table--lookup select,
+.app-shell--dark .sheet-table--lookup .percent-input,
+.app-shell--dark .sheet-table--lookup .percent-input input {
+  border-color: rgba(226, 232, 240, .18) !important;
+  background-color: rgba(15, 23, 42, .78) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06) !important;
+}
+
+.app-shell--dark .sheet-table--lookup .percent-input span {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .sheet-table--lookup select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.app-shell--dark .sheet-table--lookup .lookup-drag-cell .drag-handle,
+.app-shell--dark .sheet-table--lookup .lookup-inline-delete-button,
+.app-shell--dark .sheet-table--lookup .lookup-table__actions .action-icon-button {
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: rgba(15, 23, 42, .90) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06), 0 6px 16px rgba(0, 0, 0, .22) !important;
+}
+
+.app-shell--dark .sheet-table--lookup .lookup-drag-cell .drag-handle:hover,
+.app-shell--dark .sheet-table--lookup .lookup-inline-delete-button:hover,
+.app-shell--dark .sheet-table--lookup .lookup-table__actions .action-icon-button:hover {
+  border-color: rgba(96, 165, 250, .34) !important;
+  background: rgba(30, 64, 105, .92) !important;
+  color: #ffffff !important;
+}
