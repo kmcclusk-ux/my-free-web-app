@@ -260,7 +260,7 @@ const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 84, minWidth: 82 },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 110, minWidth: 108 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
   { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
@@ -2634,7 +2634,7 @@ function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   );
 }
 
-function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "split" }) {
+function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | "split" }) {
   if (name === "add") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2660,6 +2660,15 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "split" }
         <path d="M14 12.5h5v5h-5z" />
         <path d="M10 9h2.5a4 4 0 0 1 4 4" />
         <path d="m14.5 10.75 2 2.25 2-2.25" />
+      </svg>
+    );
+  }
+
+  if (name === "find") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="10.5" cy="10.5" r="5.25" />
+        <path d="m14.25 14.25 5 5" />
       </svg>
     );
   }
@@ -3678,6 +3687,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [renameTarget, setRenameTarget] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
+  const [isSymbolFinderOpen, setIsSymbolFinderOpen] = useState(false);
+  const [symbolFinderQuery, setSymbolFinderQuery] = useState("");
+  const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
   const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
@@ -3792,6 +3804,33 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     setIsFavoritesPanelOpen(false);
   };
   const includedRowsLabel = `${includedRowCount} included row${includedRowCount === 1 ? "" : "s"}`;
+  const symbolFinderOptions = useMemo(() => Array.from(new Set(rows
+    .flatMap((row) => [row.symbol, row.newSymbol])
+    .map((symbol) => symbol.trim())
+    .filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b)), [rows]);
+  const normalizedSymbolFinderQuery = normalizeLookupKey(symbolFinderQuery);
+  const symbolFinderMatches = useMemo(() => {
+    if (!normalizedSymbolFinderQuery) return [];
+    return displayedRows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => (
+        normalizeLookupKey(row.symbol) === normalizedSymbolFinderQuery ||
+        normalizeLookupKey(row.newSymbol) === normalizedSymbolFinderQuery
+      ));
+  }, [displayedRows, normalizedSymbolFinderQuery]);
+  const openSymbolFinder = (symbol: string) => {
+    setSymbolFinderQuery(symbol.trim());
+    setIsSymbolFinderOpen(true);
+  };
+  const jumpToInvestmentRow = (rowId: number) => {
+    setHighlightedFinderRowId(rowId);
+    setIsSymbolFinderOpen(false);
+    window.requestAnimationFrame(() => {
+      const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
+      rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    });
+  };
   const handleRemoveIncludedRows = () => {
     if (includedRowCount === 0) return;
     setIsRemoveConfirmOpen(true);
@@ -3837,6 +3876,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [splitTarget]);
+  useEffect(() => {
+    if (!isSymbolFinderOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsSymbolFinderOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSymbolFinderOpen]);
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
     if (!name) return;
@@ -4141,6 +4188,60 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
           </div>
         </div>
       )}
+      {isSymbolFinderOpen && createPortal(
+        <div className="symbol-finder-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsSymbolFinderOpen(false); }}>
+          <div className="symbol-finder-panel" role="dialog" aria-modal="true" aria-labelledby="symbol-finder-title">
+            <div className="symbol-finder-panel__header">
+              <div>
+                <p className="eyebrow">Investment Rows</p>
+                <h3 id="symbol-finder-title">Find Asset</h3>
+              </div>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsSymbolFinderOpen(false)}>Close</button>
+            </div>
+            <div className="symbol-finder-panel__controls">
+              <label>
+                <span>Type symbol</span>
+                <input
+                  type="text"
+                  list="symbol-finder-options"
+                  value={symbolFinderQuery}
+                  onChange={(event) => setSymbolFinderQuery(event.target.value)}
+                  placeholder="Enter symbol"
+                  autoFocus
+                />
+              </label>
+              <datalist id="symbol-finder-options">
+                {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol} />)}
+              </datalist>
+              <label>
+                <span>Select symbol</span>
+                <select value={symbolFinderQuery} onChange={(event) => setSymbolFinderQuery(event.target.value)}>
+                  <option value="">Choose symbol</option>
+                  {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="symbol-finder-panel__results" role="list" aria-label="Matching investment rows">
+              {!normalizedSymbolFinderQuery && <p className="symbol-finder-panel__empty">Type or select an asset symbol to find matching visible rows.</p>}
+              {normalizedSymbolFinderQuery && symbolFinderMatches.length === 0 && <p className="symbol-finder-panel__empty">No visible rows match {symbolFinderQuery.trim()}.</p>}
+              {symbolFinderMatches.map(({ row, index }) => (
+                <button
+                  key={row.id}
+                  className="symbol-finder-result"
+                  type="button"
+                  role="listitem"
+                  onClick={() => jumpToInvestmentRow(row.id)}
+                >
+                  <strong>Row {row.spreadsheetRowNumber ?? index + 1}</strong>
+                  <span>{row.description || row.account || "Investment row"}</span>
+                  <em>{row.newSymbol && normalizeLookupKey(row.newSymbol) === normalizedSymbolFinderQuery ? `${row.symbol || "Current"} → ${row.newSymbol}` : row.symbol}</em>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {splitTarget && createPortal(
         <div className="split-row-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSplitDialog(); }}>
           <div className="split-row-dialog" role="dialog" aria-modal="true" aria-labelledby="split-row-title">
@@ -4231,7 +4332,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
               const derived = derivedMap[row.id];
               const rowTaxStatus = accountTaxStatusByName[normalizeLookupKey(row.account)] || "";
               const investmentCells = {
-                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
+                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-find-button" type="button" title="Find this asset" aria-label={`Find ${row.symbol || row.newSymbol || "asset"} in visible rows`} onClick={() => openSymbolFinder(row.symbol || row.newSymbol || "")}><RowActionIcon name="find" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
@@ -4270,7 +4371,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 <tr
                   key={row.id}
                   data-investment-id={row.id}
-                  className={`${getDragRowClassName(row)} ${selectedIdSet.has(row.id) ? "investment-row--selected" : ""}`}
+                  className={`${getDragRowClassName(row)} ${selectedIdSet.has(row.id) ? "investment-row--selected" : ""} ${highlightedFinderRowId === row.id ? "investment-row--finder-target" : ""}`}
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
                 >
