@@ -4647,6 +4647,47 @@
   font-size: .52rem;
 }
 
+.tax-thermometer__no-tax-stamp {
+  position: absolute;
+  z-index: 36;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  display: grid;
+  place-items: center;
+  min-width: min(82%, 330px);
+  padding: 10px 18px;
+  border: 5px solid rgba(185, 28, 28, .86);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .82);
+  color: #991b1b;
+  font-size: clamp(1.45rem, 4.4vw, 3.2rem);
+  font-weight: 1000;
+  letter-spacing: .08em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255,255,255,.75);
+  box-shadow: 0 14px 32px rgba(127, 29, 29, .22), inset 0 0 0 2px rgba(185, 28, 28, .18);
+  pointer-events: none;
+}
+
+.thermometer-rail .tax-thermometer__no-tax-stamp {
+  min-width: 168px;
+  max-width: 210px;
+  padding: 10px 12px;
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+
+.app-shell--dark .tax-thermometer__no-tax-stamp {
+  border-color: rgba(248, 113, 113, .9);
+  background: rgba(15, 23, 42, .86);
+  color: #fecaca;
+  text-shadow: 0 1px 0 rgba(0,0,0,.5);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .38), inset 0 0 0 2px rgba(248, 113, 113, .2);
+}
+
 .tax-what-if-disclosure__tables {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
