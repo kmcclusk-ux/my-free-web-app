@@ -126,7 +126,7 @@
 }
 .income-snapshot__button:hover,
 .income-snapshot__button:focus-visible {
-  width: 92px;
+  width: 100px;
   border-color: rgba(82, 214, 169, .48);
   background: linear-gradient(135deg, rgba(41, 199, 163, .32), rgba(35, 97, 201, .26));
 }
@@ -155,7 +155,7 @@
 }
 .income-snapshot__button:hover span,
 .income-snapshot__button:focus-visible span {
-  max-width: 68px;
+  max-width: 74px;
   opacity: 1;
 }
 .income-snapshot__body {
