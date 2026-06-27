@@ -4431,3 +4431,6 @@
 .tax-what-if-table__summary strong {
   color: #17313a;
 }
+.tax-deduction-mode {
+  margin-bottom: 8px;
+}

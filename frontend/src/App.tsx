@@ -83,7 +83,8 @@ type AccountTypeRow = { id: number; name: string; taxStatus: string };
 
 type TaxWhatIfItem = { id: number; amount: number; incomeType: string };
 type DeductionItem = { id: number; amount: number; deductionType: string };
-type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
+type FederalDeductionMode = "standard" | "itemized";
+type FederalSettings = { filingStatus: FilingStatus; deductionMode: FederalDeductionMode; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
@@ -209,7 +210,7 @@ type AssistantTableConfig = {
   booleanFields: string[];
   defaultRow: (id: number) => AssistantEditableRow;
 };
-type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "extraOrdinaryItems" | "extraPreferredItems" | "deductionItems">;
+type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "deductionMode" | "extraOrdinaryItems" | "extraPreferredItems" | "deductionItems">;
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -741,7 +742,7 @@ const newTaxWhatIfItem = (incomeType: string): TaxWhatIfItem => ({ id: Date.now(
 const newDeductionItem = (deductionType: string, amount = 0): DeductionItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount, deductionType });
 const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWhatIfTypes[0]);
 const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
-const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], deductionItems: [newDeductionItem("Mortgage interest", 19500), newDeductionItem("Property tax", 19000)], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
+const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], deductionItems: [newDeductionItem("Mortgage interest", 19500), newDeductionItem("Property tax", 19000)], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual" };
@@ -1302,6 +1303,9 @@ function normalizeFilingStatus(value: unknown): FilingStatus {
   const status = String(value || "single").trim().toLowerCase();
   return status === "mfj" || status === "mfs" || status === "hoh" ? status : "single";
 }
+function normalizeFederalDeductionMode(value: unknown): FederalDeductionMode {
+  return String(value || "").trim().toLowerCase() === "itemized" ? "itemized" : "standard";
+}
 
 function niitThresholdForStatus(filingStatus: FilingStatus) {
   return filingStatus === "mfj" ? 250000 : filingStatus === "mfs" ? 125000 : 200000;
@@ -1475,6 +1479,7 @@ function normalizeFederalSettings(raw: unknown): FederalSettings {
   const deductionItems = normalizeDeductionItems(merged.deductionItems, merged.mortgageInterest, merged.propertyTax);
   return {
     ...merged,
+    deductionMode: normalizeFederalDeductionMode(merged.deductionMode),
     extraOrdinaryItems,
     extraPreferredItems,
     deductionItems,
@@ -1512,6 +1517,10 @@ function parseFederalSettingsSection(section: unknown): Partial<FederalSettings>
   const filingValue = parseStringFromSection(sectionObj, rows, "filingStatus", "Filing status");
   if (filingValue) {
     result.filingStatus = normalizeFilingStatus(filingValue);
+  }
+  const deductionModeValue = parseStringFromSection(sectionObj, rows, "deductionMode", "Deduction mode");
+  if (deductionModeValue) {
+    result.deductionMode = normalizeFederalDeductionMode(deductionModeValue);
   }
 
   return result;
@@ -4757,7 +4766,7 @@ export default function App() {
   const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
   const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, displayedStateResult.tax, federalSettings.saltCap);
   const itemizedFederalDeduction = federalDeductionSummary.itemizedDeduction;
-  const federalDeduction = Math.max(federalSettings.standardDeduction, itemizedFederalDeduction);
+  const federalDeduction = federalSettings.deductionMode === "itemized" ? itemizedFederalDeduction : federalSettings.standardDeduction;
   const federalTaxableAfterDeductions = Math.max(grossFederalTaxable - federalDeduction, 0);
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
   const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
@@ -6210,16 +6219,27 @@ export default function App() {
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
             </div>
-            <FederalDeductionMiniTable
-              rows={federalSettings.deductionItems}
-              summary={federalDeductionSummary}
-              onChange={(rows) => setFederalSettings((current) => ({
-                ...current,
-                deductionItems: rows,
-                mortgageInterest: deductionTotalByType(rows, "Mortgage interest"),
-                propertyTax: deductionTotalByType(rows, "Property tax"),
-              }))}
-            />
+            <div className="form-grid form-grid--compact tax-deduction-mode">
+              <label>
+                <span>Deduction method</span>
+                <select value={federalSettings.deductionMode} onChange={(event) => setFederalSettings((current) => ({ ...current, deductionMode: normalizeFederalDeductionMode(event.target.value) }))}>
+                  <option value="standard">Standard deduction ({formatCurrencyDetailed(federalSettings.standardDeduction)})</option>
+                  <option value="itemized">Itemized deduction ({formatCurrencyDetailed(itemizedFederalDeduction)})</option>
+                </select>
+              </label>
+            </div>
+            {federalSettings.deductionMode === "itemized" && (
+              <FederalDeductionMiniTable
+                rows={federalSettings.deductionItems}
+                summary={federalDeductionSummary}
+                onChange={(rows) => setFederalSettings((current) => ({
+                  ...current,
+                  deductionItems: rows,
+                  mortgageInterest: deductionTotalByType(rows, "Mortgage interest"),
+                  propertyTax: deductionTotalByType(rows, "Property tax"),
+                }))}
+              />
+            )}
           </Section>
         )}
         {activeTab === "state" && (
