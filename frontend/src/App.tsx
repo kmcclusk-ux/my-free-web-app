@@ -2634,7 +2634,7 @@ function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   );
 }
 
-function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | "split" }) {
+function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | "previous" | "next" | "split" }) {
   if (name === "add") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2669,6 +2669,22 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | 
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.5" cy="10.5" r="5.25" />
         <path d="m14.25 14.25 5 5" />
+      </svg>
+    );
+  }
+
+  if (name === "previous") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m14.5 6.5-5.5 5.5 5.5 5.5" />
+      </svg>
+    );
+  }
+
+  if (name === "next") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m9.5 6.5 5.5 5.5-5.5 5.5" />
       </svg>
     );
   }
@@ -3690,6 +3706,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [isSymbolFinderOpen, setIsSymbolFinderOpen] = useState(false);
   const [symbolFinderQuery, setSymbolFinderQuery] = useState("");
   const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
+  const [activeFinderQuery, setActiveFinderQuery] = useState("");
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
   const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
@@ -3819,17 +3836,39 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         normalizeLookupKey(row.newSymbol) === normalizedSymbolFinderQuery
       ));
   }, [displayedRows, normalizedSymbolFinderQuery]);
+  const activeFinderMatches = useMemo(() => {
+    const normalizedActiveQuery = normalizeLookupKey(activeFinderQuery);
+    if (!normalizedActiveQuery) return [];
+    return displayedRows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => (
+        normalizeLookupKey(row.symbol) === normalizedActiveQuery ||
+        normalizeLookupKey(row.newSymbol) === normalizedActiveQuery
+      ));
+  }, [activeFinderQuery, displayedRows]);
+  const canNavigateFinderMatches = highlightedFinderRowId !== null && activeFinderMatches.length > 1;
   const openBlankSymbolFinder = () => {
     setSymbolFinderQuery("");
     setIsSymbolFinderOpen(true);
   };
-  const jumpToInvestmentRow = (rowId: number) => {
+  const jumpToInvestmentRow = (rowId: number, query = symbolFinderQuery.trim() || activeFinderQuery) => {
     setHighlightedFinderRowId(rowId);
+    setActiveFinderQuery(query);
     setIsSymbolFinderOpen(false);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
       rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     });
+  };
+  const cycleFinderMatch = (direction: "previous" | "next") => {
+    if (activeFinderMatches.length === 0) return;
+    const currentIndex = activeFinderMatches.findIndex(({ row }) => row.id === highlightedFinderRowId);
+    const fallbackIndex = direction === "next" ? -1 : 0;
+    const nextIndex = direction === "next"
+      ? (currentIndex >= 0 ? currentIndex + 1 : fallbackIndex + 1) % activeFinderMatches.length
+      : (currentIndex >= 0 ? currentIndex - 1 + activeFinderMatches.length : activeFinderMatches.length - 1) % activeFinderMatches.length;
+    const nextRow = activeFinderMatches[nextIndex]?.row;
+    if (nextRow) jumpToInvestmentRow(nextRow.id, activeFinderQuery);
   };
   const handleRemoveIncludedRows = () => {
     if (includedRowCount === 0) return;
@@ -4094,6 +4133,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={openBlankSymbolFinder} aria-label="Find asset rows" title="Find asset rows"><RowActionIcon name="find" /></button>
+        {highlightedFinderRowId !== null && (
+          <>
+            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleFinderMatch("previous")} aria-label="Previous matching asset row" title="Previous matching asset row" disabled={!canNavigateFinderMatches}><RowActionIcon name="previous" /></button>
+            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleFinderMatch("next")} aria-label="Next matching asset row" title="Next matching asset row" disabled={!canNavigateFinderMatches}><RowActionIcon name="next" /></button>
+          </>
+        )}
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             WhatIf
