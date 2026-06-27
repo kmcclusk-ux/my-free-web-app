@@ -5126,8 +5126,10 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.style.colorScheme = uiSettings.darkMode ? "dark" : "light";
+    document.documentElement.classList.toggle("aftertaxus-dark-mode", uiSettings.darkMode);
     return () => {
       document.documentElement.style.colorScheme = "";
+      document.documentElement.classList.remove("aftertaxus-dark-mode");
     };
   }, [uiSettings.darkMode]);
 
