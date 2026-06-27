@@ -4961,3 +4961,58 @@ html.aftertaxus-dark-mode #root {
 .app-shell--dark .thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label small {
   color: #17313a !important;
 }
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) {
+  --row-bg: #0f172a !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:nth-child(even):not(.investment-row--selected) {
+  --row-bg: #121c2d !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--deferred:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--non-taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--deferred:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--non-taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--deferred:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--non-taxable:not(.investment-row--selected) {
+  --row-bg: #123625 !important;
+  --status-color: rgba(52, 211, 153, .72) !important;
+  --status-bg: rgba(52, 211, 153, .14) !important;
+  --status-text: #bbf7d0 !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--partial:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--partial:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--partial:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--taxable:not(.investment-row--selected) {
+  --row-bg: #3b171c !important;
+  --status-color: rgba(251, 113, 133, .74) !important;
+  --status-bg: rgba(251, 113, 133, .14) !important;
+  --status-text: #fecdd3 !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) {
+  opacity: .78;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td,
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(1),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(2),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(3),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(4),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(5),
+.app-shell--dark .investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody tr:not(.investment-row--selected) > td:nth-child(n+29):nth-child(-n+31) {
+  background: var(--row-bg) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) :is(input, select, button, .readonly-cell, .account-picker__trigger, .asset-picker__trigger),
+.app-shell--dark .investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody tr:not(.investment-row--selected) td:nth-child(n+29):nth-child(-n+31) :is(input, select, .readonly-cell) {
+  border-color: rgba(226, 232, 240, .18) !important;
+  background-color: rgba(15, 23, 42, .76) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06) !important;
+}
