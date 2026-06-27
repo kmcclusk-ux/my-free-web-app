@@ -1,4 +1,4 @@
-#root { width: 100%; }
+﻿#root { width: 100%; }
 :root { --app-top-nav-height: 68px; }
 .app-shell { min-height: 100vh; }
 .app-top-nav {
@@ -5465,4 +5465,50 @@ html.aftertaxus-dark-mode #root {
 
 .app-shell--dark .symbol-finder-result span {
   color: #cbd5e1 !important;
+}
+
+.app-shell--dark .tax-what-if-table,
+.app-shell--dark .tax-what-if-table--deductions,
+.app-shell--dark .tax-what-if-table--always-deductions {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: rgba(15, 23, 42, .92) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .04) !important;
+}
+
+.app-shell--dark .tax-what-if-table__heading,
+.app-shell--dark .tax-what-if-table__heading strong {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .tax-what-if-table__grid--header {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .tax-what-if-table__grid input,
+.app-shell--dark .tax-what-if-table__grid select {
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: #0f172a !important;
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .08) !important;
+}
+
+.app-shell--dark .tax-what-if-table__grid select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-what-if-table__summary {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .tax-what-if-table__summary strong {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .tax-what-if-table__limitation {
+  color: #fb7185 !important;
 }
