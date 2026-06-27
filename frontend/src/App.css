@@ -5016,3 +5016,39 @@ html.aftertaxus-dark-mode #root {
   color: #f8fafc !important;
   box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06) !important;
 }
+
+.app-shell--dark .state-flag-select__button {
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: rgba(15, 23, 42, .92) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06), 0 8px 22px rgba(0, 0, 0, .24) !important;
+}
+
+.app-shell--dark .state-flag-select__chevron {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .state-flag-select__menu {
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: rgba(2, 6, 23, .98) !important;
+  box-shadow: 0 22px 54px rgba(0, 0, 0, .48) !important;
+}
+
+.app-shell--dark .state-flag-select__option {
+  border-color: transparent !important;
+  background: rgba(15, 23, 42, .88) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .state-flag-select__option:hover,
+.app-shell--dark .state-flag-select__option--selected {
+  border-color: rgba(96, 165, 250, .30) !important;
+  background: rgba(30, 64, 105, .92) !important;
+  color: #ffffff !important;
+}
+
+.app-shell--dark .state-flag-select__option .state-flag-image,
+.app-shell--dark .state-flag-select__button .state-flag-image {
+  border-color: rgba(248, 250, 252, .38) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .28);
+}
