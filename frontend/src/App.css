@@ -3082,6 +3082,40 @@
   font-size: .72rem;
 }
 
+.investment-what-if-toggle {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid rgba(24,49,58,.2);
+  border-radius: 8px;
+  background: #fff8e7;
+  color: #7a5417;
+  cursor: pointer;
+  font-size: .72rem;
+  font-weight: 850;
+  line-height: 1;
+  user-select: none;
+}
+
+.investment-what-if-toggle::before {
+  content: "▸";
+  margin-right: 6px;
+  font-size: .75rem;
+  transition: transform 160ms ease;
+}
+
+.investment-what-if-toggle--open::before {
+  transform: rotate(90deg);
+}
+
+.investment-what-if-toggle:hover,
+.investment-what-if-toggle:focus-visible {
+  border-color: rgba(122,84,23,.38);
+  background: #fff3d1;
+  outline: none;
+}
 
 .state-flag-select {
   position: relative;

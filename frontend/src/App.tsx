@@ -3937,8 +3937,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
-          <button className={`ghost-button ghost-button--compact column-toggle ${isWhatIfActive ? "column-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
-            {isWhatIfActive ? "- WhatIf" : "+ WhatIf"}
+          <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
+            WhatIf
           </button>
         </div>
       </div>
