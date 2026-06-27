@@ -4373,3 +4373,27 @@
   border-radius: 9px;
   font-size: .76rem;
 }
+.tax-what-if-table--deductions {
+  margin-top: 10px;
+}
+.tax-what-if-table__row {
+  display: grid;
+  gap: 3px;
+}
+.tax-what-if-table__limitation {
+  margin: 0;
+  color: #b42318;
+  font-size: .68rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+.tax-what-if-table__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: #62767a;
+  font-size: .7rem;
+}
+.tax-what-if-table__summary strong {
+  color: #17313a;
+}

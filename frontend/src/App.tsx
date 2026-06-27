@@ -82,7 +82,8 @@ type AccountTaxTypeRow = { id: number; taxStatus: string };
 type AccountTypeRow = { id: number; name: string; taxStatus: string };
 
 type TaxWhatIfItem = { id: number; amount: number; incomeType: string };
-type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
+type DeductionItem = { id: number; amount: number; deductionType: string };
+type FederalSettings = { filingStatus: FilingStatus; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
@@ -208,7 +209,7 @@ type AssistantTableConfig = {
   booleanFields: string[];
   defaultRow: (id: number) => AssistantEditableRow;
 };
-type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "extraOrdinaryItems" | "extraPreferredItems">;
+type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "extraOrdinaryItems" | "extraPreferredItems" | "deductionItems">;
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -728,10 +729,19 @@ const initialAccounts: AccountRow[] = [
 ];
 const ordinaryWhatIfTypes = ["W2 wages", "Ordinary dividends", "Interest income", "Business income", "Rental income", "Other ordinary income"];
 const preferredWhatIfTypes = ["Long-term capital gains", "Qualified dividends", "Section 1250 gain", "Collectibles gain", "Other preferred income"];
+const federalDeductionTypes = ["Mortgage interest", "Property tax", "Investment loss (Long Term)", "Investment loss (Short Term)", "Charitable contributions", "Medical expenses", "Other itemized deduction"];
+const federalDeductionLimitNotes: Record<string, string> = {
+  "Mortgage interest": "Mortgage interest has IRS limits based on loan date, debt amount, and qualified residence rules.",
+  "Property tax": "Property tax is part of the SALT deduction, which is capped together with state/local income taxes.",
+  "Investment loss (Long Term)": "Capital losses are generally limited to a $3,000 annual net capital loss deduction; unused losses carry forward.",
+  "Investment loss (Short Term)": "Capital losses are generally limited to a $3,000 annual net capital loss deduction; unused losses carry forward.",
+  "Medical expenses": "Medical expenses are only deductible above the IRS AGI threshold and may be limited.",
+};
 const newTaxWhatIfItem = (incomeType: string): TaxWhatIfItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount: 0, incomeType });
+const newDeductionItem = (deductionType: string, amount = 0): DeductionItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount, deductionType });
 const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWhatIfTypes[0]);
 const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
-const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
+const initialFederalSettings: FederalSettings = { filingStatus: "mfj", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], deductionItems: [newDeductionItem("Mortgage interest", 19500), newDeductionItem("Property tax", 19000)], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual" };
@@ -1413,16 +1423,65 @@ function normalizeTaxWhatIfItems(raw: unknown, defaultType: string, legacyAmount
   return [{ id: Date.now(), amount: toNumber(legacyAmount), incomeType: defaultType }];
 }
 
+function normalizeDeductionItems(raw: unknown, mortgageInterest = 0, propertyTax = 0): DeductionItem[] {
+  const sourceRows = Array.isArray(raw) ? raw : [];
+  const rows = sourceRows
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const obj = entry as Record<string, unknown>;
+      const deductionType = String(obj.deductionType || federalDeductionTypes[0]).trim() || federalDeductionTypes[0];
+      return {
+        id: Number(obj.id) || Date.now() + index,
+        amount: toNumber(obj.amount as number | string | boolean | null | undefined),
+        deductionType,
+      };
+    })
+    .filter((row): row is DeductionItem => Boolean(row));
+  if (rows.length > 0) return rows;
+  return [
+    newDeductionItem("Mortgage interest", mortgageInterest),
+    newDeductionItem("Property tax", propertyTax),
+  ];
+}
+
+function deductionTotalByType(items: DeductionItem[], deductionType: string) {
+  return items.reduce((total, item) => item.deductionType === deductionType ? total + toNumber(item.amount) : total, 0);
+}
+
+function summarizeFederalDeductions(items: DeductionItem[], stateTax: number, saltCap: number) {
+  const mortgageInterest = deductionTotalByType(items, "Mortgage interest");
+  const propertyTax = deductionTotalByType(items, "Property tax");
+  const longTermLoss = deductionTotalByType(items, "Investment loss (Long Term)");
+  const shortTermLoss = deductionTotalByType(items, "Investment loss (Short Term)");
+  const capitalLossRaw = longTermLoss + shortTermLoss;
+  const capitalLossDeduction = Math.min(Math.max(capitalLossRaw, 0), 3000);
+  const otherItemized = items.reduce((total, item) => ["Mortgage interest", "Property tax", "Investment loss (Long Term)", "Investment loss (Short Term)"].includes(item.deductionType) ? total : total + toNumber(item.amount), 0);
+  const saltDeduction = Math.min(Math.max(propertyTax + stateTax, 0), saltCap);
+  return {
+    mortgageInterest,
+    propertyTax,
+    capitalLossRaw,
+    capitalLossDeduction,
+    otherItemized,
+    saltDeduction,
+    itemizedDeduction: mortgageInterest + saltDeduction + capitalLossDeduction + otherItemized,
+  };
+}
+
 function normalizeFederalSettings(raw: unknown): FederalSettings {
   const merged = mergeSettings(initialFederalSettings, raw) as FederalSettings;
   const extraOrdinaryItems = normalizeTaxWhatIfItems(merged.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
   const extraPreferredItems = normalizeTaxWhatIfItems(merged.extraPreferredItems, preferredWhatIfTypes[0], merged.extraPreferredIncome);
+  const deductionItems = normalizeDeductionItems(merged.deductionItems, merged.mortgageInterest, merged.propertyTax);
   return {
     ...merged,
     extraOrdinaryItems,
     extraPreferredItems,
+    deductionItems,
     extraOrdinaryIncome: extraOrdinaryItems.reduce((total, row) => total + toNumber(row.amount), 0),
     extraPreferredIncome: extraPreferredItems.reduce((total, row) => total + toNumber(row.amount), 0),
+    mortgageInterest: deductionTotalByType(deductionItems, "Mortgage interest"),
+    propertyTax: deductionTotalByType(deductionItems, "Property tax"),
   };
 }
 
@@ -1448,6 +1507,7 @@ function parseFederalSettingsSection(section: unknown): Partial<FederalSettings>
   if (extraPreferredIncome !== undefined) result.extraPreferredIncome = extraPreferredIncome;
   result.extraOrdinaryItems = normalizeTaxWhatIfItems(sectionObj?.extraOrdinaryItems, ordinaryWhatIfTypes[0], result.extraOrdinaryIncome || 0);
   result.extraPreferredItems = normalizeTaxWhatIfItems(sectionObj?.extraPreferredItems, preferredWhatIfTypes[0], result.extraPreferredIncome || 0);
+  result.deductionItems = normalizeDeductionItems(sectionObj?.deductionItems, result.mortgageInterest || 0, result.propertyTax || 0);
 
   const filingValue = parseStringFromSection(sectionObj, rows, "filingStatus", "Filing status");
   if (filingValue) {
@@ -1944,6 +2004,51 @@ function TaxWhatIfMiniTable({ title, total, rows, typeOptions, onChange }: { tit
         </div>
       ))}
       <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newTaxWhatIfItem(typeOptions[0] || "Other")])}>+ Add row</button>
+    </div>
+  );
+}
+
+function FederalDeductionMiniTable({ rows, summary, onChange }: { rows: DeductionItem[]; summary: ReturnType<typeof summarizeFederalDeductions>; onChange: (rows: DeductionItem[]) => void }) {
+  const safeRows = rows.length ? rows : [newDeductionItem(federalDeductionTypes[0])];
+  const updateRow = (id: number, values: Partial<DeductionItem>) => {
+    onChange(safeRows.map((row) => row.id === id ? { ...row, ...values } : row));
+  };
+  const removeRow = (id: number) => {
+    const nextRows = safeRows.filter((row) => row.id !== id);
+    onChange(nextRows.length ? nextRows : [newDeductionItem(federalDeductionTypes[0])]);
+  };
+
+  return (
+    <div className="tax-what-if-table tax-what-if-table--deductions">
+      <div className="tax-what-if-table__heading">
+        <strong>Federal deductions</strong>
+        <span>{formatCurrencyDetailed(summary.itemizedDeduction)}</span>
+      </div>
+      <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
+        <span>Amount</span>
+        <span>Deduction</span>
+        <span aria-hidden="true" />
+      </div>
+      {safeRows.map((row) => {
+        const limitationNote = federalDeductionLimitNotes[row.deductionType];
+        return (
+          <div className="tax-what-if-table__row" key={row.id}>
+            <div className="tax-what-if-table__grid">
+              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
+              <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
+                {federalDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove deduction row">×</button>
+            </div>
+            {limitationNote && <p className="tax-what-if-table__limitation">{limitationNote}</p>}
+          </div>
+        );
+      })}
+      <div className="tax-what-if-table__summary">
+        <span>SALT used: <strong>{formatCurrencyDetailed(summary.saltDeduction)}</strong></span>
+        <span>Capital-loss deduction used: <strong>{formatCurrencyDetailed(summary.capitalLossDeduction)}</strong></span>
+      </div>
+      <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newDeductionItem(federalDeductionTypes[0])])}>+ Add deduction</button>
     </div>
   );
 }
@@ -4650,7 +4755,8 @@ export default function App() {
     Math.abs(stateResult.taxableIncome - stateTaxableAfterDeductions) < 0.01 &&
     !(stateResult.tax === 0 && localStateResult.tax > 0);
   const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
-  const itemizedFederalDeduction = Math.min(federalSettings.propertyTax + displayedStateResult.tax, federalSettings.saltCap) + federalSettings.mortgageInterest;
+  const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, displayedStateResult.tax, federalSettings.saltCap);
+  const itemizedFederalDeduction = federalDeductionSummary.itemizedDeduction;
   const federalDeduction = Math.max(federalSettings.standardDeduction, itemizedFederalDeduction);
   const federalTaxableAfterDeductions = Math.max(grossFederalTaxable - federalDeduction, 0);
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
@@ -6103,11 +6209,19 @@ export default function App() {
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
-              <label><span>Mortgage interest</span><CurrencyInput value={federalSettings.mortgageInterest} onChange={(value) => setFederalSettings((current) => ({ ...current, mortgageInterest: value }))} /></label>
-              <label><span>Property tax</span><CurrencyInput value={federalSettings.propertyTax} onChange={(value) => setFederalSettings((current) => ({ ...current, propertyTax: value }))} /></label>
               <label><span>Standard deduction</span><CurrencyInput value={federalSettings.standardDeduction} onChange={(value) => setFederalSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
               <label><span>SALT cap</span><CurrencyInput value={federalSettings.saltCap} onChange={(value) => setFederalSettings((current) => ({ ...current, saltCap: value }))} /></label>
             </div>
+            <FederalDeductionMiniTable
+              rows={federalSettings.deductionItems}
+              summary={federalDeductionSummary}
+              onChange={(rows) => setFederalSettings((current) => ({
+                ...current,
+                deductionItems: rows,
+                mortgageInterest: deductionTotalByType(rows, "Mortgage interest"),
+                propertyTax: deductionTotalByType(rows, "Property tax"),
+              }))}
+            />
           </Section>
         )}
         {activeTab === "state" && (
