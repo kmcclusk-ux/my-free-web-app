@@ -6315,11 +6315,6 @@ export default function App() {
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
             </div>
-            <FederalAboveLineDeductionTable
-              rows={federalSettings.aboveLineDeductionItems}
-              summary={federalAboveLineDeductionSummary}
-              onChange={(rows) => setFederalSettings((current) => ({ ...current, aboveLineDeductionItems: rows }))}
-            />
             <div className="form-grid form-grid--compact tax-deduction-mode">
               <label>
                 <span>Deduction method</span>
@@ -6329,6 +6324,13 @@ export default function App() {
                 </select>
               </label>
             </div>
+            {federalSettings.deductionMode === "standard" && (
+              <FederalAboveLineDeductionTable
+                rows={federalSettings.aboveLineDeductionItems}
+                summary={federalAboveLineDeductionSummary}
+                onChange={(rows) => setFederalSettings((current) => ({ ...current, aboveLineDeductionItems: rows }))}
+              />
+            )}
             {federalSettings.deductionMode === "itemized" && (
               <FederalDeductionMiniTable
                 rows={federalSettings.deductionItems}
