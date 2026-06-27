@@ -1,4 +1,4 @@
-﻿#root { width: 100%; }
+#root { width: 100%; }
 :root { --app-top-nav-height: 68px; }
 .app-shell { min-height: 100vh; }
 .app-top-nav {
