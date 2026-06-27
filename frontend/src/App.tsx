@@ -4099,6 +4099,8 @@ export default function App() {
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
   const [isWhatIfActive, setIsWhatIfActive] = useState(false);
+  const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
+  const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState<InvestmentRow[]>(() => authEnabled ? [] : initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
@@ -4543,13 +4545,16 @@ export default function App() {
     [investments, derivedRows, tickerMap]
   );
 
-  const ordinaryBeforeDeductions = flows.federalOrdinary + federalSettings.extraOrdinaryIncome;
-  const preferredBeforeDeductions = flows.federalPreferred + federalSettings.extraPreferredIncome;
+  const effectiveExtraOrdinaryIncome = isFederalTaxWhatIfOpen ? federalSettings.extraOrdinaryIncome : 0;
+  const effectiveExtraPreferredIncome = isFederalTaxWhatIfOpen ? federalSettings.extraPreferredIncome : 0;
+  const effectiveExtraStateIncome = isStateTaxWhatIfOpen ? stateSettings.extraStateIncome : 0;
+  const ordinaryBeforeDeductions = flows.federalOrdinary + effectiveExtraOrdinaryIncome;
+  const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
   const federalTaxableInvestmentIncome = flows.federalOrdinary + flows.federalPreferred;
   const stateInvestmentAdjustment = flows.stateTaxable - federalTaxableInvestmentIncome;
-  const federalWhatIfIncome = federalSettings.extraOrdinaryIncome + federalSettings.extraPreferredIncome;
-  const stateGross = federalTaxableInvestmentIncome + stateInvestmentAdjustment + federalWhatIfIncome + stateSettings.extraStateIncome;
+  const federalWhatIfIncome = effectiveExtraOrdinaryIncome + effectiveExtraPreferredIncome;
+  const stateGross = federalTaxableInvestmentIncome + stateInvestmentAdjustment + federalWhatIfIncome + effectiveExtraStateIncome;
   const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax;
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
@@ -5991,7 +5996,7 @@ export default function App() {
               </div>
             </details>
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
-            <details className="tax-what-if-disclosure">
+            <details className="tax-what-if-disclosure" open={isFederalTaxWhatIfOpen} onToggle={(event) => setIsFederalTaxWhatIfOpen(event.currentTarget.open)}>
               <summary>What-If</summary>
               <div className="form-grid tax-what-if-disclosure__fields">
                 <label><span>Extra ordinary income</span><CurrencyInput value={federalSettings.extraOrdinaryIncome} onChange={(value) => setFederalSettings((current) => ({ ...current, extraOrdinaryIncome: value }))} /></label>
@@ -6000,6 +6005,7 @@ export default function App() {
             </details>
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
+              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
               <label><span>Mortgage interest</span><CurrencyInput value={federalSettings.mortgageInterest} onChange={(value) => setFederalSettings((current) => ({ ...current, mortgageInterest: value }))} /></label>
               <label><span>Property tax</span><CurrencyInput value={federalSettings.propertyTax} onChange={(value) => setFederalSettings((current) => ({ ...current, propertyTax: value }))} /></label>
               <label><span>Standard deduction</span><CurrencyInput value={federalSettings.standardDeduction} onChange={(value) => setFederalSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
@@ -6020,16 +6026,21 @@ export default function App() {
                 <MetricCard label="State adjustment" value={formatCurrency(stateInvestmentAdjustment)} />
                 <MetricCard label="State-taxable investments" value={formatCurrency(flows.stateTaxable)} />
                 <MetricCard label="Federal What-If income" value={formatCurrency(federalWhatIfIncome)} />
-                <MetricCard label="State-only extra income" value={formatCurrency(stateSettings.extraStateIncome)} />
+                <MetricCard label="State-only extra income" value={formatCurrency(effectiveExtraStateIncome)} />
                 <MetricCard label={`${selectedStateCode} gross`} value={formatCurrency(stateGross)} />
                 <MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} />
                 <MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} />
               </div>
             </details>
             {stateError && <div className="status-card status-card--error">{stateError}</div>}
+            <details className="tax-what-if-disclosure" open={isStateTaxWhatIfOpen} onToggle={(event) => setIsStateTaxWhatIfOpen(event.currentTarget.open)}>
+              <summary>What-If</summary>
+              <div className="form-grid tax-what-if-disclosure__fields">
+                <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => setStateSettings((current) => ({ ...current, extraStateIncome: value }))} /></label>
+              </div>
+            </details>
             <div className="form-grid form-grid--compact-wide">
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
-              <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => setStateSettings((current) => ({ ...current, extraStateIncome: value }))} /></label>
               <label>
                 <span className="tax-field-label">
                   <span>Mortgage interest</span>
