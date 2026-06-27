@@ -2174,6 +2174,7 @@ type KpiMetricConfig = {
   deltaKind?: "currency" | "percent";
   tone?: "default" | "accent" | "warning" | "sync";
   details?: React.ReactNode;
+  badge?: React.ReactNode;
 };
 
 type IncomeSnapshotValues = {
@@ -2259,7 +2260,7 @@ function TumblingCurrency({ value, className = "" }: { value: number; className?
   );
 }
 
-function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details }: KpiMetricConfig) {
+function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
@@ -2298,7 +2299,7 @@ function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKin
 
   return (
     <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()} tabIndex={details ? 0 : undefined}>
-      <span>{label}</span>
+      <span className="kpi-pill__label-line">{label}{badge}</span>
       <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
       {secondaryValue && <small>{secondaryValue}</small>}
       {formattedDelta && deltaValue !== null && (
@@ -5208,6 +5209,15 @@ export default function App() {
   const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
+  const hasExcludedAfterTaxIncome = hiddenFromAfterTaxIncome > 0.005;
+  const excludedIncomeBadge = hasExcludedAfterTaxIncome ? (
+    <span className="kpi-pill__inline-badge">
+      Excluded income
+      <span className="kpi-pill__inline-note" role="tooltip">
+        {formatCurrencyDetailed(hiddenFromAfterTaxIncome)} is still included when calculating tax liability, but is excluded from the after-tax income KPI. Change this on the Accounts tab by clearing “Exclude from aftertax income” for the account.
+      </span>
+    </span>
+  ) : undefined;
   const afterTaxBreakdownDetails = (
     <div className="tax-breakdown-popover">
       <div className="tax-breakdown-popover__header">
@@ -5499,6 +5509,7 @@ export default function App() {
       primary: true,
       tone: "warning",
       details: afterTaxBreakdownDetails,
+      badge: excludedIncomeBadge,
     },
     {
       label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} income`,

@@ -732,6 +732,60 @@
   text-transform: none;
   white-space: nowrap;
 }
+.kpi-pill__label-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible !important;
+}
+.kpi-pill__inline-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 2px 6px;
+  border: 1px solid rgba(251, 191, 36, .46);
+  border-radius: 999px;
+  background: rgba(255, 248, 232, .96);
+  color: #92400e !important;
+  font-size: .54rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .04em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  cursor: help;
+}
+.kpi-pill__inline-note {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 5300;
+  width: min(340px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .20);
+  color: #172033 !important;
+  font-size: .72rem !important;
+  font-weight: 750 !important;
+  letter-spacing: normal !important;
+  line-height: 1.35 !important;
+  opacity: 0;
+  pointer-events: none;
+  text-transform: none !important;
+  white-space: normal !important;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.kpi-pill__inline-badge:hover .kpi-pill__inline-note,
+.kpi-pill__inline-badge:focus-within .kpi-pill__inline-note {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
 .kpi-pill--has-details {
   position: relative;
   cursor: help;
@@ -5228,4 +5282,17 @@ html.aftertaxus-dark-mode #root {
 .app-shell--dark .kpi-pill .tax-breakdown-popover__header strong,
 .app-shell--dark .app-top-nav .kpi-pill .tax-breakdown-popover__header strong {
   color: #f8fafc;
+}
+
+.app-shell--dark .kpi-pill__inline-badge {
+  border-color: rgba(251, 191, 36, .46);
+  background: rgba(120, 53, 15, .72);
+  color: #fde68a !important;
+}
+
+.app-shell--dark .kpi-pill__inline-note {
+  border-color: rgba(226, 232, 240, .16);
+  background: rgba(15, 23, 42, .98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .40);
+  color: #f8fafc !important;
 }
