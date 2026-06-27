@@ -83,8 +83,9 @@ type AccountTypeRow = { id: number; name: string; taxStatus: string };
 
 type TaxWhatIfItem = { id: number; amount: number; incomeType: string };
 type DeductionItem = { id: number; amount: number; deductionType: string };
+type AboveLineDeductionItem = { id: number; amount: number; deductionType: string };
 type FederalDeductionMode = "standard" | "itemized";
-type FederalSettings = { filingStatus: FilingStatus; deductionMode: FederalDeductionMode; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
+type FederalSettings = { filingStatus: FilingStatus; deductionMode: FederalDeductionMode; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; aboveLineDeductionItems: AboveLineDeductionItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
@@ -210,7 +211,7 @@ type AssistantTableConfig = {
   booleanFields: string[];
   defaultRow: (id: number) => AssistantEditableRow;
 };
-type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "deductionMode" | "extraOrdinaryItems" | "extraPreferredItems" | "deductionItems">;
+type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "deductionMode" | "extraOrdinaryItems" | "extraPreferredItems" | "aboveLineDeductionItems" | "deductionItems">;
 
 type WorkbookResponse = {
   workspaceId: string;
@@ -738,11 +739,21 @@ const federalDeductionLimitNotes: Record<string, string> = {
   "Investment loss (Short Term)": "Capital losses are generally limited to a $3,000 annual net capital loss deduction; unused losses carry forward.",
   "Medical expenses": "Medical expenses are only deductible above the IRS AGI threshold and may be limited.",
 };
+const federalAboveLineDeductionTypes = ["Capital loss deduction", "IRA contribution", "HSA contribution", "Student loan interest", "Self-employed health insurance", "Educator expenses", "Other adjustment"];
+const federalAboveLineDeductionLimitNotes: Record<string, string> = {
+  "Capital loss deduction": "Net capital losses can reduce ordinary income by up to $3,000 per year; excess losses carry forward.",
+  "IRA contribution": "Traditional IRA deductions can be limited by income, filing status, workplace plan coverage, and contribution limits.",
+  "HSA contribution": "HSA deductions require HSA eligibility and are limited by coverage type and age.",
+  "Student loan interest": "Student loan interest deductions are capped and phase out at higher income levels.",
+  "Self-employed health insurance": "Self-employed health insurance deductions are limited by business profit and eligibility for other coverage.",
+  "Educator expenses": "Educator expense deductions are capped annually and require qualifying educator expenses.",
+};
 const newTaxWhatIfItem = (incomeType: string): TaxWhatIfItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount: 0, incomeType });
+const newAboveLineDeductionItem = (deductionType: string, amount = 0): AboveLineDeductionItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount, deductionType });
 const newDeductionItem = (deductionType: string, amount = 0): DeductionItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount, deductionType });
 const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWhatIfTypes[0]);
 const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
-const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], deductionItems: [newDeductionItem("Mortgage interest", 19500), newDeductionItem("Property tax", 19000)], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
+const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem("Capital loss deduction")], deductionItems: [newDeductionItem("Mortgage interest", 19500), newDeductionItem("Property tax", 19000)], mortgageInterest: 19500, propertyTax: 19000, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual" };
@@ -1448,8 +1459,44 @@ function normalizeDeductionItems(raw: unknown, mortgageInterest = 0, propertyTax
   ];
 }
 
+function normalizeAboveLineDeductionItems(raw: unknown): AboveLineDeductionItem[] {
+  const sourceRows = Array.isArray(raw) ? raw : [];
+  const rows = sourceRows
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const obj = entry as Record<string, unknown>;
+      const deductionType = String(obj.deductionType || federalAboveLineDeductionTypes[0]).trim() || federalAboveLineDeductionTypes[0];
+      return {
+        id: Number(obj.id) || Date.now() + index,
+        amount: toNumber(obj.amount as number | string | boolean | null | undefined),
+        deductionType,
+      };
+    })
+    .filter((row): row is AboveLineDeductionItem => Boolean(row));
+  return rows.length ? rows : [newAboveLineDeductionItem(federalAboveLineDeductionTypes[0])];
+}
+
 function deductionTotalByType(items: DeductionItem[], deductionType: string) {
   return items.reduce((total, item) => item.deductionType === deductionType ? total + toNumber(item.amount) : total, 0);
+}
+
+function summarizeAboveLineDeductions(items: AboveLineDeductionItem[]) {
+  let capitalLossRaw = 0;
+  let uncappedTotal = 0;
+  items.forEach((item) => {
+    const amount = Math.max(toNumber(item.amount), 0);
+    if (item.deductionType === "Capital loss deduction") {
+      capitalLossRaw += amount;
+    } else {
+      uncappedTotal += amount;
+    }
+  });
+  const capitalLossDeduction = Math.min(capitalLossRaw, 3000);
+  return {
+    capitalLossRaw,
+    capitalLossDeduction,
+    total: capitalLossDeduction + uncappedTotal,
+  };
 }
 
 function summarizeFederalDeductions(items: DeductionItem[], stateTax: number, saltCap: number) {
@@ -1476,12 +1523,14 @@ function normalizeFederalSettings(raw: unknown): FederalSettings {
   const merged = mergeSettings(initialFederalSettings, raw) as FederalSettings;
   const extraOrdinaryItems = normalizeTaxWhatIfItems(merged.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
   const extraPreferredItems = normalizeTaxWhatIfItems(merged.extraPreferredItems, preferredWhatIfTypes[0], merged.extraPreferredIncome);
+  const aboveLineDeductionItems = normalizeAboveLineDeductionItems(merged.aboveLineDeductionItems);
   const deductionItems = normalizeDeductionItems(merged.deductionItems, merged.mortgageInterest, merged.propertyTax);
   return {
     ...merged,
     deductionMode: normalizeFederalDeductionMode(merged.deductionMode),
     extraOrdinaryItems,
     extraPreferredItems,
+    aboveLineDeductionItems,
     deductionItems,
     extraOrdinaryIncome: extraOrdinaryItems.reduce((total, row) => total + toNumber(row.amount), 0),
     extraPreferredIncome: extraPreferredItems.reduce((total, row) => total + toNumber(row.amount), 0),
@@ -1512,6 +1561,7 @@ function parseFederalSettingsSection(section: unknown): Partial<FederalSettings>
   if (extraPreferredIncome !== undefined) result.extraPreferredIncome = extraPreferredIncome;
   result.extraOrdinaryItems = normalizeTaxWhatIfItems(sectionObj?.extraOrdinaryItems, ordinaryWhatIfTypes[0], result.extraOrdinaryIncome || 0);
   result.extraPreferredItems = normalizeTaxWhatIfItems(sectionObj?.extraPreferredItems, preferredWhatIfTypes[0], result.extraPreferredIncome || 0);
+  result.aboveLineDeductionItems = normalizeAboveLineDeductionItems(sectionObj?.aboveLineDeductionItems);
   result.deductionItems = normalizeDeductionItems(sectionObj?.deductionItems, result.mortgageInterest || 0, result.propertyTax || 0);
 
   const filingValue = parseStringFromSection(sectionObj, rows, "filingStatus", "Filing status");
@@ -2058,6 +2108,50 @@ function FederalDeductionMiniTable({ rows, summary, onChange }: { rows: Deductio
         <span>Capital-loss deduction used: <strong>{formatCurrencyDetailed(summary.capitalLossDeduction)}</strong></span>
       </div>
       <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newDeductionItem(federalDeductionTypes[0])])}>+ Add deduction</button>
+    </div>
+  );
+}
+
+function FederalAboveLineDeductionTable({ rows, summary, onChange }: { rows: AboveLineDeductionItem[]; summary: ReturnType<typeof summarizeAboveLineDeductions>; onChange: (rows: AboveLineDeductionItem[]) => void }) {
+  const safeRows = rows.length ? rows : [newAboveLineDeductionItem(federalAboveLineDeductionTypes[0])];
+  const updateRow = (id: number, values: Partial<AboveLineDeductionItem>) => {
+    onChange(safeRows.map((row) => row.id === id ? { ...row, ...values } : row));
+  };
+  const removeRow = (id: number) => {
+    const nextRows = safeRows.filter((row) => row.id !== id);
+    onChange(nextRows.length ? nextRows : [newAboveLineDeductionItem(federalAboveLineDeductionTypes[0])]);
+  };
+
+  return (
+    <div className="tax-what-if-table tax-what-if-table--always-deductions">
+      <div className="tax-what-if-table__heading">
+        <strong>Deductions that apply with standard deduction</strong>
+        <span>{formatCurrencyDetailed(summary.total)}</span>
+      </div>
+      <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
+        <span>Amount</span>
+        <span>Deduction</span>
+        <span aria-hidden="true" />
+      </div>
+      {safeRows.map((row) => {
+        const limitationNote = federalAboveLineDeductionLimitNotes[row.deductionType];
+        return (
+          <div className="tax-what-if-table__row" key={row.id}>
+            <div className="tax-what-if-table__grid">
+              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
+              <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
+                {federalAboveLineDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+              <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove standard-compatible deduction row">×</button>
+            </div>
+            {limitationNote && <p className="tax-what-if-table__limitation">{limitationNote}</p>}
+          </div>
+        );
+      })}
+      <div className="tax-what-if-table__summary">
+        <span>Capital-loss deduction used: <strong>{formatCurrencyDetailed(summary.capitalLossDeduction)}</strong></span>
+      </div>
+      <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newAboveLineDeductionItem(federalAboveLineDeductionTypes[0])])}>+ Add deduction</button>
     </div>
   );
 }
@@ -4765,9 +4859,11 @@ export default function App() {
     !(stateResult.tax === 0 && localStateResult.tax > 0);
   const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
   const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, displayedStateResult.tax, federalSettings.saltCap);
+  const federalAboveLineDeductionSummary = summarizeAboveLineDeductions(federalSettings.aboveLineDeductionItems);
   const itemizedFederalDeduction = federalDeductionSummary.itemizedDeduction;
   const federalDeduction = federalSettings.deductionMode === "itemized" ? itemizedFederalDeduction : federalSettings.standardDeduction;
-  const federalTaxableAfterDeductions = Math.max(grossFederalTaxable - federalDeduction, 0);
+  const federalTaxableBeforeStandardOrItemized = Math.max(grossFederalTaxable - federalAboveLineDeductionSummary.total, 0);
+  const federalTaxableAfterDeductions = Math.max(federalTaxableBeforeStandardOrItemized - federalDeduction, 0);
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
   const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
   const magi = grossFederalTaxable;
@@ -6219,6 +6315,11 @@ export default function App() {
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
             </div>
+            <FederalAboveLineDeductionTable
+              rows={federalSettings.aboveLineDeductionItems}
+              summary={federalAboveLineDeductionSummary}
+              onChange={(rows) => setFederalSettings((current) => ({ ...current, aboveLineDeductionItems: rows }))}
+            />
             <div className="form-grid form-grid--compact tax-deduction-mode">
               <label>
                 <span>Deduction method</span>

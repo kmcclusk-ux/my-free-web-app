@@ -4410,6 +4410,9 @@
 .tax-what-if-table--deductions {
   margin-top: 10px;
 }
+.tax-what-if-table--always-deductions {
+  margin: 10px 0;
+}
 .tax-what-if-table__row {
   display: grid;
   gap: 3px;
