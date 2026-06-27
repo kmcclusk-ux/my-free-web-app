@@ -6209,8 +6209,6 @@ export default function App() {
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
-              <label><span>Standard deduction</span><CurrencyInput value={federalSettings.standardDeduction} onChange={(value) => setFederalSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
-              <label><span>SALT cap</span><CurrencyInput value={federalSettings.saltCap} onChange={(value) => setFederalSettings((current) => ({ ...current, saltCap: value }))} /></label>
             </div>
             <FederalDeductionMiniTable
               rows={federalSettings.deductionItems}
