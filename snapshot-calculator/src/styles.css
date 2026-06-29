@@ -29,6 +29,7 @@ select {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding: 28px 0 40px;
+  font-size: 75%;
 }
 
 .hero,
@@ -249,7 +250,7 @@ select,
 .input-shell,
 .state-select-shell {
   width: 100%;
-  min-height: 48px;
+  min-height: 42px;
   border: 1px solid rgba(226, 232, 240, .16);
   border-radius: 16px;
   background: rgba(2, 6, 23, .54);
@@ -283,7 +284,7 @@ select option {
 
 .input-shell input,
 .state-select-shell select {
-  min-height: 46px;
+  min-height: 40px;
   border: 0;
   background: transparent;
 }
