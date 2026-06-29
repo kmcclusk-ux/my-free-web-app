@@ -585,6 +585,16 @@ function App() {
         </section>
       )}
 
+      <section className="shared-investment-panel">
+        <NumberField label="Investment amount for both scenarios" prefix="$" value={investmentAmount} onChange={setInvestmentAmount} />
+      </section>
+
+      <section className="compare-grid">
+        <InvestmentCard title={scenarioAName} yearlyDifference={differenceA} value={investmentA} onChange={setInvestmentA} />
+        <div className="versus">VS</div>
+        <InvestmentCard title={scenarioBName} yearlyDifference={differenceB} value={investmentB} onChange={setInvestmentB} />
+      </section>
+
       <section className="setup-panel">
         <label className="field">
           <span>Filing status</span>
@@ -636,16 +646,6 @@ function App() {
             <div><span>Tax saved</span><strong>{currency(Math.abs(resultA.taxCost - resultB.taxCost))}</strong></div>
           </div>
         </div>
-      </section>
-
-      <section className="shared-investment-panel">
-        <NumberField label="Investment amount for both scenarios" prefix="$" value={investmentAmount} onChange={setInvestmentAmount} />
-      </section>
-
-      <section className="compare-grid">
-        <InvestmentCard title={scenarioAName} yearlyDifference={differenceA} value={investmentA} onChange={setInvestmentA} />
-        <div className="versus">VS</div>
-        <InvestmentCard title={scenarioBName} yearlyDifference={differenceB} value={investmentB} onChange={setInvestmentB} />
       </section>
 
       <section className="results-panel">
