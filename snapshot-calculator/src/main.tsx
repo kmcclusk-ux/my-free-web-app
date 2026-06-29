@@ -47,6 +47,7 @@ const taxTypeOptions: Array<{ value: TaxType; label: string; note: string }> = [
   { value: "muni", label: "In-state municipal bond", note: "Federal and state tax-free estimate." },
   { value: "taxFree", label: "Tax-free income", note: "No modeled federal or state tax." },
 ];
+const thermometerMarkers = [50, 40, 30, 20, 10];
 
 const taxTypeValues = new Set<TaxType>(taxTypeOptions.map((option) => option.value));
 const filingStatusValues = new Set<FilingStatus>(filingStatusOptions.map((option) => option.value));
@@ -610,6 +611,13 @@ function App() {
               <strong>Tax drag</strong>
             </div>
             <div className="thermo-track">
+              <div className="thermo-markers" aria-hidden="true">
+                {thermometerMarkers.map((marker) => (
+                  <span key={marker} className="thermo-marker" style={{ bottom: `${marker}%` }}>
+                    <b>{marker}%</b>
+                  </span>
+                ))}
+              </div>
               <div className="thermo-fill" style={{ height: `${Math.min(Math.max(winner.result.effectiveTaxRate * 100, 4), 100)}%` }} />
               {noIncomeTaxStates.has(stateCode) && <div className="no-tax-stamp">No state income tax</div>}
             </div>
