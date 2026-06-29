@@ -220,6 +220,11 @@ function safeInvestmentUpdate(value: unknown, fallback: InvestmentInput) {
   };
 }
 
+function dividendYieldLookupUrl(symbol: string) {
+  const query = `${symbol || "investment"} current dividend yield`;
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}
+
 function currency(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits }).format(value);
 }
@@ -369,7 +374,10 @@ function InvestmentCard({ title, yearlyDifference, value, onChange }: { title: s
       <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyDifference} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
-        <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
+        <div className="symbol-input-row">
+          <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
+          <a href={dividendYieldLookupUrl(value.symbol)} target="_blank" rel="noreferrer" aria-label={`Look up current dividend yield for ${value.symbol || "this investment"}`}>Yield lookup</a>
+        </div>
       </label>
       <NumberField label="Yield" suffix="%" value={value.yieldPercent} onChange={(yieldPercent) => onChange({ ...value, yieldPercent })} />
       <label className="field">

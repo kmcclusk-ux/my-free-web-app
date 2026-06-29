@@ -435,6 +435,35 @@ select {
   padding: 0 7px;
 }
 
+.symbol-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.symbol-input-row a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid rgba(103, 232, 249, .32);
+  border-radius: 999px;
+  background: rgba(8, 47, 73, .62);
+  color: #a5f3fc;
+  font-size: .62rem;
+  font-weight: 950;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.symbol-input-row a:hover {
+  border-color: rgba(103, 232, 249, .62);
+  background: rgba(14, 116, 144, .5);
+  color: #ecfeff;
+}
+
 select option {
   background: #0f172a;
   color: #f8fafc;
