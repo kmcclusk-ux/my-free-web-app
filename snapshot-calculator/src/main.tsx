@@ -324,17 +324,29 @@ function parseNumberInput(value: string) {
   return Number.isFinite(number) ? number : null;
 }
 
+function formatDollarInput(value: number | string) {
+  const rawValue = String(value).replace(/[$,%\s,]/g, "");
+  if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.") return rawValue;
+  const isNegative = rawValue.startsWith("-");
+  const unsignedValue = isNegative ? rawValue.slice(1) : rawValue;
+  const [integerPart = "", decimalPart] = unsignedValue.split(".");
+  const formattedInteger = integerPart.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
+  return `${isNegative ? "-" : ""}${formattedInteger}${decimalPart !== undefined ? `.${decimalPart}` : ""}`;
+}
+
 function NumberField({ label, value, onChange, prefix, suffix, className = "" }: { label: string; value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; className?: string }) {
-  const [draftValue, setDraftValue] = useState(String(value));
+  const isDollarField = prefix === "$";
+  const displayValue = isDollarField ? formatDollarInput(value) : String(value);
+  const [draftValue, setDraftValue] = useState(displayValue);
 
   useEffect(() => {
     const parsedDraftValue = parseNumberInput(draftValue);
     if (parsedDraftValue === value) return;
-    setDraftValue(String(value));
-  }, [draftValue, value]);
+    setDraftValue(isDollarField ? formatDollarInput(value) : String(value));
+  }, [draftValue, isDollarField, value]);
 
   function handleChange(rawValue: string) {
-    setDraftValue(rawValue);
+    setDraftValue(isDollarField ? formatDollarInput(rawValue) : rawValue);
     const nextValue = parseNumberInput(rawValue);
     if (nextValue !== null) onChange(nextValue);
   }
