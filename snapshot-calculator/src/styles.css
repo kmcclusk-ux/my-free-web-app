@@ -557,7 +557,7 @@ select option {
 
 .bar-row {
   display: grid;
-  grid-template-columns: minmax(72px, .18fr) minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(150px, .28fr) minmax(0, 1fr) 96px;
   gap: 12px;
   align-items: center;
   margin: 10px 0;
@@ -566,6 +566,11 @@ select option {
 .bar-row > span {
   color: #cbd5e1;
   font-weight: 950;
+}
+
+.bar-name-text {
+  min-width: 34px;
+  color: #f8fafc;
 }
 
 .bar-row strong {

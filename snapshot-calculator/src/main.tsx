@@ -424,19 +424,21 @@ function DeductionsPanel({
   );
 }
 
-function ComparisonBars({ a, b, nameA, nameB, differenceA, differenceB, label, valueKey }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; nameA: string; nameB: string; differenceA: number; differenceB: number; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome" }) {
-  const max = Math.max(a[valueKey], b[valueKey], 1);
+function ComparisonBars({ a, b, nameA, nameB, differenceA, differenceB, label, valueKey, scaleMax }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; nameA: string; nameB: string; differenceA: number; differenceB: number; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome"; scaleMax: number }) {
+  const max = Math.max(scaleMax, 1);
+  const widthA = Math.max(0, Math.min((a[valueKey] / max) * 100, 100));
+  const widthB = Math.max(0, Math.min((b[valueKey] / max) * 100, 100));
   return (
     <div className="bar-group">
       <h3>{label}</h3>
       <div className="bar-row">
-        <span className="bar-name">{nameA}<DifferenceBadge value={differenceA} /></span>
-        <div className="bar-track"><div className="bar-fill bar-fill-a" style={{ width: `${(a[valueKey] / max) * 100}%` }} /></div>
+        <span className="bar-name"><span className="bar-name-text">{nameA}</span><DifferenceBadge value={differenceA} /></span>
+        <div className="bar-track"><div className="bar-fill bar-fill-a" style={{ width: `${widthA}%` }} /></div>
         <strong>{currency(a[valueKey])}</strong>
       </div>
       <div className="bar-row">
-        <span className="bar-name">{nameB}<DifferenceBadge value={differenceB} /></span>
-        <div className="bar-track"><div className="bar-fill bar-fill-b" style={{ width: `${(b[valueKey] / max) * 100}%` }} /></div>
+        <span className="bar-name"><span className="bar-name-text">{nameB}</span><DifferenceBadge value={differenceB} /></span>
+        <div className="bar-track"><div className="bar-fill bar-fill-b" style={{ width: `${widthB}%` }} /></div>
         <strong>{currency(b[valueKey])}</strong>
       </div>
     </div>
@@ -466,6 +468,7 @@ function App() {
   const resultB = useMemo(() => investmentResult(scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode]);
   const differenceA = resultA.afterTaxIncome - resultB.afterTaxIncome;
   const differenceB = resultB.afterTaxIncome - resultA.afterTaxIncome;
+  const incomeBarScaleMax = Math.max(resultA.beforeTaxIncome, resultB.beforeTaxIncome, 1);
   const hasWinner = Math.abs(differenceA) > 0.5;
   const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: scenarioAName, symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: scenarioBName, symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
@@ -647,8 +650,8 @@ function App() {
 
       <section className="results-panel">
         <div className="results-main">
-          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} differenceA={differenceA} differenceB={differenceB} label="Before-tax income" valueKey="beforeTaxIncome" />
-          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} differenceA={differenceA} differenceB={differenceB} label="After-tax income" valueKey="afterTaxIncome" />
+          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} differenceA={differenceA} differenceB={differenceB} label="Before-tax income" valueKey="beforeTaxIncome" scaleMax={incomeBarScaleMax} />
+          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} differenceA={differenceA} differenceB={differenceB} label="After-tax income" valueKey="afterTaxIncome" scaleMax={incomeBarScaleMax} />
         </div>
       </section>
 
