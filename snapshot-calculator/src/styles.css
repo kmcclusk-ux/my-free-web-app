@@ -427,7 +427,7 @@ select option {
 
 .bar-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(72px, .18fr) minmax(0, 1fr) 96px;
   gap: 12px;
   align-items: center;
   margin: 10px 0;
@@ -474,7 +474,7 @@ select option {
 }
 
 .tax-drag-card--featured {
-  grid-template-columns: minmax(120px, .26fr) minmax(0, 1fr);
+  grid-template-columns: minmax(180px, .36fr) minmax(0, 1fr);
   align-items: center;
   background:
     radial-gradient(circle at 18% 18%, rgba(37, 99, 235, .24), transparent 28%),
@@ -520,14 +520,13 @@ select option {
 }
 
 .tax-drag-card--featured .thermometer-card {
-  grid-template-columns: auto minmax(0, 1fr);
-  justify-items: start;
+  grid-template-columns: 1fr;
+  justify-items: center;
   align-items: center;
-  column-gap: 8px;
+  row-gap: 8px;
 }
 
 .tax-drag-card--featured .thermo-title {
-  grid-column: 1 / -1;
   font-size: .68rem;
 }
 
@@ -557,9 +556,10 @@ select option {
 }
 
 .tax-drag-card--featured .thermo-track {
-  grid-row: span 2;
-  width: 36px;
-  height: 58px;
+  width: 116px;
+  height: 52vh;
+  min-height: 360px;
+  max-height: 560px;
 }
 
 .thermo-fill {
@@ -573,9 +573,9 @@ select option {
 }
 
 .tax-drag-card--featured .thermo-fill {
-  left: 9px;
-  right: 9px;
-  bottom: 5px;
+  left: 30px;
+  right: 30px;
+  bottom: 18px;
 }
 
 .no-tax-stamp {
@@ -603,7 +603,7 @@ select option {
 }
 
 .tax-drag-card--featured .thermometer-card > strong {
-  font-size: .95rem;
+  font-size: 1.6rem;
   line-height: 1;
 }
 
@@ -614,9 +614,9 @@ select option {
 }
 
 .tax-drag-card--featured .thermometer-card > span {
-  max-width: 90px;
-  text-align: left;
-  line-height: 1.05;
+  max-width: 150px;
+  text-align: center;
+  line-height: 1.15;
 }
 
 .tax-lines {

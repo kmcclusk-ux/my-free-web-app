@@ -402,18 +402,18 @@ function DeductionsPanel({
   );
 }
 
-function ComparisonBars({ a, b, label, valueKey }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome" }) {
+function ComparisonBars({ a, b, nameA, nameB, label, valueKey }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; nameA: string; nameB: string; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome" }) {
   const max = Math.max(a[valueKey], b[valueKey], 1);
   return (
     <div className="bar-group">
       <h3>{label}</h3>
       <div className="bar-row">
-        <span>A</span>
+        <span>{nameA}</span>
         <div className="bar-track"><div className="bar-fill bar-fill-a" style={{ width: `${(a[valueKey] / max) * 100}%` }} /></div>
         <strong>{currency(a[valueKey])}</strong>
       </div>
       <div className="bar-row">
-        <span>B</span>
+        <span>{nameB}</span>
         <div className="bar-track"><div className="bar-fill bar-fill-b" style={{ width: `${(b[valueKey] / max) * 100}%` }} /></div>
         <strong>{currency(b[valueKey])}</strong>
       </div>
@@ -435,12 +435,14 @@ function App() {
 
   const scenarioA = useMemo(() => ({ ...investmentA, amount: investmentAmount }), [investmentA, investmentAmount]);
   const scenarioB = useMemo(() => ({ ...investmentB, amount: investmentAmount }), [investmentB, investmentAmount]);
+  const scenarioAName = scenarioA.symbol || "First investment";
+  const scenarioBName = scenarioB.symbol || "Second investment";
   const itemizedDeductionTotal = itemizedDeductions.mortgageInterest + itemizedDeductions.propertyTax + itemizedDeductions.charitable + itemizedDeductions.other;
   const deductionTotal = deductionMethod === "standard" ? standardDeductions[filingStatus] : itemizedDeductionTotal;
   const taxableIncomeAfterDeductions = Math.max(0, taxableIncome - deductionTotal);
   const resultA = useMemo(() => investmentResult(scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode]);
   const resultB = useMemo(() => investmentResult(scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode]);
-  const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: "Investment A", symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: "Investment B", symbol: scenarioB.symbol, result: resultB, other: resultA };
+  const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: scenarioAName, symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: scenarioBName, symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
   const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentAmount, deductionMethod, itemizedDeductions, investmentA: scenarioA, investmentB: scenarioB }), [filingStatus, stateCode, taxableIncome, investmentAmount, deductionMethod, itemizedDeductions, scenarioA, scenarioB]);
@@ -611,15 +613,15 @@ function App() {
       </section>
 
       <section className="compare-grid">
-        <InvestmentCard title="Investment A" value={investmentA} onChange={setInvestmentA} />
+        <InvestmentCard title={scenarioAName} value={investmentA} onChange={setInvestmentA} />
         <div className="versus">VS</div>
-        <InvestmentCard title="Investment B" value={investmentB} onChange={setInvestmentB} />
+        <InvestmentCard title={scenarioBName} value={investmentB} onChange={setInvestmentB} />
       </section>
 
       <section className="results-panel">
         <div className="results-main">
-          <ComparisonBars a={resultA} b={resultB} label="Before-tax income" valueKey="beforeTaxIncome" />
-          <ComparisonBars a={resultA} b={resultB} label="After-tax income" valueKey="afterTaxIncome" />
+          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} label="Before-tax income" valueKey="beforeTaxIncome" />
+          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} label="After-tax income" valueKey="afterTaxIncome" />
         </div>
       </section>
 
