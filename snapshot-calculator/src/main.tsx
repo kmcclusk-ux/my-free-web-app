@@ -581,7 +581,6 @@ function App() {
             <img src={US_FLAG} alt="US flag" />
           </div>
           <div className="embed-summary">
-            {hasWinner && <MiniFireworks />}
             <span>After-tax winner</span>
             <strong>{winner.symbol || winner.label}</strong>
             <em>+{currency(advantage)} / year</em>
@@ -601,7 +600,6 @@ function App() {
             <p>Compare two investments using your filing status, state, taxable income, yield, and tax treatment.</p>
           </div>
           <div className="winner-card">
-            {hasWinner && <MiniFireworks />}
             <span>After-tax winner</span>
             <strong>{winner.symbol || winner.label}</strong>
             <em>+{currency(advantage)} / year</em>
