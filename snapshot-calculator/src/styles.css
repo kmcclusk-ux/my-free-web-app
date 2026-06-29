@@ -435,18 +435,33 @@ select {
   padding: 0 7px;
 }
 
-.symbol-input-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.yield-field-row {
+  display: flex;
   gap: 6px;
-  align-items: center;
+  align-items: end;
 }
 
-.symbol-input-row a {
+.yield-field {
+  width: 82px;
+  flex: 0 0 auto;
+}
+
+.yield-field .input-shell {
+  width: 82px;
+}
+
+.yield-field input {
+  width: 46px;
+  min-width: 0;
+  text-align: right;
+}
+
+.yield-lookup-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 20px;
+  margin-bottom: 0;
   padding: 0 8px;
   border: 1px solid rgba(103, 232, 249, .32);
   border-radius: 999px;
@@ -458,7 +473,7 @@ select {
   white-space: nowrap;
 }
 
-.symbol-input-row a:hover {
+.yield-lookup-link:hover {
   border-color: rgba(103, 232, 249, .62);
   background: rgba(14, 116, 144, .5);
   color: #ecfeff;

@@ -322,7 +322,7 @@ function parseNumberInput(value: string) {
   return Number.isFinite(number) ? number : null;
 }
 
-function NumberField({ label, value, onChange, prefix, suffix }: { label: string; value: number; onChange: (value: number) => void; prefix?: string; suffix?: string }) {
+function NumberField({ label, value, onChange, prefix, suffix, className = "" }: { label: string; value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; className?: string }) {
   const [draftValue, setDraftValue] = useState(String(value));
 
   useEffect(() => {
@@ -338,7 +338,7 @@ function NumberField({ label, value, onChange, prefix, suffix }: { label: string
   }
 
   return (
-    <label className="field">
+    <label className={`field ${className}`}>
       <span>{label}</span>
       <div className="input-shell">
         {prefix && <em>{prefix}</em>}
@@ -364,6 +364,10 @@ function MiniFireworks() {
   );
 }
 
+function YieldLookupLink({ symbol }: { symbol: string }) {
+  return <a className="yield-lookup-link" href={dividendYieldLookupUrl(symbol)} target="_blank" rel="noreferrer" aria-label={`Look up current dividend yield for ${symbol || "this investment"}`}>Yield lookup</a>;
+}
+
 function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { title: string; yearlyIncome: number; isWinner: boolean; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
   const taxType = taxTypeOptions.find((option) => option.value === value.taxType) || taxTypeOptions[0];
   return (
@@ -372,12 +376,12 @@ function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { ti
       <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyIncome} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
-        <div className="symbol-input-row">
-          <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
-          <a href={dividendYieldLookupUrl(value.symbol)} target="_blank" rel="noreferrer" aria-label={`Look up current dividend yield for ${value.symbol || "this investment"}`}>Yield lookup</a>
-        </div>
+        <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
       </label>
-      <NumberField label="Yield" suffix="%" value={value.yieldPercent} onChange={(yieldPercent) => onChange({ ...value, yieldPercent })} />
+      <div className="yield-field-row">
+        <NumberField className="yield-field" label="Yield" suffix="%" value={value.yieldPercent} onChange={(yieldPercent) => onChange({ ...value, yieldPercent })} />
+        <YieldLookupLink symbol={value.symbol} />
+      </div>
       <label className="field">
         <span>Tax type</span>
         <select value={value.taxType} onChange={(event) => onChange({ ...value, taxType: event.target.value as TaxType })}>
