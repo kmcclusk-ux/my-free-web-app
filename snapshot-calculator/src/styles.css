@@ -119,11 +119,11 @@ select {
 .hero {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 22px;
+  gap: 12px;
   align-items: center;
-  min-height: 280px;
-  padding: 30px;
-  border-radius: 32px;
+  min-height: 140px;
+  padding: 15px;
+  border-radius: 24px;
   overflow: hidden;
   position: relative;
 }
@@ -132,7 +132,7 @@ select {
   content: "";
   position: absolute;
   inset: auto -8% -55% 40%;
-  height: 260px;
+  height: 130px;
   background: radial-gradient(circle, rgba(45, 212, 191, .26), transparent 66%);
   pointer-events: none;
 }
@@ -200,8 +200,8 @@ h1 {
 .winner-card {
   position: relative;
   min-width: 260px;
-  padding: 22px;
-  border-radius: 26px;
+  padding: 12px;
+  border-radius: 18px;
   border: 1px solid rgba(45, 212, 191, .28);
   background: linear-gradient(145deg, rgba(20, 83, 45, .6), rgba(15, 23, 42, .88));
 }
@@ -217,9 +217,9 @@ h1 {
 
 .winner-card strong {
   display: block;
-  margin: 8px 0;
+  margin: 4px 0;
   color: #ffffff;
-  font-size: 2.5rem;
+  font-size: 1.7rem;
   line-height: 1;
 }
 
@@ -402,10 +402,10 @@ select option {
 
 .tax-drag-card {
   display: grid;
-  gap: 18px;
+  gap: 10px;
   margin-top: 18px;
-  padding: 20px;
-  border-radius: 30px;
+  padding: 10px;
+  border-radius: 22px;
 }
 
 .tax-drag-card--featured {
@@ -419,14 +419,14 @@ select option {
 .tax-feature-copy {
   display: grid;
   align-content: center;
-  gap: 14px;
+  gap: 8px;
 }
 
 .tax-feature-copy h2 {
   max-width: 760px;
   margin: 0;
   color: #ffffff;
-  font-size: clamp(1.8rem, 4vw, 3.4rem);
+  font-size: clamp(1.25rem, 2.6vw, 2.1rem);
   line-height: 1;
   letter-spacing: -.05em;
 }
@@ -450,8 +450,8 @@ select option {
 .thermometer-card {
   display: grid;
   justify-items: center;
-  gap: 12px;
-  padding: 20px;
+  gap: 7px;
+  padding: 10px;
 }
 
 .thermo-title {
@@ -471,8 +471,8 @@ select option {
 
 .thermo-track {
   position: relative;
-  width: 98px;
-  height: 300px;
+  width: 72px;
+  height: 165px;
   overflow: hidden;
   border: 2px solid rgba(248, 250, 252, .72);
   border-radius: 999px;
@@ -481,9 +481,9 @@ select option {
 
 .thermo-fill {
   position: absolute;
-  left: 26px;
-  right: 26px;
-  bottom: 16px;
+  left: 18px;
+  right: 18px;
+  bottom: 10px;
   border-radius: 999px;
   background: #2563eb;
   box-shadow: 0 0 22px rgba(59, 130, 246, .44);
@@ -510,7 +510,7 @@ select option {
 
 .thermometer-card > strong {
   color: #f8fafc;
-  font-size: 2.65rem;
+  font-size: 1.8rem;
 }
 
 .thermometer-card > span {
@@ -620,10 +620,10 @@ select option {
   }
 
   .thermo-track {
-    height: 240px;
+    height: 165px;
   }
 
   .tax-feature-copy h2 {
-    font-size: clamp(1.55rem, 8vw, 2.5rem);
+    font-size: clamp(1.2rem, 6vw, 1.9rem);
   }
 }
