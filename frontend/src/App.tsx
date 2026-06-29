@@ -1688,7 +1688,7 @@ function formatPercentInputValue(value: number) {
   return Number.isFinite(truncated) ? String(truncated) : "";
 }
 function formatGridCurrency(value: number) { return formatCurrency(toNumber(value)); }
-function formatCurrencyInput(value: number) { return formatCurrency(toNumber(value)); }
+function formatCurrencyInput(value: number) { return formatDollarInputValue(value); }
 function parseCurrencyInput(value: string) { return toNumber(value); }
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
@@ -2048,17 +2048,25 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
 }
 
 function CurrencyInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const [isFocused, setIsFocused] = useState(false);
-  const displayValue = isFocused ? String(toNumber(value) || "") : formatCurrencyInput(value);
+  const [draftValue, setDraftValue] = useState(formatCurrencyInput(value));
+
+  useEffect(() => {
+    if (toNumber(draftValue) === toNumber(value)) return;
+    setDraftValue(formatCurrencyInput(value));
+  }, [draftValue, value]);
+
+  function handleChange(rawValue: string) {
+    setDraftValue(formatDollarInputValue(rawValue));
+    onChange(parseCurrencyInput(rawValue));
+  }
 
   return (
     <input
       type="text"
       inputMode="decimal"
-      value={displayValue}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onChange={(event) => onChange(parseCurrencyInput(event.target.value))}
+      value={draftValue}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => handleChange(event.target.value)}
     />
   );
 }
