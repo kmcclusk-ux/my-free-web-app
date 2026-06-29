@@ -223,8 +223,10 @@ function safeInvestmentUpdate(value: unknown, fallback: InvestmentInput) {
 }
 
 function dividendYieldLookupUrl(symbol: string) {
-  const query = `${symbol || "investment"} current dividend yield`;
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  const normalizedSymbol = (symbol || "").trim().toLowerCase();
+  return normalizedSymbol
+    ? `https://stockanalysis.com/etf/${encodeURIComponent(normalizedSymbol)}/dividend/`
+    : "https://stockanalysis.com/etf/";
 }
 
 function currency(value: number, maximumFractionDigits = 0) {
