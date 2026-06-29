@@ -35,6 +35,7 @@ select {
 .hero,
 .embed-header,
 .setup-panel,
+.shared-investment-panel,
 .investment-card,
 .results-panel,
 .tax-drag-card,
@@ -52,6 +53,7 @@ select {
 }
 
 .snapshot-app--embed .setup-panel,
+.snapshot-app--embed .shared-investment-panel,
 .snapshot-app--embed .tax-drag-card,
 .snapshot-app--embed .compare-grid,
 .snapshot-app--embed .results-panel {
@@ -61,6 +63,7 @@ select {
 .snapshot-app--embed .investment-card,
 .snapshot-app--embed .results-panel,
 .snapshot-app--embed .tax-drag-card,
+.snapshot-app--embed .shared-investment-panel,
 .snapshot-app--embed .setup-panel {
   padding: 6px;
   border-radius: 16px;
@@ -312,6 +315,17 @@ select option {
   gap: 16px;
   align-items: center;
   margin-top: 18px;
+}
+
+.shared-investment-panel {
+  max-width: 360px;
+  margin: 8px auto 0;
+  padding: 7px 9px;
+  border-radius: 14px;
+}
+
+.shared-investment-panel .field > span {
+  text-align: center;
 }
 
 .investment-card {

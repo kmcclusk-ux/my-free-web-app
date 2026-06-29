@@ -16,6 +16,7 @@ type SnapshotInputs = {
   filingStatus: FilingStatus;
   stateCode: string;
   taxableIncome: number;
+  investmentAmount: number;
   investmentA: InvestmentInput;
   investmentB: InvestmentInput;
 };
@@ -44,6 +45,7 @@ const defaultInputs: SnapshotInputs = {
   filingStatus: "mfj",
   stateCode: "CA",
   taxableIncome: 300000,
+  investmentAmount: 250000,
   investmentA: { symbol: "BIL", amount: 250000, yieldPercent: 4.8, taxType: "ordinary" },
   investmentB: { symbol: "NAC", amount: 250000, yieldPercent: 4.4, taxType: "treasury" },
 };
@@ -130,14 +132,18 @@ function getInitialSettings() {
     return { isEmbedMode: false, inputs: defaultInputs };
   }
   const params = new URLSearchParams(window.location.search);
+  const investmentA = investmentFromParams(params, "a", defaultInputs.investmentA);
+  const investmentB = investmentFromParams(params, "b", defaultInputs.investmentB);
+  const investmentAmount = numberParam(params, "amount", investmentA.amount || investmentB.amount || defaultInputs.investmentAmount);
   return {
     isEmbedMode: params.get("embed") === "1" || params.get("mode") === "embed",
     inputs: {
       filingStatus: filingStatusParam(params, defaultInputs.filingStatus),
       stateCode: stateParam(params, defaultInputs.stateCode),
       taxableIncome: numberParam(params, "income", defaultInputs.taxableIncome),
-      investmentA: investmentFromParams(params, "a", defaultInputs.investmentA),
-      investmentB: investmentFromParams(params, "b", defaultInputs.investmentB),
+      investmentAmount,
+      investmentA: { ...investmentA, amount: investmentAmount },
+      investmentB: { ...investmentB, amount: investmentAmount },
     },
   };
 }
@@ -149,12 +155,13 @@ function buildShareUrl(inputs: SnapshotInputs, embed = true) {
   url.searchParams.set("filingStatus", inputs.filingStatus);
   url.searchParams.set("state", inputs.stateCode);
   url.searchParams.set("income", String(inputs.taxableIncome));
+  url.searchParams.set("amount", String(inputs.investmentAmount));
   url.searchParams.set("aSymbol", inputs.investmentA.symbol);
-  url.searchParams.set("aAmount", String(inputs.investmentA.amount));
+  url.searchParams.set("aAmount", String(inputs.investmentAmount));
   url.searchParams.set("aYield", String(inputs.investmentA.yieldPercent));
   url.searchParams.set("aTaxType", inputs.investmentA.taxType);
   url.searchParams.set("bSymbol", inputs.investmentB.symbol);
-  url.searchParams.set("bAmount", String(inputs.investmentB.amount));
+  url.searchParams.set("bAmount", String(inputs.investmentAmount));
   url.searchParams.set("bYield", String(inputs.investmentB.yieldPercent));
   url.searchParams.set("bTaxType", inputs.investmentB.taxType);
   return url.toString();
@@ -301,7 +308,6 @@ function InvestmentCard({ title, value, onChange }: { title: string; value: Inve
         <span>Asset / Symbol</span>
         <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
       </label>
-      <NumberField label="Investment amount" prefix="$" value={value.amount} onChange={(amount) => onChange({ ...value, amount })} />
       <NumberField label="Yield" suffix="%" value={value.yieldPercent} onChange={(yieldPercent) => onChange({ ...value, yieldPercent })} />
       <label className="field">
         <span>Tax type</span>
@@ -338,16 +344,19 @@ function App() {
   const [filingStatus, setFilingStatus] = useState<FilingStatus>(initialSettings.inputs.filingStatus);
   const [stateCode, setStateCode] = useState(initialSettings.inputs.stateCode);
   const [taxableIncome, setTaxableIncome] = useState(initialSettings.inputs.taxableIncome);
+  const [investmentAmount, setInvestmentAmount] = useState(initialSettings.inputs.investmentAmount);
   const [investmentA, setInvestmentA] = useState<InvestmentInput>(initialSettings.inputs.investmentA);
   const [investmentB, setInvestmentB] = useState<InvestmentInput>(initialSettings.inputs.investmentB);
   const [copyStatus, setCopyStatus] = useState("");
 
-  const resultA = useMemo(() => investmentResult(investmentA, taxableIncome, filingStatus, stateCode), [investmentA, taxableIncome, filingStatus, stateCode]);
-  const resultB = useMemo(() => investmentResult(investmentB, taxableIncome, filingStatus, stateCode), [investmentB, taxableIncome, filingStatus, stateCode]);
-  const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: "Investment A", symbol: investmentA.symbol, result: resultA, other: resultB } : { label: "Investment B", symbol: investmentB.symbol, result: resultB, other: resultA };
+  const scenarioA = useMemo(() => ({ ...investmentA, amount: investmentAmount }), [investmentA, investmentAmount]);
+  const scenarioB = useMemo(() => ({ ...investmentB, amount: investmentAmount }), [investmentB, investmentAmount]);
+  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncome, filingStatus, stateCode), [scenarioA, taxableIncome, filingStatus, stateCode]);
+  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncome, filingStatus, stateCode), [scenarioB, taxableIncome, filingStatus, stateCode]);
+  const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: "Investment A", symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: "Investment B", symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
-  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentA, investmentB }), [filingStatus, stateCode, taxableIncome, investmentA, investmentB]);
+  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentAmount, investmentA: scenarioA, investmentB: scenarioB }), [filingStatus, stateCode, taxableIncome, investmentAmount, scenarioA, scenarioB]);
   const shareUrl = useMemo(() => buildShareUrl(inputs), [inputs]);
   const embedPayload = useMemo(() => ({
     inputs,
@@ -382,12 +391,23 @@ function App() {
       if (payload.taxableIncome !== undefined || payload.income !== undefined) {
         setTaxableIncome(numberValue(payload.taxableIncome ?? payload.income, taxableIncome));
       }
-      if (payload.investmentA) setInvestmentA((current) => safeInvestmentUpdate(payload.investmentA, current));
-      if (payload.investmentB) setInvestmentB((current) => safeInvestmentUpdate(payload.investmentB, current));
+      if (payload.investmentAmount !== undefined || payload.amount !== undefined) {
+        setInvestmentAmount(numberValue(payload.investmentAmount ?? payload.amount, investmentAmount));
+      }
+      if (payload.investmentA) {
+        const nextInvestment = safeInvestmentUpdate(payload.investmentA, investmentA);
+        setInvestmentA(nextInvestment);
+        if (payload.investmentAmount === undefined && payload.amount === undefined) setInvestmentAmount(nextInvestment.amount);
+      }
+      if (payload.investmentB) {
+        const nextInvestment = safeInvestmentUpdate(payload.investmentB, investmentB);
+        setInvestmentB(nextInvestment);
+        if (payload.investmentAmount === undefined && payload.amount === undefined && !payload.investmentA) setInvestmentAmount(nextInvestment.amount);
+      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [taxableIncome]);
+  }, [investmentA, investmentAmount, investmentB, taxableIncome]);
 
   async function copyShareLink() {
     try {
@@ -477,6 +497,10 @@ function App() {
             <div><span>Tax saved</span><strong>{currency(Math.abs(resultA.taxCost - resultB.taxCost))}</strong></div>
           </div>
         </div>
+      </section>
+
+      <section className="shared-investment-panel">
+        <NumberField label="Investment amount for both scenarios" prefix="$" value={investmentAmount} onChange={setInvestmentAmount} />
       </section>
 
       <section className="compare-grid">

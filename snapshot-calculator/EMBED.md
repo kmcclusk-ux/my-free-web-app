@@ -6,7 +6,7 @@ Use the snapshot calculator as an iframe in a chatbot shell, AI answer card, hel
 
 ```html
 <iframe
-  src="https://calculator.aftertaxus.com/?embed=1&state=CA&filingStatus=mfj&income=300000&aSymbol=BIL&aAmount=250000&aYield=4.8&aTaxType=ordinary&bSymbol=NAC&bAmount=250000&bYield=4.4&bTaxType=treasury"
+  src="https://calculator.aftertaxus.com/?embed=1&state=CA&filingStatus=mfj&income=300000&amount=250000&aSymbol=BIL&aYield=4.8&aTaxType=ordinary&bSymbol=NAC&bYield=4.4&bTaxType=treasury"
   title="AfterTax US investment comparison"
   loading="lazy"
   style="width:100%;max-width:920px;height:760px;border:0;border-radius:24px;overflow:hidden"
@@ -19,8 +19,10 @@ Use the snapshot calculator as an iframe in a chatbot shell, AI answer card, hel
 - `filingStatus` accepts `mfj`, `single`, `mfs`, or `hoh`.
 - `state` accepts a two-letter state code like `CA`, `TX`, or `NY`.
 - `income` is taxable income before the two compared investments.
-- `aSymbol`, `aAmount`, `aYield`, `aTaxType` configure Investment A.
-- `bSymbol`, `bAmount`, `bYield`, `bTaxType` configure Investment B.
+- `amount` is the shared investment amount used for both scenarios.
+- `aSymbol`, `aYield`, `aTaxType` configure Investment A.
+- `bSymbol`, `bYield`, `bTaxType` configure Investment B.
+- `aAmount` and `bAmount` are still accepted for older links; `amount` takes priority.
 - `aTaxType` and `bTaxType` accept `ordinary`, `qualified`, `treasury`, `muni`, or `taxFree`.
 
 ## Chatbot Integration
@@ -43,8 +45,9 @@ iframe.contentWindow.postMessage({
     filingStatus: "mfj",
     stateCode: "CA",
     taxableIncome: 300000,
-    investmentA: { symbol: "BIL", amount: 250000, yieldPercent: 4.8, taxType: "ordinary" },
-    investmentB: { symbol: "NAC", amount: 250000, yieldPercent: 4.4, taxType: "treasury" }
+    investmentAmount: 250000,
+    investmentA: { symbol: "BIL", yieldPercent: 4.8, taxType: "ordinary" },
+    investmentB: { symbol: "NAC", yieldPercent: 4.4, taxType: "treasury" }
   }
 }, "https://calculator.aftertaxus.com");
 ```
