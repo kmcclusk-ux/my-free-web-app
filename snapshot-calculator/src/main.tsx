@@ -526,7 +526,7 @@ function App() {
             <strong>Want the full portfolio view?</strong>
             <span>AfterTax US models accounts, asset classes, state taxes, deductions, what-if rows, and income exclusions.</span>
           </div>
-          <button type="button" onClick={copyShareLink}>{copyStatus || "Copy embeddable comparison"}</button>
+          <a href="https://aftertaxus.com" target="_blank" rel="noreferrer">Open full portfolio manager</a>
         </section>
       )}
     </main>
