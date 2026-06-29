@@ -32,14 +32,84 @@ select {
 }
 
 .hero,
+.embed-header,
 .setup-panel,
 .investment-card,
 .results-panel,
+.embed-footer,
 .cta-card {
   border: 1px solid rgba(226, 232, 240, .16);
   background: linear-gradient(180deg, rgba(15, 23, 42, .84), rgba(2, 6, 23, .72));
   box-shadow: 0 24px 64px rgba(0, 0, 0, .34), inset 0 0 0 1px rgba(255, 255, 255, .03);
   backdrop-filter: blur(18px);
+}
+
+.snapshot-app--embed {
+  width: min(920px, 100%);
+  padding: 12px;
+}
+
+.snapshot-app--embed .setup-panel,
+.snapshot-app--embed .compare-grid,
+.snapshot-app--embed .results-panel {
+  margin-top: 12px;
+}
+
+.snapshot-app--embed .investment-card,
+.snapshot-app--embed .results-panel,
+.snapshot-app--embed .setup-panel {
+  padding: 14px;
+  border-radius: 22px;
+}
+
+.snapshot-app--embed .tax-note {
+  min-height: 0;
+}
+
+.embed-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 24px;
+}
+
+.embed-summary {
+  display: grid;
+  gap: 2px;
+  min-width: 160px;
+  padding: 10px 12px;
+  border: 1px solid rgba(45, 212, 191, .22);
+  border-radius: 18px;
+  background: rgba(20, 83, 45, .3);
+}
+
+.embed-summary span,
+.embed-summary em {
+  color: #a7f3d0;
+  font-size: .72rem;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.embed-summary strong {
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.copy-link-button {
+  border: 1px solid rgba(45, 212, 191, .38);
+  border-radius: 999px;
+  padding: 11px 14px;
+  background: linear-gradient(135deg, #0f766e, #1d4ed8);
+  color: #fff;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .hero {
@@ -474,8 +544,18 @@ select option {
   cursor: pointer;
 }
 
+.embed-footer {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  color: #a7f3d0;
+  font-size: .84rem;
+  line-height: 1.4;
+}
+
 @media (max-width: 860px) {
   .hero,
+  .embed-header,
   .setup-panel,
   .compare-grid,
   .results-panel,
@@ -493,5 +573,10 @@ select option {
 
   .cta-card {
     align-items: stretch;
+  }
+
+  .embed-summary,
+  .copy-link-button {
+    width: 100%;
   }
 }

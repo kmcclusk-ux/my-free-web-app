@@ -1,4 +1,4 @@
-import { StrictMode, useMemo, useState } from "react";
+import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -10,6 +10,14 @@ type InvestmentInput = {
   amount: number;
   yieldPercent: number;
   taxType: TaxType;
+};
+
+type SnapshotInputs = {
+  filingStatus: FilingStatus;
+  stateCode: string;
+  taxableIncome: number;
+  investmentA: InvestmentInput;
+  investmentB: InvestmentInput;
 };
 
 const US_FLAG = "https://upload.wikimedia.org/wikipedia/en/a/a4/Flag_of_the_United_States.svg";
@@ -28,6 +36,17 @@ const taxTypeOptions: Array<{ value: TaxType; label: string; note: string }> = [
   { value: "muni", label: "In-state municipal bond", note: "Federal and state tax-free estimate." },
   { value: "taxFree", label: "Tax-free income", note: "No modeled federal or state tax." },
 ];
+
+const taxTypeValues = new Set<TaxType>(taxTypeOptions.map((option) => option.value));
+const filingStatusValues = new Set<FilingStatus>(filingStatusOptions.map((option) => option.value));
+
+const defaultInputs: SnapshotInputs = {
+  filingStatus: "mfj",
+  stateCode: "CA",
+  taxableIncome: 300000,
+  investmentA: { symbol: "BIL", amount: 250000, yieldPercent: 4.8, taxType: "ordinary" },
+  investmentB: { symbol: "NAC", amount: 250000, yieldPercent: 4.4, taxType: "treasury" },
+};
 
 const stateOptions = [
   ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"],
@@ -67,6 +86,90 @@ function stateFlagUrl(stateCode: string) {
   const name = stateNames[stateCode] || stateCode;
   const fileName = stateFlagOverrides[stateCode] || `Flag of ${name}.svg`;
   return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=48`;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function numberValue(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function numberParam(params: URLSearchParams, key: string, fallback: number) {
+  return numberValue(params.get(key), fallback);
+}
+
+function filingStatusParam(params: URLSearchParams, fallback: FilingStatus) {
+  const value = params.get("filingStatus") || params.get("filing") || fallback;
+  return filingStatusValues.has(value as FilingStatus) ? value as FilingStatus : fallback;
+}
+
+function stateParam(params: URLSearchParams, fallback: string) {
+  const value = (params.get("state") || params.get("stateCode") || fallback).toUpperCase();
+  return stateNames[value] ? value : fallback;
+}
+
+function taxTypeParam(params: URLSearchParams, key: string, fallback: TaxType) {
+  const value = params.get(key) || fallback;
+  return taxTypeValues.has(value as TaxType) ? value as TaxType : fallback;
+}
+
+function investmentFromParams(params: URLSearchParams, prefix: "a" | "b", fallback: InvestmentInput) {
+  return {
+    symbol: (params.get(`${prefix}Symbol`) || fallback.symbol).toUpperCase(),
+    amount: numberParam(params, `${prefix}Amount`, fallback.amount),
+    yieldPercent: numberParam(params, `${prefix}Yield`, fallback.yieldPercent),
+    taxType: taxTypeParam(params, `${prefix}TaxType`, fallback.taxType),
+  };
+}
+
+function getInitialSettings() {
+  if (typeof window === "undefined") {
+    return { isEmbedMode: false, inputs: defaultInputs };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    isEmbedMode: params.get("embed") === "1" || params.get("mode") === "embed",
+    inputs: {
+      filingStatus: filingStatusParam(params, defaultInputs.filingStatus),
+      stateCode: stateParam(params, defaultInputs.stateCode),
+      taxableIncome: numberParam(params, "income", defaultInputs.taxableIncome),
+      investmentA: investmentFromParams(params, "a", defaultInputs.investmentA),
+      investmentB: investmentFromParams(params, "b", defaultInputs.investmentB),
+    },
+  };
+}
+
+function buildShareUrl(inputs: SnapshotInputs, embed = true) {
+  const url = new URL(typeof window === "undefined" ? "https://calculator.aftertaxus.com/" : window.location.href);
+  url.search = "";
+  url.searchParams.set("embed", embed ? "1" : "0");
+  url.searchParams.set("filingStatus", inputs.filingStatus);
+  url.searchParams.set("state", inputs.stateCode);
+  url.searchParams.set("income", String(inputs.taxableIncome));
+  url.searchParams.set("aSymbol", inputs.investmentA.symbol);
+  url.searchParams.set("aAmount", String(inputs.investmentA.amount));
+  url.searchParams.set("aYield", String(inputs.investmentA.yieldPercent));
+  url.searchParams.set("aTaxType", inputs.investmentA.taxType);
+  url.searchParams.set("bSymbol", inputs.investmentB.symbol);
+  url.searchParams.set("bAmount", String(inputs.investmentB.amount));
+  url.searchParams.set("bYield", String(inputs.investmentB.yieldPercent));
+  url.searchParams.set("bTaxType", inputs.investmentB.taxType);
+  return url.toString();
+}
+
+function safeInvestmentUpdate(value: unknown, fallback: InvestmentInput) {
+  if (!value || typeof value !== "object") return fallback;
+  const record = value as Record<string, unknown>;
+  const taxType = stringValue(record.taxType);
+  return {
+    symbol: (stringValue(record.symbol) || fallback.symbol).toUpperCase(),
+    amount: numberValue(record.amount, fallback.amount),
+    yieldPercent: numberValue(record.yieldPercent, fallback.yieldPercent),
+    taxType: taxTypeValues.has(taxType as TaxType) ? taxType as TaxType : fallback.taxType,
+  };
 }
 
 function currency(value: number, maximumFractionDigits = 0) {
@@ -210,37 +313,106 @@ function ComparisonBars({ a, b, label, valueKey }: { a: ReturnType<typeof invest
 }
 
 function App() {
-  const [filingStatus, setFilingStatus] = useState<FilingStatus>("mfj");
-  const [stateCode, setStateCode] = useState("CA");
-  const [taxableIncome, setTaxableIncome] = useState(300000);
-  const [investmentA, setInvestmentA] = useState<InvestmentInput>({ symbol: "BIL", amount: 250000, yieldPercent: 4.8, taxType: "ordinary" });
-  const [investmentB, setInvestmentB] = useState<InvestmentInput>({ symbol: "NAC", amount: 250000, yieldPercent: 4.4, taxType: "treasury" });
+  const initialSettings = useMemo(() => getInitialSettings(), []);
+  const [filingStatus, setFilingStatus] = useState<FilingStatus>(initialSettings.inputs.filingStatus);
+  const [stateCode, setStateCode] = useState(initialSettings.inputs.stateCode);
+  const [taxableIncome, setTaxableIncome] = useState(initialSettings.inputs.taxableIncome);
+  const [investmentA, setInvestmentA] = useState<InvestmentInput>(initialSettings.inputs.investmentA);
+  const [investmentB, setInvestmentB] = useState<InvestmentInput>(initialSettings.inputs.investmentB);
+  const [copyStatus, setCopyStatus] = useState("");
 
   const resultA = useMemo(() => investmentResult(investmentA, taxableIncome, filingStatus, stateCode), [investmentA, taxableIncome, filingStatus, stateCode]);
   const resultB = useMemo(() => investmentResult(investmentB, taxableIncome, filingStatus, stateCode), [investmentB, taxableIncome, filingStatus, stateCode]);
   const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: "Investment A", symbol: investmentA.symbol, result: resultA, other: resultB } : { label: "Investment B", symbol: investmentB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
+  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentA, investmentB }), [filingStatus, stateCode, taxableIncome, investmentA, investmentB]);
+  const shareUrl = useMemo(() => buildShareUrl(inputs), [inputs]);
+  const embedPayload = useMemo(() => ({
+    inputs,
+    resultA,
+    resultB,
+    winner: {
+      label: winner.label,
+      symbol: winner.symbol,
+      advantage,
+      afterTaxIncome: winner.result.afterTaxIncome,
+      effectiveTaxRate: winner.result.effectiveTaxRate,
+    },
+  }), [advantage, inputs, resultA, resultB, winner]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.parent === window) return;
+    window.parent.postMessage({ type: "aftertaxus-snapshot-result", payload: embedPayload }, "*");
+  }, [embedPayload]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      const record = data as Record<string, unknown>;
+      if (record.type !== "aftertaxus-snapshot-set-inputs" || !record.payload || typeof record.payload !== "object") return;
+      const payload = record.payload as Record<string, unknown>;
+      const nextFilingStatus = stringValue(payload.filingStatus);
+      const nextStateCode = stringValue(payload.stateCode || payload.state).toUpperCase();
+      if (filingStatusValues.has(nextFilingStatus as FilingStatus)) setFilingStatus(nextFilingStatus as FilingStatus);
+      if (stateNames[nextStateCode]) setStateCode(nextStateCode);
+      if (payload.taxableIncome !== undefined || payload.income !== undefined) {
+        setTaxableIncome(numberValue(payload.taxableIncome ?? payload.income, taxableIncome));
+      }
+      if (payload.investmentA) setInvestmentA((current) => safeInvestmentUpdate(payload.investmentA, current));
+      if (payload.investmentB) setInvestmentB((current) => safeInvestmentUpdate(payload.investmentB, current));
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [taxableIncome]);
+
+  async function copyShareLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyStatus("Copied");
+    } catch {
+      setCopyStatus("Copy failed");
+    }
+    window.setTimeout(() => setCopyStatus(""), 1600);
+  }
 
   return (
-    <main className="snapshot-app">
-      <section className="hero">
-        <div className="brand-row">
-          <span className="brand-mark">C</span>
-          <strong>AfterTax US</strong>
-          <img src={US_FLAG} alt="US flag" />
-        </div>
-        <div className="hero-copy">
-          <p className="eyebrow">Free snapshot calculator</p>
-          <h1>See which income investment wins after tax.</h1>
-          <p>Compare two investments using your filing status, state, taxable income, yield, and tax treatment.</p>
-        </div>
-        <div className="winner-card">
-          <span>After-tax winner</span>
-          <strong>{winner.symbol || winner.label}</strong>
-          <em>+{currency(advantage)} / year</em>
-        </div>
-      </section>
+    <main className={`snapshot-app ${initialSettings.isEmbedMode ? "snapshot-app--embed" : ""}`}>
+      {initialSettings.isEmbedMode ? (
+        <section className="embed-header">
+          <div className="brand-row">
+            <span className="brand-mark">C</span>
+            <strong>AfterTax US Snapshot</strong>
+            <img src={US_FLAG} alt="US flag" />
+          </div>
+          <div className="embed-summary">
+            <span>After-tax winner</span>
+            <strong>{winner.symbol || winner.label}</strong>
+            <em>+{currency(advantage)} / year</em>
+          </div>
+          <button type="button" className="copy-link-button" onClick={copyShareLink}>{copyStatus || "Copy embed link"}</button>
+        </section>
+      ) : (
+        <section className="hero">
+          <div className="brand-row">
+            <span className="brand-mark">C</span>
+            <strong>AfterTax US</strong>
+            <img src={US_FLAG} alt="US flag" />
+          </div>
+          <div className="hero-copy">
+            <p className="eyebrow">Free snapshot calculator</p>
+            <h1>See which income investment wins after tax.</h1>
+            <p>Compare two investments using your filing status, state, taxable income, yield, and tax treatment.</p>
+          </div>
+          <div className="winner-card">
+            <span>After-tax winner</span>
+            <strong>{winner.symbol || winner.label}</strong>
+            <em>+{currency(advantage)} / year</em>
+          </div>
+        </section>
+      )}
 
       <section className="setup-panel">
         <label className="field">
@@ -296,13 +468,19 @@ function App() {
         </aside>
       </section>
 
-      <section className="cta-card">
-        <div>
-          <strong>Want the full portfolio view?</strong>
-          <span>AfterTax US models accounts, asset classes, state taxes, deductions, what-if rows, and income exclusions.</span>
-        </div>
-        <button type="button">Run your own after-tax comparison</button>
-      </section>
+      {initialSettings.isEmbedMode ? (
+        <section className="embed-footer">
+          <span>AI/chatbot ready: preload via URL parameters or update this frame with postMessage.</span>
+        </section>
+      ) : (
+        <section className="cta-card">
+          <div>
+            <strong>Want the full portfolio view?</strong>
+            <span>AfterTax US models accounts, asset classes, state taxes, deductions, what-if rows, and income exclusions.</span>
+          </div>
+          <button type="button" onClick={copyShareLink}>{copyStatus || "Copy embeddable comparison"}</button>
+        </section>
+      )}
     </main>
   );
 }
