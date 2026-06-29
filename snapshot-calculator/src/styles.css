@@ -36,6 +36,7 @@ select {
 .setup-panel,
 .investment-card,
 .results-panel,
+.tax-drag-card,
 .embed-footer,
 .cta-card {
   border: 1px solid rgba(226, 232, 240, .16);
@@ -50,6 +51,7 @@ select {
 }
 
 .snapshot-app--embed .setup-panel,
+.snapshot-app--embed .tax-drag-card,
 .snapshot-app--embed .compare-grid,
 .snapshot-app--embed .results-panel {
   margin-top: 12px;
@@ -57,6 +59,7 @@ select {
 
 .snapshot-app--embed .investment-card,
 .snapshot-app--embed .results-panel,
+.snapshot-app--embed .tax-drag-card,
 .snapshot-app--embed .setup-panel {
   padding: 14px;
   border-radius: 22px;
@@ -331,7 +334,7 @@ select option {
 
 .results-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+  grid-template-columns: 1fr;
   gap: 18px;
   margin-top: 18px;
   padding: 20px;
@@ -398,7 +401,41 @@ select option {
 
 .tax-drag-card {
   display: grid;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 20px;
+  border-radius: 30px;
+}
+
+.tax-drag-card--featured {
+  grid-template-columns: minmax(220px, .46fr) minmax(0, 1fr);
+  align-items: stretch;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(37, 99, 235, .24), transparent 28%),
+    linear-gradient(180deg, rgba(15, 23, 42, .9), rgba(2, 6, 23, .76));
+}
+
+.tax-feature-copy {
+  display: grid;
+  align-content: center;
   gap: 14px;
+}
+
+.tax-feature-copy h2 {
+  max-width: 760px;
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.8rem, 4vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -.05em;
+}
+
+.tax-feature-copy p {
+  max-width: 720px;
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 .thermometer-card,
@@ -412,8 +449,8 @@ select option {
 .thermometer-card {
   display: grid;
   justify-items: center;
-  gap: 10px;
-  padding: 16px;
+  gap: 12px;
+  padding: 20px;
 }
 
 .thermo-title {
@@ -433,8 +470,8 @@ select option {
 
 .thermo-track {
   position: relative;
-  width: 72px;
-  height: 210px;
+  width: 98px;
+  height: 300px;
   overflow: hidden;
   border: 2px solid rgba(248, 250, 252, .72);
   border-radius: 999px;
@@ -443,9 +480,9 @@ select option {
 
 .thermo-fill {
   position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 12px;
+  left: 26px;
+  right: 26px;
+  bottom: 16px;
   border-radius: 999px;
   background: #2563eb;
   box-shadow: 0 0 22px rgba(59, 130, 246, .44);
@@ -472,7 +509,7 @@ select option {
 
 .thermometer-card > strong {
   color: #f8fafc;
-  font-size: 2rem;
+  font-size: 2.65rem;
 }
 
 .thermometer-card > span {
@@ -558,6 +595,7 @@ select option {
   .embed-header,
   .setup-panel,
   .compare-grid,
+  .tax-drag-card--featured,
   .results-panel,
   .cta-card {
     grid-template-columns: 1fr;
@@ -578,5 +616,13 @@ select option {
   .embed-summary,
   .copy-link-button {
     width: 100%;
+  }
+
+  .thermo-track {
+    height: 240px;
+  }
+
+  .tax-feature-copy h2 {
+    font-size: clamp(1.55rem, 8vw, 2.5rem);
   }
 }

@@ -454,6 +454,31 @@ function App() {
         <NumberField label="Taxable income before these investments" prefix="$" value={taxableIncome} onChange={setTaxableIncome} />
       </section>
 
+      <section className="tax-drag-card tax-drag-card--featured">
+        <div className="thermometer-card">
+          <div className="thermo-title">
+            <span><img src={US_FLAG} alt="" /> + <img src={stateFlagUrl(stateCode)} alt="" /></span>
+            <strong>Tax drag</strong>
+          </div>
+          <div className="thermo-track">
+            <div className="thermo-fill" style={{ height: `${Math.min(Math.max(winner.result.effectiveTaxRate * 100, 4), 100)}%` }} />
+            {noIncomeTaxStates.has(stateCode) && <div className="no-tax-stamp">No state income tax</div>}
+          </div>
+          <strong>{percent(winner.result.effectiveTaxRate)}</strong>
+          <span>winning investment effective tax drag</span>
+        </div>
+        <div className="tax-feature-copy">
+          <p className="eyebrow">After-tax impact</p>
+          <h2>{winner.symbol || winner.label} wins by {currency(advantage)} per year</h2>
+          <p>Tax treatment can overwhelm headline yield. Use this thermometer to see how much federal and state tax drag affects the winning income option.</p>
+          <div className="tax-lines">
+            <div><span>{investmentA.symbol || "A"} tax cost</span><strong>{currency(resultA.taxCost)}</strong></div>
+            <div><span>{investmentB.symbol || "B"} tax cost</span><strong>{currency(resultB.taxCost)}</strong></div>
+            <div><span>Tax saved</span><strong>{currency(Math.abs(resultA.taxCost - resultB.taxCost))}</strong></div>
+          </div>
+        </div>
+      </section>
+
       <section className="compare-grid">
         <InvestmentCard title="Investment A" value={investmentA} onChange={setInvestmentA} />
         <div className="versus">VS</div>
@@ -465,28 +490,6 @@ function App() {
           <ComparisonBars a={resultA} b={resultB} label="Before-tax income" valueKey="beforeTaxIncome" />
           <ComparisonBars a={resultA} b={resultB} label="After-tax income" valueKey="afterTaxIncome" />
         </div>
-        <aside className="tax-drag-card">
-          <div className="thermometer-card">
-            <div className="thermo-title">
-              <span><img src={US_FLAG} alt="" /> + <img src={stateFlagUrl(stateCode)} alt="" /></span>
-              <strong>Tax drag</strong>
-            </div>
-            <div className="thermo-track">
-              <div className="thermo-fill" style={{ height: `${Math.min(Math.max(winner.result.effectiveTaxRate * 100, 4), 100)}%` }} />
-              {noIncomeTaxStates.has(stateCode) && <div className="no-tax-stamp">No state income tax</div>}
-            </div>
-            <strong>{percent(winner.result.effectiveTaxRate)}</strong>
-            <span>winning investment effective tax drag</span>
-          </div>
-          <div className="tax-lines">
-            <div><span>{investmentA.symbol || "A"} tax cost</span><strong>{currency(resultA.taxCost)}</strong></div>
-            <div><span>{investmentB.symbol || "B"} tax cost</span><strong>{currency(resultB.taxCost)}</strong></div>
-            <div><span>Tax saved</span><strong>{currency(Math.abs(resultA.taxCost - resultB.taxCost))}</strong></div>
-          </div>
-          <p className="recommendation">
-            {winner.symbol || winner.label} produces more after-tax income here. Lower yield can still win when the tax treatment is better.
-          </p>
-        </aside>
       </section>
 
       {initialSettings.isEmbedMode ? (
