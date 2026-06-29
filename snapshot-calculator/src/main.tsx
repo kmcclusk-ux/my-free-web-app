@@ -603,6 +603,30 @@ function App() {
         <InvestmentCard title={scenarioAName} yearlyIncome={resultA.afterTaxIncome} isWinner={differenceA > 0.5} value={investmentA} onChange={setInvestmentA} />
         <div className="versus">VS</div>
         <InvestmentCard title={scenarioBName} yearlyIncome={resultB.afterTaxIncome} isWinner={differenceB > 0.5} value={investmentB} onChange={setInvestmentB} />
+        <section className="tax-drag-card tax-drag-card--featured">
+          <div className="thermometer-card">
+            <div className="thermo-title">
+              <span><img src={US_FLAG} alt="" /> + <img src={stateFlagUrl(stateCode)} alt="" /></span>
+              <strong>Tax drag</strong>
+            </div>
+            <div className="thermo-track">
+              <div className="thermo-fill" style={{ height: `${Math.min(Math.max(winner.result.effectiveTaxRate * 100, 4), 100)}%` }} />
+              {noIncomeTaxStates.has(stateCode) && <div className="no-tax-stamp">No state income tax</div>}
+            </div>
+            <strong>{percent(winner.result.effectiveTaxRate)}</strong>
+            <span>winning investment effective tax drag</span>
+          </div>
+          <div className="tax-feature-copy">
+            <p className="eyebrow">After-tax impact</p>
+            <h2>{winner.symbol || winner.label} wins by {currency(advantage)} per year</h2>
+            <p>Taxable base after deductions: {currency(taxableIncomeAfterDeductions)}.</p>
+            <div className="tax-lines">
+              <div><span>{investmentA.symbol || "A"} tax cost</span><strong>{currency(resultA.taxCost)}</strong></div>
+              <div><span>{investmentB.symbol || "B"} tax cost</span><strong>{currency(resultB.taxCost)}</strong></div>
+              <div><span>Tax saved</span><strong>{currency(Math.abs(resultA.taxCost - resultB.taxCost))}</strong></div>
+            </div>
+          </div>
+        </section>
       </section>
 
       <section className="setup-panel">
@@ -632,31 +656,6 @@ function App() {
         onMethodChange={setDeductionMethod}
         onItemizedChange={setItemizedDeductions}
       />
-
-      <section className="tax-drag-card tax-drag-card--featured">
-        <div className="thermometer-card">
-          <div className="thermo-title">
-            <span><img src={US_FLAG} alt="" /> + <img src={stateFlagUrl(stateCode)} alt="" /></span>
-            <strong>Tax drag</strong>
-          </div>
-          <div className="thermo-track">
-            <div className="thermo-fill" style={{ height: `${Math.min(Math.max(winner.result.effectiveTaxRate * 100, 4), 100)}%` }} />
-            {noIncomeTaxStates.has(stateCode) && <div className="no-tax-stamp">No state income tax</div>}
-          </div>
-          <strong>{percent(winner.result.effectiveTaxRate)}</strong>
-          <span>winning investment effective tax drag</span>
-        </div>
-        <div className="tax-feature-copy">
-          <p className="eyebrow">After-tax impact</p>
-          <h2>{winner.symbol || winner.label} wins by {currency(advantage)} per year</h2>
-          <p>Taxable base after deductions: {currency(taxableIncomeAfterDeductions)}. Use this thermometer to see how federal and state tax drag affects the winning income option.</p>
-          <div className="tax-lines">
-            <div><span>{investmentA.symbol || "A"} tax cost</span><strong>{currency(resultA.taxCost)}</strong></div>
-            <div><span>{investmentB.symbol || "B"} tax cost</span><strong>{currency(resultB.taxCost)}</strong></div>
-            <div><span>Tax saved</span><strong>{currency(Math.abs(resultA.taxCost - resultB.taxCost))}</strong></div>
-          </div>
-        </div>
-      </section>
 
       <section className="results-panel">
         <div className="results-main">
