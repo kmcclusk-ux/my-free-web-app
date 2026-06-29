@@ -228,6 +228,11 @@ function percent(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function signedYearlyDifference(value: number) {
+  if (Math.abs(value) < 0.5) return "$0/yr";
+  return `${value > 0 ? "+" : "-"}${currency(Math.abs(value))}/yr`;
+}
+
 function bracketedTax(income: number, brackets: ReadonlyArray<{ max: number; rate: number }>) {
   if (!Number.isFinite(income) || income <= 0) return 0;
   let tax = 0;
@@ -340,11 +345,16 @@ function NumberField({ label, value, onChange, prefix, suffix }: { label: string
   );
 }
 
-function InvestmentCard({ title, value, onChange }: { title: string; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
+function DifferenceBadge({ value }: { value: number }) {
+  const className = value > 0 ? "difference-badge difference-badge--positive" : value < 0 ? "difference-badge difference-badge--negative" : "difference-badge";
+  return <span className={className}>{signedYearlyDifference(value)}</span>;
+}
+
+function InvestmentCard({ title, yearlyDifference, value, onChange }: { title: string; yearlyDifference: number; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
   const taxType = taxTypeOptions.find((option) => option.value === value.taxType) || taxTypeOptions[0];
   return (
     <section className="investment-card">
-      <div className="card-kicker">{title}</div>
+      <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyDifference} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
         <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
@@ -402,18 +412,18 @@ function DeductionsPanel({
   );
 }
 
-function ComparisonBars({ a, b, nameA, nameB, label, valueKey }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; nameA: string; nameB: string; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome" }) {
+function ComparisonBars({ a, b, nameA, nameB, differenceA, differenceB, label, valueKey }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; nameA: string; nameB: string; differenceA: number; differenceB: number; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome" }) {
   const max = Math.max(a[valueKey], b[valueKey], 1);
   return (
     <div className="bar-group">
       <h3>{label}</h3>
       <div className="bar-row">
-        <span>{nameA}</span>
+        <span className="bar-name">{nameA}<DifferenceBadge value={differenceA} /></span>
         <div className="bar-track"><div className="bar-fill bar-fill-a" style={{ width: `${(a[valueKey] / max) * 100}%` }} /></div>
         <strong>{currency(a[valueKey])}</strong>
       </div>
       <div className="bar-row">
-        <span>{nameB}</span>
+        <span className="bar-name">{nameB}<DifferenceBadge value={differenceB} /></span>
         <div className="bar-track"><div className="bar-fill bar-fill-b" style={{ width: `${(b[valueKey] / max) * 100}%` }} /></div>
         <strong>{currency(b[valueKey])}</strong>
       </div>
@@ -442,6 +452,8 @@ function App() {
   const taxableIncomeAfterDeductions = Math.max(0, taxableIncome - deductionTotal);
   const resultA = useMemo(() => investmentResult(scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode]);
   const resultB = useMemo(() => investmentResult(scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode]);
+  const differenceA = resultA.afterTaxIncome - resultB.afterTaxIncome;
+  const differenceB = resultB.afterTaxIncome - resultA.afterTaxIncome;
   const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: scenarioAName, symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: scenarioBName, symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
@@ -613,15 +625,15 @@ function App() {
       </section>
 
       <section className="compare-grid">
-        <InvestmentCard title={scenarioAName} value={investmentA} onChange={setInvestmentA} />
+        <InvestmentCard title={scenarioAName} yearlyDifference={differenceA} value={investmentA} onChange={setInvestmentA} />
         <div className="versus">VS</div>
-        <InvestmentCard title={scenarioBName} value={investmentB} onChange={setInvestmentB} />
+        <InvestmentCard title={scenarioBName} yearlyDifference={differenceB} value={investmentB} onChange={setInvestmentB} />
       </section>
 
       <section className="results-panel">
         <div className="results-main">
-          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} label="Before-tax income" valueKey="beforeTaxIncome" />
-          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} label="After-tax income" valueKey="afterTaxIncome" />
+          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} differenceA={differenceA} differenceB={differenceB} label="Before-tax income" valueKey="beforeTaxIncome" />
+          <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} differenceA={differenceA} differenceB={differenceB} label="After-tax income" valueKey="afterTaxIncome" />
         </div>
       </section>
 

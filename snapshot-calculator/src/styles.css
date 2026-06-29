@@ -195,6 +195,43 @@ select {
   letter-spacing: .14em;
 }
 
+.investment-name-line,
+.bar-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.difference-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, .35);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .72);
+  color: #cbd5e1;
+  font-size: .62rem;
+  font-weight: 950;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.difference-badge--positive {
+  border-color: rgba(52, 211, 153, .5);
+  background: rgba(6, 78, 59, .72);
+  color: #bbf7d0;
+}
+
+.difference-badge--negative {
+  border-color: rgba(248, 113, 113, .5);
+  background: rgba(127, 29, 29, .62);
+  color: #fecaca;
+}
+
 h1 {
   margin: 0;
   color: #ffffff;
@@ -433,7 +470,7 @@ select option {
   margin: 10px 0;
 }
 
-.bar-row span {
+.bar-row > span {
   color: #cbd5e1;
   font-weight: 950;
 }
