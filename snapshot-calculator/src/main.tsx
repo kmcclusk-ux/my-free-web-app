@@ -116,6 +116,7 @@ function stringValue(value: unknown) {
 }
 
 function numberValue(value: unknown, fallback: number) {
+  if (value === null || value === undefined || value === "") return fallback;
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
