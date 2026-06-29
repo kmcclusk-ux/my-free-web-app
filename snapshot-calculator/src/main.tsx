@@ -63,12 +63,12 @@ const standardDeductions: Record<FilingStatus, number> = {
 const defaultInputs: SnapshotInputs = {
   filingStatus: "mfj",
   stateCode: "CA",
-  taxableIncome: 300000,
-  investmentAmount: 250000,
+  taxableIncome: 120000,
+  investmentAmount: 100000,
   deductionMethod: "standard",
   itemizedDeductions: { mortgageInterest: 0, propertyTax: 0, charitable: 0, other: 0 },
-  investmentA: { symbol: "BIL", amount: 250000, yieldPercent: 4.8, taxType: "ordinary" },
-  investmentB: { symbol: "NAC", amount: 250000, yieldPercent: 4.4, taxType: "treasury" },
+  investmentA: { symbol: "BIL", amount: 100000, yieldPercent: 3.6, taxType: "ordinary" },
+  investmentB: { symbol: "NAC", amount: 100000, yieldPercent: 7, taxType: "treasury" },
 };
 
 const stateOptions = [
