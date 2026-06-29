@@ -258,13 +258,34 @@ function investmentResult(input: InvestmentInput, taxableIncome: number, filingS
   };
 }
 
+function parseNumberInput(value: string) {
+  const cleanedValue = value.replace(/[$,%\s,]/g, "");
+  if (cleanedValue === "" || cleanedValue === "-" || cleanedValue === "." || cleanedValue === "-.") return 0;
+  const number = Number(cleanedValue);
+  return Number.isFinite(number) ? number : null;
+}
+
 function NumberField({ label, value, onChange, prefix, suffix }: { label: string; value: number; onChange: (value: number) => void; prefix?: string; suffix?: string }) {
+  const [draftValue, setDraftValue] = useState(String(value));
+
+  useEffect(() => {
+    const parsedDraftValue = parseNumberInput(draftValue);
+    if (parsedDraftValue === value) return;
+    setDraftValue(String(value));
+  }, [draftValue, value]);
+
+  function handleChange(rawValue: string) {
+    setDraftValue(rawValue);
+    const nextValue = parseNumberInput(rawValue);
+    if (nextValue !== null) onChange(nextValue);
+  }
+
   return (
     <label className="field">
       <span>{label}</span>
       <div className="input-shell">
         {prefix && <em>{prefix}</em>}
-        <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+        <input type="text" inputMode="decimal" value={draftValue} onChange={(event) => handleChange(event.target.value)} />
         {suffix && <em>{suffix}</em>}
       </div>
     </label>
