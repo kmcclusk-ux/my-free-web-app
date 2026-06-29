@@ -424,7 +424,7 @@ function App() {
           </div>
           <div className="hero-copy">
             <p className="eyebrow">Free snapshot calculator</p>
-            <h1>Which income investment wins after tax</h1>
+            <h1>Which wins after tax?</h1>
             <p>Compare two investments using your filing status, state, taxable income, yield, and tax treatment.</p>
           </div>
           <div className="winner-card">
