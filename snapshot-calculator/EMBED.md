@@ -6,7 +6,7 @@ Use the snapshot calculator as an iframe in a chatbot shell, AI answer card, hel
 
 ```html
 <iframe
-  src="https://calculator.aftertaxus.com/?embed=1&state=CA&filingStatus=mfj&income=300000&amount=250000&aSymbol=BIL&aYield=4.8&aTaxType=ordinary&bSymbol=NAC&bYield=4.4&bTaxType=treasury"
+  src="https://calculator.aftertaxus.com/?embed=1&state=CA&filingStatus=mfj&income=300000&deductionMethod=standard&amount=250000&aSymbol=BIL&aYield=4.8&aTaxType=ordinary&bSymbol=NAC&bYield=4.4&bTaxType=treasury"
   title="AfterTax US investment comparison"
   loading="lazy"
   style="width:100%;max-width:920px;height:760px;border:0;border-radius:24px;overflow:hidden"
@@ -18,7 +18,9 @@ Use the snapshot calculator as an iframe in a chatbot shell, AI answer card, hel
 - `embed=1` turns on the compact chatbot-friendly layout.
 - `filingStatus` accepts `mfj`, `single`, `mfs`, or `hoh`.
 - `state` accepts a two-letter state code like `CA`, `TX`, or `NY`.
-- `income` is taxable income before the two compared investments.
+- `income` is income before deductions and before the two compared investments.
+- `deductionMethod` accepts `standard` or `itemized`.
+- `mortgageInterest`, `propertyTax`, `charitable`, and `otherDeductions` are used when `deductionMethod=itemized`.
 - `amount` is the shared investment amount used for both scenarios.
 - `aSymbol`, `aYield`, `aTaxType` configure Investment A.
 - `bSymbol`, `bYield`, `bTaxType` configure Investment B.
@@ -45,6 +47,8 @@ iframe.contentWindow.postMessage({
     filingStatus: "mfj",
     stateCode: "CA",
     taxableIncome: 300000,
+    deductionMethod: "itemized",
+    itemizedDeductions: { mortgageInterest: 12000, propertyTax: 10000, charitable: 2500, other: 0 },
     investmentAmount: 250000,
     investmentA: { symbol: "BIL", yieldPercent: 4.8, taxType: "ordinary" },
     investmentB: { symbol: "NAC", yieldPercent: 4.4, taxType: "treasury" }

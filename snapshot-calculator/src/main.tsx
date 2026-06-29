@@ -4,6 +4,7 @@ import "./styles.css";
 
 type FilingStatus = "mfj" | "single" | "mfs" | "hoh";
 type TaxType = "ordinary" | "qualified" | "treasury" | "muni" | "taxFree";
+type DeductionMethod = "standard" | "itemized";
 
 type InvestmentInput = {
   symbol: string;
@@ -17,8 +18,17 @@ type SnapshotInputs = {
   stateCode: string;
   taxableIncome: number;
   investmentAmount: number;
+  deductionMethod: DeductionMethod;
+  itemizedDeductions: ItemizedDeductions;
   investmentA: InvestmentInput;
   investmentB: InvestmentInput;
+};
+
+type ItemizedDeductions = {
+  mortgageInterest: number;
+  propertyTax: number;
+  charitable: number;
+  other: number;
 };
 
 const US_FLAG = "https://upload.wikimedia.org/wikipedia/en/a/a4/Flag_of_the_United_States.svg";
@@ -40,12 +50,22 @@ const taxTypeOptions: Array<{ value: TaxType; label: string; note: string }> = [
 
 const taxTypeValues = new Set<TaxType>(taxTypeOptions.map((option) => option.value));
 const filingStatusValues = new Set<FilingStatus>(filingStatusOptions.map((option) => option.value));
+const deductionMethodValues = new Set<DeductionMethod>(["standard", "itemized"]);
+
+const standardDeductions: Record<FilingStatus, number> = {
+  mfj: 30000,
+  single: 15000,
+  mfs: 15000,
+  hoh: 22500,
+};
 
 const defaultInputs: SnapshotInputs = {
   filingStatus: "mfj",
   stateCode: "CA",
   taxableIncome: 300000,
   investmentAmount: 250000,
+  deductionMethod: "standard",
+  itemizedDeductions: { mortgageInterest: 0, propertyTax: 0, charitable: 0, other: 0 },
   investmentA: { symbol: "BIL", amount: 250000, yieldPercent: 4.8, taxType: "ordinary" },
   investmentB: { symbol: "NAC", amount: 250000, yieldPercent: 4.4, taxType: "treasury" },
 };
@@ -118,6 +138,20 @@ function taxTypeParam(params: URLSearchParams, key: string, fallback: TaxType) {
   return taxTypeValues.has(value as TaxType) ? value as TaxType : fallback;
 }
 
+function deductionMethodParam(params: URLSearchParams, fallback: DeductionMethod) {
+  const value = params.get("deductionMethod") || fallback;
+  return deductionMethodValues.has(value as DeductionMethod) ? value as DeductionMethod : fallback;
+}
+
+function itemizedDeductionsFromParams(params: URLSearchParams, fallback: ItemizedDeductions) {
+  return {
+    mortgageInterest: numberParam(params, "mortgageInterest", fallback.mortgageInterest),
+    propertyTax: numberParam(params, "propertyTax", fallback.propertyTax),
+    charitable: numberParam(params, "charitable", fallback.charitable),
+    other: numberParam(params, "otherDeductions", fallback.other),
+  };
+}
+
 function investmentFromParams(params: URLSearchParams, prefix: "a" | "b", fallback: InvestmentInput) {
   return {
     symbol: (params.get(`${prefix}Symbol`) || fallback.symbol).toUpperCase(),
@@ -142,6 +176,8 @@ function getInitialSettings() {
       stateCode: stateParam(params, defaultInputs.stateCode),
       taxableIncome: numberParam(params, "income", defaultInputs.taxableIncome),
       investmentAmount,
+      deductionMethod: deductionMethodParam(params, defaultInputs.deductionMethod),
+      itemizedDeductions: itemizedDeductionsFromParams(params, defaultInputs.itemizedDeductions),
       investmentA: { ...investmentA, amount: investmentAmount },
       investmentB: { ...investmentB, amount: investmentAmount },
     },
@@ -156,6 +192,11 @@ function buildShareUrl(inputs: SnapshotInputs, embed = true) {
   url.searchParams.set("state", inputs.stateCode);
   url.searchParams.set("income", String(inputs.taxableIncome));
   url.searchParams.set("amount", String(inputs.investmentAmount));
+  url.searchParams.set("deductionMethod", inputs.deductionMethod);
+  url.searchParams.set("mortgageInterest", String(inputs.itemizedDeductions.mortgageInterest));
+  url.searchParams.set("propertyTax", String(inputs.itemizedDeductions.propertyTax));
+  url.searchParams.set("charitable", String(inputs.itemizedDeductions.charitable));
+  url.searchParams.set("otherDeductions", String(inputs.itemizedDeductions.other));
   url.searchParams.set("aSymbol", inputs.investmentA.symbol);
   url.searchParams.set("aAmount", String(inputs.investmentAmount));
   url.searchParams.set("aYield", String(inputs.investmentA.yieldPercent));
@@ -320,6 +361,47 @@ function InvestmentCard({ title, value, onChange }: { title: string; value: Inve
   );
 }
 
+function DeductionsPanel({
+  filingStatus,
+  method,
+  itemizedDeductions,
+  deductionTotal,
+  onMethodChange,
+  onItemizedChange,
+}: {
+  filingStatus: FilingStatus;
+  method: DeductionMethod;
+  itemizedDeductions: ItemizedDeductions;
+  deductionTotal: number;
+  onMethodChange: (method: DeductionMethod) => void;
+  onItemizedChange: (deductions: ItemizedDeductions) => void;
+}) {
+  const standardDeduction = standardDeductions[filingStatus];
+  return (
+    <section className="deductions-panel">
+      <label className="field deduction-method-field">
+        <span>Deduction method</span>
+        <select value={method} onChange={(event) => onMethodChange(event.target.value as DeductionMethod)}>
+          <option value="standard">Standard deduction ({currency(standardDeduction)})</option>
+          <option value="itemized">Itemized deductions</option>
+        </select>
+      </label>
+      <div className="deduction-summary">
+        <span>Deduction used</span>
+        <strong>{currency(deductionTotal)}</strong>
+      </div>
+      {method === "itemized" && (
+        <div className="itemized-grid">
+          <NumberField label="Mortgage interest" prefix="$" value={itemizedDeductions.mortgageInterest} onChange={(mortgageInterest) => onItemizedChange({ ...itemizedDeductions, mortgageInterest })} />
+          <NumberField label="Property tax" prefix="$" value={itemizedDeductions.propertyTax} onChange={(propertyTax) => onItemizedChange({ ...itemizedDeductions, propertyTax })} />
+          <NumberField label="Charitable" prefix="$" value={itemizedDeductions.charitable} onChange={(charitable) => onItemizedChange({ ...itemizedDeductions, charitable })} />
+          <NumberField label="Other" prefix="$" value={itemizedDeductions.other} onChange={(other) => onItemizedChange({ ...itemizedDeductions, other })} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ComparisonBars({ a, b, label, valueKey }: { a: ReturnType<typeof investmentResult>; b: ReturnType<typeof investmentResult>; label: string; valueKey: "beforeTaxIncome" | "afterTaxIncome" }) {
   const max = Math.max(a[valueKey], b[valueKey], 1);
   return (
@@ -345,18 +427,23 @@ function App() {
   const [stateCode, setStateCode] = useState(initialSettings.inputs.stateCode);
   const [taxableIncome, setTaxableIncome] = useState(initialSettings.inputs.taxableIncome);
   const [investmentAmount, setInvestmentAmount] = useState(initialSettings.inputs.investmentAmount);
+  const [deductionMethod, setDeductionMethod] = useState<DeductionMethod>(initialSettings.inputs.deductionMethod);
+  const [itemizedDeductions, setItemizedDeductions] = useState<ItemizedDeductions>(initialSettings.inputs.itemizedDeductions);
   const [investmentA, setInvestmentA] = useState<InvestmentInput>(initialSettings.inputs.investmentA);
   const [investmentB, setInvestmentB] = useState<InvestmentInput>(initialSettings.inputs.investmentB);
   const [copyStatus, setCopyStatus] = useState("");
 
   const scenarioA = useMemo(() => ({ ...investmentA, amount: investmentAmount }), [investmentA, investmentAmount]);
   const scenarioB = useMemo(() => ({ ...investmentB, amount: investmentAmount }), [investmentB, investmentAmount]);
-  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncome, filingStatus, stateCode), [scenarioA, taxableIncome, filingStatus, stateCode]);
-  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncome, filingStatus, stateCode), [scenarioB, taxableIncome, filingStatus, stateCode]);
+  const itemizedDeductionTotal = itemizedDeductions.mortgageInterest + itemizedDeductions.propertyTax + itemizedDeductions.charitable + itemizedDeductions.other;
+  const deductionTotal = deductionMethod === "standard" ? standardDeductions[filingStatus] : itemizedDeductionTotal;
+  const taxableIncomeAfterDeductions = Math.max(0, taxableIncome - deductionTotal);
+  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode]);
+  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode]);
   const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: "Investment A", symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: "Investment B", symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
-  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentAmount, investmentA: scenarioA, investmentB: scenarioB }), [filingStatus, stateCode, taxableIncome, investmentAmount, scenarioA, scenarioB]);
+  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentAmount, deductionMethod, itemizedDeductions, investmentA: scenarioA, investmentB: scenarioB }), [filingStatus, stateCode, taxableIncome, investmentAmount, deductionMethod, itemizedDeductions, scenarioA, scenarioB]);
   const shareUrl = useMemo(() => buildShareUrl(inputs), [inputs]);
   const embedPayload = useMemo(() => ({
     inputs,
@@ -393,6 +480,17 @@ function App() {
       }
       if (payload.investmentAmount !== undefined || payload.amount !== undefined) {
         setInvestmentAmount(numberValue(payload.investmentAmount ?? payload.amount, investmentAmount));
+      }
+      const nextDeductionMethod = stringValue(payload.deductionMethod);
+      if (deductionMethodValues.has(nextDeductionMethod as DeductionMethod)) setDeductionMethod(nextDeductionMethod as DeductionMethod);
+      if (payload.itemizedDeductions && typeof payload.itemizedDeductions === "object") {
+        const deductions = payload.itemizedDeductions as Record<string, unknown>;
+        setItemizedDeductions((current) => ({
+          mortgageInterest: numberValue(deductions.mortgageInterest, current.mortgageInterest),
+          propertyTax: numberValue(deductions.propertyTax, current.propertyTax),
+          charitable: numberValue(deductions.charitable, current.charitable),
+          other: numberValue(deductions.other, current.other),
+        }));
       }
       if (payload.investmentA) {
         const nextInvestment = safeInvestmentUpdate(payload.investmentA, investmentA);
@@ -471,8 +569,17 @@ function App() {
             </select>
           </div>
         </label>
-        <NumberField label="Taxable income before these investments" prefix="$" value={taxableIncome} onChange={setTaxableIncome} />
+        <NumberField label="Income before deductions and investments" prefix="$" value={taxableIncome} onChange={setTaxableIncome} />
       </section>
+
+      <DeductionsPanel
+        filingStatus={filingStatus}
+        method={deductionMethod}
+        itemizedDeductions={itemizedDeductions}
+        deductionTotal={deductionTotal}
+        onMethodChange={setDeductionMethod}
+        onItemizedChange={setItemizedDeductions}
+      />
 
       <section className="tax-drag-card tax-drag-card--featured">
         <div className="thermometer-card">
@@ -490,7 +597,7 @@ function App() {
         <div className="tax-feature-copy">
           <p className="eyebrow">After-tax impact</p>
           <h2>{winner.symbol || winner.label} wins by {currency(advantage)} per year</h2>
-          <p>Tax treatment can overwhelm headline yield. Use this thermometer to see how much federal and state tax drag affects the winning income option.</p>
+          <p>Taxable base after deductions: {currency(taxableIncomeAfterDeductions)}. Use this thermometer to see how federal and state tax drag affects the winning income option.</p>
           <div className="tax-lines">
             <div><span>{investmentA.symbol || "A"} tax cost</span><strong>{currency(resultA.taxCost)}</strong></div>
             <div><span>{investmentB.symbol || "B"} tax cost</span><strong>{currency(resultB.taxCost)}</strong></div>
