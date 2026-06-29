@@ -780,6 +780,16 @@ function toNumber(value: number | string | boolean | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatDollarInputValue(value: number | string | boolean | null | undefined) {
+  const rawValue = String(value ?? "").replace(/[\$,%\s,]/g, "");
+  if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.") return rawValue;
+  const isNegative = rawValue.startsWith("-");
+  const unsignedValue = isNegative ? rawValue.slice(1) : rawValue;
+  const [integerPart = "", decimalPart] = unsignedValue.split(".");
+  const formattedInteger = integerPart.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
+  return `${isNegative ? "-" : ""}${formattedInteger}${decimalPart !== undefined ? `.${decimalPart}` : ""}`;
+}
+
 function isPlaceholderAssetSymbol(value: string) {
   const normalized = normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
   return ["na", "none", "notapplicable"].includes(normalized);
@@ -1211,20 +1221,29 @@ function AccountInput({ value, onChange }: { value: string; onChange: (value: st
 }
 
 function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: string) => void; ariaLabel: string }) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [draftValue, setDraftValue] = useState(formatDollarInputValue(value));
+
+  useEffect(() => {
+    if (toNumber(draftValue) === toNumber(value)) return;
+    setDraftValue(formatDollarInputValue(value));
+  }, [draftValue, value]);
+
+  function handleChange(rawValue: string) {
+    setDraftValue(formatDollarInputValue(rawValue));
+    onChange(String(toNumber(rawValue)));
+  }
+
   return (
     <input
       className="money-input"
       type="text"
       inputMode="decimal"
       aria-label={ariaLabel}
-      value={isEditing ? String(value || "") : formatGridCurrency(value)}
+      value={draftValue}
       onFocus={(event) => {
-        setIsEditing(true);
         event.currentTarget.select();
       }}
-      onBlur={() => setIsEditing(false)}
-      onChange={(event) => onChange(String(toNumber(event.target.value)))}
+      onChange={(event) => handleChange(event.target.value)}
     />
   );
 }
@@ -4339,13 +4358,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                       <td>
                         <div className="split-row-dialog__currency-input">
                           <span>$</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
+                          <MoneyInput
                             value={amount}
-                            onChange={(event) => setSplitAllocations((current) => current.map((currentAmount, currentIndex) => currentIndex === index ? toNumber(event.target.value) : currentAmount))}
-                            aria-label={`Investment amount for split row ${index + 1}`}
+                            onChange={(value) => setSplitAllocations((current) => current.map((currentAmount, currentIndex) => currentIndex === index ? toNumber(value) : currentAmount))}
+                            ariaLabel={`Investment amount for split row ${index + 1}`}
                           />
                         </div>
                       </td>
