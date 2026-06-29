@@ -350,10 +350,22 @@ function DifferenceBadge({ value }: { value: number }) {
   return <span className={className}>{signedYearlyDifference(value)}</span>;
 }
 
+function MiniFireworks() {
+  return (
+    <span className="mini-fireworks" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
 function InvestmentCard({ title, yearlyDifference, value, onChange }: { title: string; yearlyDifference: number; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
   const taxType = taxTypeOptions.find((option) => option.value === value.taxType) || taxTypeOptions[0];
+  const isWinner = yearlyDifference > 0.5;
   return (
-    <section className="investment-card">
+    <section className={`investment-card ${isWinner ? "investment-card--winner" : ""}`}>
+      {isWinner && <MiniFireworks />}
       <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyDifference} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
@@ -454,6 +466,7 @@ function App() {
   const resultB = useMemo(() => investmentResult(scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode]);
   const differenceA = resultA.afterTaxIncome - resultB.afterTaxIncome;
   const differenceB = resultB.afterTaxIncome - resultA.afterTaxIncome;
+  const hasWinner = Math.abs(differenceA) > 0.5;
   const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: scenarioAName, symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: scenarioBName, symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
@@ -541,6 +554,7 @@ function App() {
             <img src={US_FLAG} alt="US flag" />
           </div>
           <div className="embed-summary">
+            {hasWinner && <MiniFireworks />}
             <span>After-tax winner</span>
             <strong>{winner.symbol || winner.label}</strong>
             <em>+{currency(advantage)} / year</em>
@@ -560,6 +574,7 @@ function App() {
             <p>Compare two investments using your filing status, state, taxable income, yield, and tax treatment.</p>
           </div>
           <div className="winner-card">
+            {hasWinner && <MiniFireworks />}
             <span>After-tax winner</span>
             <strong>{winner.symbol || winner.label}</strong>
             <em>+{currency(advantage)} / year</em>

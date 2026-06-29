@@ -90,6 +90,7 @@ select {
 }
 
 .embed-summary {
+  position: relative;
   display: grid;
   gap: 2px;
   min-width: 120px;
@@ -257,6 +258,86 @@ h1 {
   background: linear-gradient(145deg, rgba(20, 83, 45, .6), rgba(15, 23, 42, .88));
 }
 
+.mini-fireworks {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  pointer-events: none;
+}
+
+.mini-fireworks span,
+.mini-fireworks::before,
+.mini-fireworks::after {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fde68a;
+  opacity: 0;
+  animation: miniFirework 1.8s ease-out infinite;
+  box-shadow:
+    0 -13px 0 #fde68a,
+    10px -8px 0 #67e8f9,
+    13px 3px 0 #fca5a5,
+    4px 12px 0 #bbf7d0,
+    -9px 9px 0 #fef3c7,
+    -13px -2px 0 #93c5fd,
+    -7px -11px 0 #f9a8d4;
+}
+
+.mini-fireworks span {
+  left: 10px;
+  top: 14px;
+}
+
+.mini-fireworks span:nth-child(2) {
+  left: 22px;
+  top: 10px;
+  transform: scale(.75);
+  animation-delay: .45s;
+}
+
+.mini-fireworks span:nth-child(3) {
+  left: 18px;
+  top: 24px;
+  transform: scale(.65);
+  animation-delay: .9s;
+}
+
+.mini-fireworks::before {
+  left: 5px;
+  top: 24px;
+  transform: scale(.6);
+  animation-delay: .25s;
+}
+
+.mini-fireworks::after {
+  left: 27px;
+  top: 24px;
+  transform: scale(.55);
+  animation-delay: 1.15s;
+}
+
+@keyframes miniFirework {
+  0% {
+    opacity: 0;
+    transform: scale(.15) rotate(0deg);
+  }
+  18% {
+    opacity: 1;
+  }
+  56% {
+    opacity: .95;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1) rotate(22deg);
+  }
+}
+
 .winner-card span,
 .winner-card em {
   display: block;
@@ -409,10 +490,22 @@ select option {
 }
 
 .investment-card {
+  position: relative;
   display: grid;
   gap: 14px;
   padding: 20px;
   border-radius: 26px;
+  overflow: hidden;
+}
+
+.investment-card--winner {
+  border-color: rgba(250, 204, 21, .46);
+  box-shadow: 0 20px 54px rgba(250, 204, 21, .08), inset 0 0 0 1px rgba(250, 204, 21, .12);
+}
+
+.investment-card--winner .mini-fireworks {
+  top: 10px;
+  right: 12px;
 }
 
 .versus {
@@ -787,5 +880,14 @@ select option {
 
   .tax-feature-copy h2 {
     font-size: clamp(.9rem, 5vw, 1.35rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-fireworks span,
+  .mini-fireworks::before,
+  .mini-fireworks::after {
+    animation: none;
+    opacity: .9;
   }
 }
