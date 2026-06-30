@@ -3541,7 +3541,8 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const lookupMoveColumnWidth = rowDeleteNextToMove ? LOOKUP_TABLE_DRAG_COLUMN_WIDTH + (LOOKUP_TABLE_ACTION_COLUMN_WIDTH * inlineActionCount) : LOOKUP_TABLE_DRAG_COLUMN_WIDTH;
   const lookupTableWidth = lookupMoveColumnWidth + lookupColumnWidths.reduce((sum, width) => sum + width, 0) + lookupActionColumnWidth;
   const lookupTableStyle = { width: lookupTableWidth, minWidth: lookupTableWidth } as CSSProperties;
-  const lookupMoveCellStyle = rowDeleteNextToMove ? { width: lookupMoveColumnWidth, minWidth: lookupMoveColumnWidth, maxWidth: lookupMoveColumnWidth } as CSSProperties : undefined;
+  const lookupMoveHeadingStyle = rowDeleteNextToMove ? { width: lookupMoveColumnWidth, minWidth: lookupMoveColumnWidth, maxWidth: lookupMoveColumnWidth } as CSSProperties : undefined;
+  const lookupMoveCellStyle = rowDeleteNextToMove ? { ...lookupMoveHeadingStyle, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 4 } as CSSProperties : undefined;
   const stopAutoScroll = () => {
     if (autoScrollFrameRef.current !== null) {
       window.cancelAnimationFrame(autoScrollFrameRef.current);
@@ -3702,7 +3703,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
             {!rowDeleteNextToMove && <col style={{ width: LOOKUP_TABLE_ACTION_COLUMN_WIDTH }} />}
           </colgroup>
           <thead>
-            <tr><th className={`drag-handle-heading lookup-drag-heading ${rowDeleteNextToMove ? "lookup-drag-heading--with-delete" : ""}`.trim()} style={lookupMoveCellStyle} aria-label="Move row">{showMoveHeaderLabel ? "Move" : ""}</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}{!rowDeleteNextToMove && <th />}</tr>
+            <tr><th className={`drag-handle-heading lookup-drag-heading ${rowDeleteNextToMove ? "lookup-drag-heading--with-delete" : ""}`.trim()} style={lookupMoveHeadingStyle} aria-label="Move row">{showMoveHeaderLabel ? "Move" : ""}</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}{!rowDeleteNextToMove && <th />}</tr>
           </thead>
           <tbody>
             {rows.map((row) => (
