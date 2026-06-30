@@ -31,6 +31,11 @@ type ItemizedDeductions = {
   other: number;
 };
 
+type InvestmentSymbolOption = {
+  symbol: string;
+  dividendYield: number;
+};
+
 const US_FLAG = "https://upload.wikimedia.org/wikipedia/en/a/a4/Flag_of_the_United_States.svg";
 
 const filingStatusOptions: Array<{ value: FilingStatus; label: string }> = [
@@ -47,18 +52,29 @@ const taxTypeOptions: Array<{ value: TaxType; label: string; note: string }> = [
   { value: "muni", label: "In-state municipal bond", note: "Federal and state tax-free estimate." },
   { value: "taxFree", label: "Tax-free income", note: "No modeled federal or state tax." },
 ];
-const popularInvestmentSymbols = [
-  "SPY", "VOO", "IVV", "VTI", "QQQ", "QQQM", "SCHD", "VIG", "VYM", "DGRO",
-  "JEPI", "JEPQ", "BND", "AGG", "TLT", "IEF", "SHY", "SGOV", "BIL", "GOVT",
-  "HYG", "LQD", "MUB", "VNQ", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP",
-  "IWM", "DIA", "EFA", "EEM", "VXUS", "GLD", "SLV", "USO", "TQQQ", "SQQQ",
-  "ARKK", "SCHG", "SCHX", "SPLG", "RSP", "VGT", "VUG", "VTV", "VB", "BSV",
-  "PFFA", "NAC", "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA",
-  "BRK.B", "AVGO", "LLY", "JPM", "V", "MA", "NFLX", "COST", "WMT", "HD",
-  "ORCL", "AMD", "ADBE", "CRM", "PEP", "KO", "MCD", "CSCO", "INTC", "IBM",
-  "QCOM", "TXN", "AMGN", "UNH", "JNJ", "ABBV", "MRK", "PFE", "ABT", "TMO",
-  "DIS", "NKE", "SBUX", "BA", "CAT", "GE", "GS", "BAC", "WFC", "XOM",
+const popularInvestmentCatalog: InvestmentSymbolOption[] = [
+  { symbol: "SPY", dividendYield: 1.1 }, { symbol: "VOO", dividendYield: 1.1 }, { symbol: "IVV", dividendYield: 1.1 }, { symbol: "VTI", dividendYield: 1.2 }, { symbol: "QQQ", dividendYield: 0.5 },
+  { symbol: "QQQM", dividendYield: 0.6 }, { symbol: "SCHD", dividendYield: 3.5 }, { symbol: "VIG", dividendYield: 1.7 }, { symbol: "VYM", dividendYield: 2.7 }, { symbol: "DGRO", dividendYield: 2.2 },
+  { symbol: "JEPI", dividendYield: 7.3 }, { symbol: "JEPQ", dividendYield: 9.0 }, { symbol: "BND", dividendYield: 3.7 }, { symbol: "AGG", dividendYield: 3.6 }, { symbol: "TLT", dividendYield: 4.1 },
+  { symbol: "IEF", dividendYield: 3.5 }, { symbol: "SHY", dividendYield: 3.8 }, { symbol: "SGOV", dividendYield: 4.6 }, { symbol: "BIL", dividendYield: 3.6 }, { symbol: "GOVT", dividendYield: 3.7 },
+  { symbol: "HYG", dividendYield: 5.9 }, { symbol: "LQD", dividendYield: 4.3 }, { symbol: "MUB", dividendYield: 2.9 }, { symbol: "VNQ", dividendYield: 3.9 }, { symbol: "XLK", dividendYield: 0.7 },
+  { symbol: "XLF", dividendYield: 1.5 }, { symbol: "XLE", dividendYield: 3.1 }, { symbol: "XLV", dividendYield: 1.6 }, { symbol: "XLY", dividendYield: 0.8 }, { symbol: "XLP", dividendYield: 2.5 },
+  { symbol: "IWM", dividendYield: 1.3 }, { symbol: "DIA", dividendYield: 1.7 }, { symbol: "EFA", dividendYield: 3.0 }, { symbol: "EEM", dividendYield: 2.5 }, { symbol: "VXUS", dividendYield: 3.0 },
+  { symbol: "GLD", dividendYield: 0 }, { symbol: "SLV", dividendYield: 0 }, { symbol: "USO", dividendYield: 0 }, { symbol: "TQQQ", dividendYield: 1.0 }, { symbol: "SQQQ", dividendYield: 7.0 },
+  { symbol: "ARKK", dividendYield: 0 }, { symbol: "SCHG", dividendYield: 0.5 }, { symbol: "SCHX", dividendYield: 1.2 }, { symbol: "SPLG", dividendYield: 1.2 }, { symbol: "RSP", dividendYield: 1.5 },
+  { symbol: "VGT", dividendYield: 0.7 }, { symbol: "VUG", dividendYield: 0.5 }, { symbol: "VTV", dividendYield: 2.3 }, { symbol: "VB", dividendYield: 1.4 }, { symbol: "BSV", dividendYield: 4.1 },
+  { symbol: "PFFA", dividendYield: 9.0 }, { symbol: "NAC", dividendYield: 5.7 }, { symbol: "AAPL", dividendYield: 0.5 }, { symbol: "MSFT", dividendYield: 0.7 }, { symbol: "NVDA", dividendYield: 0.0 },
+  { symbol: "AMZN", dividendYield: 0 }, { symbol: "META", dividendYield: 0.3 }, { symbol: "GOOGL", dividendYield: 0.4 }, { symbol: "GOOG", dividendYield: 0.4 }, { symbol: "TSLA", dividendYield: 0 },
+  { symbol: "BRK.B", dividendYield: 0 }, { symbol: "AVGO", dividendYield: 1.1 }, { symbol: "LLY", dividendYield: 0.6 }, { symbol: "JPM", dividendYield: 2.0 }, { symbol: "V", dividendYield: 0.7 },
+  { symbol: "MA", dividendYield: 0.5 }, { symbol: "NFLX", dividendYield: 0 }, { symbol: "COST", dividendYield: 0.5 }, { symbol: "WMT", dividendYield: 0.9 }, { symbol: "HD", dividendYield: 2.1 },
+  { symbol: "ORCL", dividendYield: 1.2 }, { symbol: "AMD", dividendYield: 0 }, { symbol: "ADBE", dividendYield: 0 }, { symbol: "CRM", dividendYield: 0.4 }, { symbol: "PEP", dividendYield: 3.0 },
+  { symbol: "KO", dividendYield: 3.0 }, { symbol: "MCD", dividendYield: 2.3 }, { symbol: "CSCO", dividendYield: 2.7 }, { symbol: "INTC", dividendYield: 1.1 }, { symbol: "IBM", dividendYield: 3.0 },
+  { symbol: "QCOM", dividendYield: 2.1 }, { symbol: "TXN", dividendYield: 2.8 }, { symbol: "AMGN", dividendYield: 3.0 }, { symbol: "UNH", dividendYield: 1.4 }, { symbol: "JNJ", dividendYield: 3.2 },
+  { symbol: "ABBV", dividendYield: 3.5 }, { symbol: "MRK", dividendYield: 3.5 }, { symbol: "PFE", dividendYield: 6.5 }, { symbol: "ABT", dividendYield: 2.0 }, { symbol: "TMO", dividendYield: 0.4 },
+  { symbol: "DIS", dividendYield: 0.7 }, { symbol: "NKE", dividendYield: 2.4 }, { symbol: "SBUX", dividendYield: 2.5 }, { symbol: "BA", dividendYield: 0 }, { symbol: "CAT", dividendYield: 1.8 },
+  { symbol: "GE", dividendYield: 0.5 }, { symbol: "GS", dividendYield: 2.5 }, { symbol: "BAC", dividendYield: 2.3 }, { symbol: "WFC", dividendYield: 2.1 }, { symbol: "XOM", dividendYield: 3.5 },
 ];
+const popularInvestmentYieldBySymbol = new Map(popularInvestmentCatalog.map((option) => [option.symbol, option.dividendYield]));
 const thermometerMarkers = [50, 40, 30, 20, 10];
 
 const taxTypeValues = new Set<TaxType>(taxTypeOptions.map((option) => option.value));
@@ -396,23 +412,36 @@ function YieldLookupLink({ symbol }: { symbol: string }) {
   return <a className="yield-lookup-link" href={dividendYieldLookupUrl(symbol)} target="_blank" rel="noreferrer" aria-label={`Look up current dividend yield for ${symbol || "this investment"}`}>Yield lookup</a>;
 }
 
-function investmentSymbolOptions(symbol: string) {
+function investmentSymbolOptions(symbol: string): InvestmentSymbolOption[] {
   const normalizedSymbol = symbol.trim().toUpperCase();
-  if (!normalizedSymbol || popularInvestmentSymbols.includes(normalizedSymbol)) return popularInvestmentSymbols;
-  return [normalizedSymbol, ...popularInvestmentSymbols];
+  if (!normalizedSymbol || popularInvestmentYieldBySymbol.has(normalizedSymbol)) return popularInvestmentCatalog;
+  return [{ symbol: normalizedSymbol, dividendYield: valueOrZero(popularInvestmentYieldBySymbol.get(normalizedSymbol)) }, ...popularInvestmentCatalog];
+}
+
+function valueOrZero(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function symbolOptionLabel(option: InvestmentSymbolOption) {
+  return `${option.symbol} — ${option.dividendYield.toFixed(1)}%`;
 }
 
 function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { title: string; yearlyIncome: number; isWinner: boolean; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
   const taxType = taxTypeOptions.find((option) => option.value === value.taxType) || taxTypeOptions[0];
   const symbolOptions = investmentSymbolOptions(value.symbol);
+  const changeSymbol = (symbol: string) => {
+    const normalizedSymbol = symbol.toUpperCase();
+    const dividendYield = popularInvestmentYieldBySymbol.get(normalizedSymbol);
+    onChange({ ...value, symbol: normalizedSymbol, yieldPercent: dividendYield ?? value.yieldPercent });
+  };
   return (
     <section className={`investment-card ${isWinner ? "investment-card--winner" : ""}`}>
       {isWinner && <MiniFireworks />}
       <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyIncome} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
-        <select value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })}>
-          {symbolOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
+        <select value={value.symbol} onChange={(event) => changeSymbol(event.target.value)}>
+          {symbolOptions.map((option) => <option key={option.symbol} value={option.symbol}>{symbolOptionLabel(option)}</option>)}
         </select>
       </label>
       <div className="yield-field-row">
