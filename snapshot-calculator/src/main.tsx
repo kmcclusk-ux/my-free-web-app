@@ -47,6 +47,18 @@ const taxTypeOptions: Array<{ value: TaxType; label: string; note: string }> = [
   { value: "muni", label: "In-state municipal bond", note: "Federal and state tax-free estimate." },
   { value: "taxFree", label: "Tax-free income", note: "No modeled federal or state tax." },
 ];
+const popularInvestmentSymbols = [
+  "SPY", "VOO", "IVV", "VTI", "QQQ", "QQQM", "SCHD", "VIG", "VYM", "DGRO",
+  "JEPI", "JEPQ", "BND", "AGG", "TLT", "IEF", "SHY", "SGOV", "BIL", "GOVT",
+  "HYG", "LQD", "MUB", "VNQ", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP",
+  "IWM", "DIA", "EFA", "EEM", "VXUS", "GLD", "SLV", "USO", "TQQQ", "SQQQ",
+  "ARKK", "SCHG", "SCHX", "SPLG", "RSP", "VGT", "VUG", "VTV", "VB", "BSV",
+  "PFFA", "NAC", "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "TSLA",
+  "BRK.B", "AVGO", "LLY", "JPM", "V", "MA", "NFLX", "COST", "WMT", "HD",
+  "ORCL", "AMD", "ADBE", "CRM", "PEP", "KO", "MCD", "CSCO", "INTC", "IBM",
+  "QCOM", "TXN", "AMGN", "UNH", "JNJ", "ABBV", "MRK", "PFE", "ABT", "TMO",
+  "DIS", "NKE", "SBUX", "BA", "CAT", "GE", "GS", "BAC", "WFC", "XOM",
+];
 const thermometerMarkers = [50, 40, 30, 20, 10];
 
 const taxTypeValues = new Set<TaxType>(taxTypeOptions.map((option) => option.value));
@@ -384,15 +396,24 @@ function YieldLookupLink({ symbol }: { symbol: string }) {
   return <a className="yield-lookup-link" href={dividendYieldLookupUrl(symbol)} target="_blank" rel="noreferrer" aria-label={`Look up current dividend yield for ${symbol || "this investment"}`}>Yield lookup</a>;
 }
 
+function investmentSymbolOptions(symbol: string) {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (!normalizedSymbol || popularInvestmentSymbols.includes(normalizedSymbol)) return popularInvestmentSymbols;
+  return [normalizedSymbol, ...popularInvestmentSymbols];
+}
+
 function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { title: string; yearlyIncome: number; isWinner: boolean; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
   const taxType = taxTypeOptions.find((option) => option.value === value.taxType) || taxTypeOptions[0];
+  const symbolOptions = investmentSymbolOptions(value.symbol);
   return (
     <section className={`investment-card ${isWinner ? "investment-card--winner" : ""}`}>
       {isWinner && <MiniFireworks />}
       <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyIncome} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
-        <input value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })} />
+        <select value={value.symbol} onChange={(event) => onChange({ ...value, symbol: event.target.value.toUpperCase() })}>
+          {symbolOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
+        </select>
       </label>
       <div className="yield-field-row">
         <NumberField className="yield-field" label="Yield" suffix="%" value={value.yieldPercent} onChange={(yieldPercent) => onChange({ ...value, yieldPercent })} />
