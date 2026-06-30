@@ -503,6 +503,9 @@ function App() {
   const [investmentA, setInvestmentA] = useState<InvestmentInput>(initialSettings.inputs.investmentA);
   const [investmentB, setInvestmentB] = useState<InvestmentInput>(initialSettings.inputs.investmentB);
   const [copyStatus, setCopyStatus] = useState("");
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [waitlistMessage, setWaitlistMessage] = useState("");
 
   const scenarioA = useMemo(() => ({ ...investmentA, amount: investmentAmount }), [investmentA, investmentAmount]);
   const scenarioB = useMemo(() => ({ ...investmentB, amount: investmentAmount }), [investmentB, investmentAmount]);
@@ -592,6 +595,33 @@ function App() {
       setCopyStatus("Copy failed");
     }
     window.setTimeout(() => setCopyStatus(""), 1600);
+  }
+
+  async function submitWaitlist(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const email = waitlistEmail.trim();
+    if (!email) return;
+    setWaitlistStatus("submitting");
+    setWaitlistMessage("");
+    try {
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email,
+          source: "snapshot-calculator",
+          pageUrl: typeof window === "undefined" ? "" : window.location.href,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof data.message === "string" ? data.message : "Unable to join right now.");
+      setWaitlistStatus("success");
+      setWaitlistMessage("You're on the list. I’ll send the portfolio app invite when it opens.");
+      setWaitlistEmail("");
+    } catch (error) {
+      setWaitlistStatus("error");
+      setWaitlistMessage(error instanceof Error ? error.message : "Unable to join right now.");
+    }
   }
 
   return (
@@ -711,12 +741,27 @@ function App() {
           <span>AI/chatbot ready: preload via URL parameters or update this frame with postMessage.</span>
         </section>
       ) : (
-        <section className="cta-card">
+        <section className="cta-card waitlist-card">
           <div>
-            <strong>Want the full portfolio view?</strong>
-            <span>AfterTax US models accounts, asset classes, state taxes, deductions, what-if rows, and income exclusions.</span>
+            <strong>Want the full portfolio app?</strong>
+            <span>Join the waitlist for portfolio-level accounts, asset classes, state taxes, deductions, what-if rows, and income exclusions.</span>
           </div>
-          <a href="https://aftertaxus.com" target="_blank" rel="noreferrer">Open full portfolio manager</a>
+          <form className="waitlist-form" onSubmit={submitWaitlist}>
+            <label className="sr-only" htmlFor="waitlist-email">Email address</label>
+            <input
+              id="waitlist-email"
+              type="email"
+              value={waitlistEmail}
+              onChange={(event) => setWaitlistEmail(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+            <button type="submit" disabled={waitlistStatus === "submitting"}>
+              {waitlistStatus === "submitting" ? "Joining..." : "Join waitlist"}
+            </button>
+            {waitlistMessage && <small className={`waitlist-status waitlist-status--${waitlistStatus}`}>{waitlistMessage}</small>}
+          </form>
         </section>
       )}
     </main>

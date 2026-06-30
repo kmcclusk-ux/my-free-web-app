@@ -929,6 +929,71 @@ select option {
   cursor: pointer;
 }
 
+.cta-card button:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+
+.waitlist-card {
+  flex-wrap: wrap;
+}
+
+.waitlist-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: min(100%, 480px);
+}
+
+.waitlist-form input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, .34);
+  border-radius: 999px;
+  padding: 13px 16px;
+  background: rgba(15, 23, 42, .78);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  outline: none;
+}
+
+.waitlist-form input::placeholder {
+  color: #94a3b8;
+}
+
+.waitlist-form input:focus {
+  border-color: rgba(45, 212, 191, .72);
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, .14);
+}
+
+.waitlist-status {
+  grid-column: 1 / -1;
+  color: #cbd5e1;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.waitlist-status--success {
+  color: #86efac;
+}
+
+.waitlist-status--error {
+  color: #fecaca;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .embed-footer {
   margin-top: 12px;
   padding: 12px 14px;
@@ -968,6 +1033,10 @@ select option {
 
   .cta-card {
     align-items: stretch;
+  }
+
+  .waitlist-form {
+    grid-template-columns: 1fr;
   }
 
   .embed-summary,
