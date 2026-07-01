@@ -94,7 +94,7 @@ type FederalSettings = { filingStatus: FilingStatus; deductionMode: FederalDeduc
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
-type ModelUiSnapshot = { investmentFavorites: InvestmentFavorite[] };
+type ModelUiSnapshot = { investmentFavorites: InvestmentFavorite[]; selectedAssetIds: number[] };
 type ModelDataSnapshot = {
   investments: InvestmentRow[];
   tickers: TickerRow[];
@@ -766,7 +766,7 @@ const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferred
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem(blankDeductionType)], deductionItems: [newDeductionItem(blankDeductionType)], mortgageInterest: 0, propertyTax: 0, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false };
+const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1310,6 +1310,11 @@ function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
   return favorites;
 }
 
+function normalizeSelectedAssetIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0))];
+}
+
 function normalizeModelVersions(raw: unknown): ModelVersion[] {
   if (!Array.isArray(raw)) return [];
   const versions: ModelVersion[] = [];
@@ -1339,6 +1344,7 @@ function normalizeModelVersions(raw: unknown): ModelVersion[] {
         plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
         uiSettings: {
           investmentFavorites: normalizeInvestmentFavorites((snapshot.uiSettings as Record<string, unknown> | undefined)?.investmentFavorites),
+          selectedAssetIds: normalizeSelectedAssetIds((snapshot.uiSettings as Record<string, unknown> | undefined)?.selectedAssetIds),
         },
         isWhatIfActive: Boolean(snapshot.isWhatIfActive),
       },
@@ -1663,6 +1669,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
   const sectionObj = section as Record<string, unknown>;
   return {
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
+    selectedAssetIds: normalizeSelectedAssetIds(sectionObj.selectedAssetIds),
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
     incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
     darkMode: sectionObj.darkMode === true,
@@ -1684,6 +1691,7 @@ function parseWorkbookSettings(settings: unknown) {
       investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
         ? ui.investmentFavorites
         : legacyFavorites,
+      selectedAssetIds: ui.selectedAssetIds || [],
       modelVersions: ui.modelVersions || [],
       incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
       darkMode: ui.darkMode === true,
@@ -4674,9 +4682,9 @@ export default function App() {
     federalSettings,
     stateSettings,
     plannerSettings,
-    uiSettings: { investmentFavorites: uiSettings.investmentFavorites },
+    uiSettings: { investmentFavorites: uiSettings.investmentFavorites, selectedAssetIds: selectedInvestmentIds },
     isWhatIfActive,
-  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings.investmentFavorites, isWhatIfActive]);
+  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings.investmentFavorites, selectedInvestmentIds, isWhatIfActive]);
   const currentHistorySerialized = useMemo(() => JSON.stringify(currentHistorySnapshot), [currentHistorySnapshot]);
 
   const resetHistoryTracking = useCallback(() => {
@@ -4700,10 +4708,12 @@ export default function App() {
     setPlannerSettings(snapshot.plannerSettings);
     setUiSettings((current) => ({
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
+      selectedAssetIds: normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds),
       modelVersions: current.modelVersions,
       incomePrimaryPeriod: current.incomePrimaryPeriod,
       darkMode: current.darkMode,
     }));
+    setSelectedInvestmentIds(normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds));
     setIsWhatIfActive(snapshot.isWhatIfActive);
     setStorageState("ready");
   }, []);
@@ -5192,8 +5202,14 @@ export default function App() {
       setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
       setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
       setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
+      setSelectedInvestmentIds(
+        normalizeSelectedAssetIds(workbookSettings.ui?.selectedAssetIds).filter((id) =>
+          activeInvestments.some((row) => row.id === id)
+        )
+      );
       setUiSettings({
         investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
+        selectedAssetIds: workbookSettings.ui?.selectedAssetIds || [],
         modelVersions: workbookSettings.ui?.modelVersions || [],
         incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
         darkMode: workbookSettings.ui?.darkMode === true,
@@ -5291,7 +5307,7 @@ export default function App() {
     setStorageState("saving");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: uiSettings } }, authToken).then(() => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds } } }, authToken).then(() => {
         if (!cancelled) { setStorageState("saved"); }
       }).catch((error: Error) => {
         console.error(error);
@@ -5300,7 +5316,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, selectedInvestmentIds, hasRealData, authEnabled, authState.status, authToken]);
 
   const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
   const totalIncome = flows.totalIncome;

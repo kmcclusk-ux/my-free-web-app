@@ -47,22 +47,15 @@ const referenceTableNameSchema = z.enum([
 ]);
 const referenceValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const referenceRowSchema = z.record(referenceValueSchema);
-const investmentValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
-const investmentRowSchema = z.record(investmentValueSchema);
 
 type InvestmentRow = {
   id?: string | number;
-  spreadsheetRowNumber?: number;
   description?: string;
   symbol?: string;
-  newSymbol?: string;
-  newPercent?: number;
   account?: string;
   category?: string;
   totalInvestment?: number;
   yearlyIncome?: number;
-  includeIncome?: boolean;
-  overrideProposal?: boolean;
   taxTreatment?: string;
   investmentType?: string;
   [key: string]: unknown;
@@ -221,9 +214,6 @@ const referenceTableConfigs: Record<
     aliases: {
       ticker: "symbol",
       percentreturn: "percentReturn",
-      dividend: "percentReturn",
-      dividendpercent: "percentReturn",
-      dividendpercentage: "percentReturn",
       pctreturn: "percentReturn",
       return: "percentReturn",
       taxtreatment: "taxTreatment",
@@ -296,11 +286,6 @@ function normalizeNumberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function normalizeRateValue(value: unknown) {
-  const numeric = normalizeNumberValue(value);
-  return Math.abs(numeric) > 1 ? numeric / 100 : numeric;
-}
-
 function referenceFieldAlias(tabName: ReferenceTableName, field: string) {
   const config = referenceTableConfigs[tabName];
   const normalized = normalizeReferenceKey(field);
@@ -313,7 +298,6 @@ function referenceFieldAlias(tabName: ReferenceTableName, field: string) {
 function coerceReferenceValue(tabName: ReferenceTableName, field: string, value: unknown) {
   const config = referenceTableConfigs[tabName];
   if (config.booleanFields?.includes(field)) return normalizeBooleanValue(value);
-  if (tabName === "tickers" && field === "percentReturn") return normalizeRateValue(value);
   if (config.numericFields?.includes(field)) return normalizeNumberValue(value);
   return String(value ?? "");
 }
@@ -425,16 +409,12 @@ function getInvestmentIncome(row: WorkbookRow) {
 }
 
 function getInvestmentIncluded(row: WorkbookRow) {
-  const value = rowValue(row, "select", "includeIncome", "inc", "include_income", "income", "include_investment_income", "use");
+  const value = rowValue(row, "includeIncome", "inc", "include_income", "income", "include_investment_income", "use");
   if (value === undefined) return true;
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   const text = String(value).trim().toLowerCase();
   return text === "1" || text === "true" || text === "yes" || text === "y";
-}
-
-function exposeInvestmentSelect<T extends InvestmentRow>(row: T) {
-  return { ...row, select: getInvestmentIncluded(row) };
 }
 
 function summarizeInvestments(investments: InvestmentRow[]) {
@@ -510,6 +490,41 @@ function findInvestmentByIdOrQuery(investments: InvestmentRow[], id?: number, qu
   return matches.length === 1 ? matches[0] : null;
 }
 
+function normalizeRowId(value: unknown) {
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function uniqueNumericIds(values: unknown[]) {
+  return [...new Set(values.map(normalizeRowId).filter((id): id is number => id !== null))];
+}
+
+function selectedInvestmentIdsFromSettings(settings: Record<string, unknown>) {
+  const ui = settings.ui && typeof settings.ui === "object" ? settings.ui as Record<string, unknown> : {};
+  return Array.isArray(ui.selectedAssetIds) ? uniqueNumericIds(ui.selectedAssetIds) : [];
+}
+
+function setSelectedInvestmentIdsInSettings(settings: Record<string, unknown>, selectedAssetIds: number[]) {
+  const ui = settings.ui && typeof settings.ui === "object" ? settings.ui as Record<string, unknown> : {};
+  return {
+    ...settings,
+    ui: {
+      ...ui,
+      selectedAssetIds,
+    },
+  };
+}
+
+function investmentMatchesSelector(row: InvestmentRow, selector: string, exactSymbolOnly = false) {
+  const normalizedSelector = selector.trim().toLowerCase();
+  if (!normalizedSelector) return false;
+  if (exactSymbolOnly) {
+    return [getInvestmentSymbol(row), rowText(row, "newSymbol", "new_symbol", "overrideSymbol")]
+      .some((value) => value.trim().toLowerCase() === normalizedSelector);
+  }
+  return matchQuery(row, selector);
+}
+
 function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
   const allowedKeys = new Set([
     "description",
@@ -527,101 +542,6 @@ function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
   return Object.fromEntries(
     Object.entries(values).filter(([key, value]) => allowedKeys.has(key) && value !== undefined)
   ) as Partial<InvestmentRow>;
-}
-
-function investmentFieldAlias(field: string) {
-  const raw = field.trim().toLowerCase();
-  if (raw.includes("%") && /\b(new|what\s*if|override|proposed)\b/.test(raw)) return "newPercent";
-  const normalized = normalizeReferenceKey(field);
-  const aliases: Record<string, string> = {
-    spreadsheetrownumber: "spreadsheetRowNumber",
-    sheetrownumber: "spreadsheetRowNumber",
-    sourcerownumber: "spreadsheetRowNumber",
-    rownumber: "spreadsheetRowNumber",
-    desc: "description",
-    description: "description",
-    account: "account",
-    accnt: "account",
-    accountname: "account",
-    accountnames: "account",
-    category: "category",
-    totalinvestment: "totalInvestment",
-    totalinv: "totalInvestment",
-    totalinvamount: "totalInvestment",
-    investment: "totalInvestment",
-    amount: "totalInvestment",
-    value: "totalInvestment",
-    yearlyincome: "yearlyIncome",
-    yearlyincomeamount: "yearlyIncome",
-    yrinc: "yearlyIncome",
-    yearinc: "yearlyIncome",
-    annualincome: "yearlyIncome",
-    income: "yearlyIncome",
-    includeincome: "includeIncome",
-    includeinvestmentincome: "includeIncome",
-    include: "includeIncome",
-    inc: "includeIncome",
-    use: "includeIncome",
-    select: "includeIncome",
-    selected: "includeIncome",
-    overrideproposal: "overrideProposal",
-    override: "overrideProposal",
-    whatif: "overrideProposal",
-    symbol: "symbol",
-    ticker: "symbol",
-    asset: "symbol",
-    assetid: "symbol",
-    newsymbol: "newSymbol",
-    proposedasset: "newSymbol",
-    proposedsymbol: "newSymbol",
-    new: "newSymbol",
-    newpercent: "newPercent",
-    newpct: "newPercent",
-    newpercentage: "newPercent",
-    newreturn: "newPercent",
-    overridepercent: "newPercent",
-    overridepercentage: "newPercent",
-    whatifpercent: "newPercent",
-    whatifpercentage: "newPercent",
-  };
-  return aliases[normalized] ?? null;
-}
-
-function coerceInvestmentValue(field: string, value: unknown) {
-  if (["spreadsheetRowNumber", "totalInvestment", "yearlyIncome", "newPercent"].includes(field)) return normalizeNumberValue(value);
-  if (["includeIncome", "overrideProposal"].includes(field)) return normalizeBooleanValue(value);
-  return String(value ?? "");
-}
-
-function sanitizeInvestmentValues(values: WorkbookRow) {
-  const sanitized: Partial<InvestmentRow> = {};
-  const rejected: string[] = [];
-  for (const [field, value] of Object.entries(values)) {
-    if (["id", "query", "selector", "workspaceId"].includes(field)) continue;
-    const allowedField = investmentFieldAlias(field);
-    if (!allowedField) {
-      rejected.push(field);
-      continue;
-    }
-    (sanitized as Record<string, unknown>)[allowedField] = coerceInvestmentValue(allowedField, value);
-  }
-  return { sanitized, rejected };
-}
-
-function defaultInvestmentRow(id: number): InvestmentRow {
-  return {
-    id,
-    description: "",
-    account: "",
-    category: "core",
-    totalInvestment: 0,
-    yearlyIncome: 0,
-    includeIncome: true,
-    overrideProposal: false,
-    symbol: "",
-    newSymbol: "",
-    newPercent: 0,
-  };
 }
 
 export function createPortfolioServer(config: PortfolioServerConfig = {}) {
@@ -675,8 +595,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         .filter((row) =>
           category ? getInvestmentCategory(row).toLowerCase() === category.toLowerCase() : true
         )
-        .slice(0, limit ?? 25)
-        .map(exposeInvestmentSelect);
+        .slice(0, limit ?? 25);
 
       return jsonToolResult({
         workspaceId: workbook.workspaceId,
@@ -699,7 +618,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     },
     async ({ workspaceId, query, account, category, symbol, limit }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
-      const sourceRows = toWorkbookRows(workbook.tabs.investments).map(exposeInvestmentSelect);
+      const sourceRows = toWorkbookRows(workbook.tabs.investments);
       const rows = sourceRows
         .filter((row) => rowMatchesQuery(row, query))
         .filter((row) =>
@@ -818,7 +737,6 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       category: z.string().default("core"),
       totalInvestment: z.number().nonnegative().default(0),
       yearlyIncome: z.number().nonnegative().default(0),
-      select: z.boolean().optional().describe("Select checkbox. Alias for includeIncome."),
       includeIncome: z.boolean().default(true),
       overrideProposal: z.boolean().default(false),
       symbol: z.string().default(""),
@@ -832,7 +750,6 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       category,
       totalInvestment,
       yearlyIncome,
-      select,
       includeIncome,
       overrideProposal,
       symbol,
@@ -849,7 +766,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         category,
         totalInvestment,
         yearlyIncome,
-        includeIncome: select ?? includeIncome,
+        includeIncome,
         overrideProposal,
         symbol,
         newSymbol: newSymbol || symbol,
@@ -880,7 +797,6 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         category: z.string().optional(),
         totalInvestment: z.number().nonnegative().optional(),
         yearlyIncome: z.number().nonnegative().optional(),
-        select: z.boolean().optional().describe("Select checkbox. Alias for includeIncome."),
         includeIncome: z.boolean().optional(),
         overrideProposal: z.boolean().optional(),
         symbol: z.string().optional(),
@@ -901,11 +817,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         );
       }
 
-      const { select, ...requestedValues } = values;
-      const update = safeInvestmentUpdate({
-        ...requestedValues,
-        ...(select !== undefined ? { includeIncome: select } : {}),
-      });
+      const update = safeInvestmentUpdate(values);
       if (Object.keys(update).length === 0) {
         throw new Error("update_investment received no valid fields to update.");
       }
@@ -927,61 +839,12 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   );
 
   server.tool(
-    "replace_all_investments",
-    "Replace the entire investments table with the supplied rows. Use only when the user explicitly wants to populate AfterTaxUS from scratch or replace all investment rows.",
-    {
-      workspaceId: z.string().optional(),
-      rows: z.array(investmentRowSchema).min(1).describe("Complete replacement investment rows. Spreadsheet-style aliases such as desc, accnt, total inv, yr inc, select/use, symbol, new symbol, and new % are accepted."),
-    },
-    async ({ workspaceId, rows: inputRows }) => {
-      const workbook = await getWorkbook(resolvedConfig, workspaceId);
-      const previousRows = toInvestmentRows(workbook.tabs.investments);
-      const nextRows: InvestmentRow[] = [];
-      const sanitizedRows = inputRows.map((row) => ({
-        raw: row,
-        ...sanitizeInvestmentValues(row),
-      }));
-      const rejected = sanitizedRows.flatMap((row) => row.rejected);
-      if (rejected.length) {
-        throw new Error(`Unsupported investment field(s): ${[...new Set(rejected)].join(", ")}.`);
-      }
-      if (sanitizedRows.some((row) => Object.keys(row.sanitized).length === 0)) {
-        throw new Error("Every replacement investment row must include at least one valid field.");
-      }
-
-      for (const row of sanitizedRows) {
-        const id = nextWorkbookRowId(nextRows, row.raw.id);
-        const sanitized = row.sanitized;
-        const symbol = String(sanitized.symbol ?? "");
-        const newSymbol = sanitized.newSymbol === undefined ? symbol : String(sanitized.newSymbol ?? "");
-        const nextRow = {
-          ...defaultInvestmentRow(id),
-          ...sanitized,
-          id,
-          newSymbol,
-        };
-        nextRows.push(nextRow);
-      }
-
-      workbook.tabs.investments = nextRows;
-      const saveResult = await saveWorkbook(resolvedConfig, workbook);
-      return jsonToolResult({
-        ok: true,
-        workspaceId: workbook.workspaceId,
-        savedAt: saveResult.updatedAt,
-        replacedRows: previousRows.length,
-        totalRows: nextRows.length,
-      });
-    }
-  );
-
-  server.tool(
     "set_investment_checkbox",
-    "Set one investment checkbox by row id. Use select for the unlabeled checkmark column; includeIncome remains a compatible alias.",
+    "Set one investment checkbox field, such as includeIncome or overrideProposal, by investment row id.",
     {
       workspaceId: z.string().optional(),
       id: z.number(),
-      field: z.enum(["select", "includeIncome", "overrideProposal"]),
+      field: z.enum(["includeIncome", "overrideProposal"]),
       checked: z.boolean(),
     },
     async ({ workspaceId, id, field, checked }) => {
@@ -991,9 +854,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         throw new Error(`Investment row ${id} was not found.`);
       }
 
-      const storedField = field === "select" ? "includeIncome" : field;
       workbook.tabs.investments = investments.map((row) =>
-        Number(row.id) === id ? { ...row, [storedField]: checked } : row
+        Number(row.id) === id ? { ...row, [field]: checked } : row
       );
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
@@ -1002,8 +864,78 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         savedAt: saveResult.updatedAt,
         id,
         field,
-        storedField,
         checked,
+      });
+    }
+  );
+
+  server.tool(
+    "select_investment_rows",
+    "Select/highlight investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. This updates workbook UI settings so the app highlights those rows when loaded or refreshed.",
+    {
+      workspaceId: z.string().optional(),
+      ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to select/highlight."),
+      symbols: z.array(z.string()).optional().describe("Symbols/tickers to select by exact current or WhatIf symbol match."),
+      queries: z.array(z.string()).optional().describe("Free-text queries to match against exported investment row fields."),
+      mode: z.enum(["replace", "add", "remove"]).default("replace").describe("replace overwrites current selection; add appends; remove unselects matching rows."),
+      clear: z.boolean().optional().describe("When true, clears all selected rows. Overrides ids/symbols/queries."),
+    },
+    async ({ workspaceId, ids, symbols, queries, mode, clear }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const investments = toInvestmentRows(workbook.tabs.investments);
+      const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
+
+      const requestedIds = uniqueNumericIds(ids || []);
+      const symbolSelectors = (symbols || []).map((symbol) => symbol.trim()).filter(Boolean);
+      const querySelectors = (queries || []).map((query) => query.trim()).filter(Boolean);
+
+      const matchedRows = clear
+        ? []
+        : investments.filter((row) => {
+          const rowId = normalizeRowId(row.id);
+          return (
+            (rowId !== null && requestedIds.includes(rowId)) ||
+            symbolSelectors.some((symbol) => investmentMatchesSelector(row, symbol, true)) ||
+            querySelectors.some((query) => investmentMatchesSelector(row, query, false))
+          );
+        });
+      const matchedIds = uniqueNumericIds(matchedRows.map((row) => row.id));
+
+      if (!clear && requestedIds.length + symbolSelectors.length + querySelectors.length === 0) {
+        throw new Error("select_investment_rows requires ids, symbols, queries, or clear=true.");
+      }
+      if (!clear && matchedIds.length === 0) {
+        throw new Error("select_investment_rows found no matching investment rows.");
+      }
+
+      let selectedAssetIds: number[];
+      if (clear) {
+        selectedAssetIds = [];
+      } else if (mode === "add") {
+        selectedAssetIds = [...new Set([...existingSelection, ...matchedIds])];
+      } else if (mode === "remove") {
+        const removeIds = new Set(matchedIds);
+        selectedAssetIds = existingSelection.filter((id) => !removeIds.has(id));
+      } else {
+        selectedAssetIds = matchedIds;
+      }
+
+      workbook.settings = setSelectedInvestmentIdsInSettings(workbook.settings, selectedAssetIds);
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        mode: clear ? "clear" : mode,
+        selectedAssetIds,
+        matchedRows: matchedRows.map((row) => ({
+          id: normalizeRowId(row.id),
+          description: rowText(row, "description", "desc"),
+          account: getInvestmentAccount(row),
+          symbol: getInvestmentSymbol(row),
+          newSymbol: rowText(row, "newSymbol", "new_symbol", "overrideSymbol"),
+        })),
+        note: "Open or refresh AfterTaxUS to see persisted row highlights if the app is already running.",
       });
     }
   );
