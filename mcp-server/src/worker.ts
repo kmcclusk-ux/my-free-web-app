@@ -12,6 +12,7 @@ type WorkerEnv = {
   PORTFOLIO_SYNC_TOKEN?: string;
   MCP_AUTH_TOKEN?: string;
   MCP_PATH?: string;
+  ALLOW_PUBLIC_MCP?: string;
 };
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
@@ -31,8 +32,15 @@ function getBearerToken(request: Request) {
 }
 
 function getSuppliedMcpToken(request: Request) {
+  const bearerToken = getBearerToken(request);
+  if (bearerToken) return bearerToken;
+
   const url = new URL(request.url);
-  return getBearerToken(request) || url.searchParams.get("mcp_token") || "";
+  return url.searchParams.get("mcp_token")?.trim() || "";
+}
+
+function publicMcpAccessAllowed(env: WorkerEnv) {
+  return ["1", "true", "yes", "on"].includes(String(env.ALLOW_PUBLIC_MCP || "").trim().toLowerCase());
 }
 
 function resolveMcpToken(request: Request, env: WorkerEnv) {
@@ -47,7 +55,7 @@ function resolveMcpToken(request: Request, env: WorkerEnv) {
     return { ok: true as const, portfolioMcpToken: suppliedToken };
   }
 
-  if (!expectedToken && !env.PORTFOLIO_SYNC_TOKEN) {
+  if (publicMcpAccessAllowed(env)) {
     return { ok: true as const };
   }
 
@@ -88,10 +96,16 @@ export default {
         },
         mcpPath
       );
-      return jsonResponse({ ...payload, authProtected: Boolean(env.MCP_AUTH_TOKEN || env.PORTFOLIO_SYNC_TOKEN), supportsUserMcpTokens: true });
+      return jsonResponse({
+        ...payload,
+        mcpPathAliases: [mcpPath, "/mcp-v2"],
+        authProtected: !publicMcpAccessAllowed(env),
+        supportsUserMcpTokens: true,
+        acceptsBearerAuthOnly: false,
+      });
     }
 
-    if (url.pathname === mcpPath) {
+    if (url.pathname === mcpPath || url.pathname === "/mcp-v2") {
       const tokenConfig = resolveMcpToken(request, env);
       if (!tokenConfig.ok) {
         return jsonResponse({ error: "Unauthorized MCP request." }, { status: 401 });
