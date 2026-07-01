@@ -440,9 +440,12 @@ function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { ti
       <div className="card-kicker investment-name-line"><span>{title}</span><DifferenceBadge value={yearlyIncome} /></div>
       <label className="field">
         <span>Asset / Symbol</span>
-        <select value={value.symbol} onChange={(event) => changeSymbol(event.target.value)}>
-          {symbolOptions.map((option) => <option key={option.symbol} value={option.symbol}>{symbolOptionLabel(option)}</option>)}
-        </select>
+        <div className="symbol-field-row">
+          <input value={value.symbol} placeholder="Type symbol" onChange={(event) => changeSymbol(event.target.value)} />
+          <select value={value.symbol} onChange={(event) => changeSymbol(event.target.value)} aria-label={`${title} symbol dropdown`}>
+            {symbolOptions.map((option) => <option key={option.symbol} value={option.symbol}>{symbolOptionLabel(option)}</option>)}
+          </select>
+        </div>
       </label>
       <div className="yield-field-row">
         <NumberField className="yield-field" label="Yield" suffix="%" value={value.yieldPercent} onChange={(yieldPercent) => onChange({ ...value, yieldPercent })} />

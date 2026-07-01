@@ -441,6 +441,17 @@ select {
   align-items: end;
 }
 
+.symbol-field-row {
+  display: grid;
+  grid-template-columns: minmax(72px, .38fr) minmax(0, 1fr);
+  gap: 6px;
+}
+
+.symbol-field-row input {
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .yield-field {
   width: 82px;
   flex: 0 0 auto;
