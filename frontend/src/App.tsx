@@ -1120,7 +1120,7 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
             style={{
               position: "absolute",
               top: 4,
-              right: 18,
+              right: 30,
               maxWidth: 46,
               padding: "1px 4px",
               border: "1px solid rgba(251, 191, 36, .42)",
@@ -1132,7 +1132,7 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
               lineHeight: 1,
               letterSpacing: ".03em",
               textTransform: "uppercase",
-              transform: "rotate(-45deg)",
+              transform: "rotate(-30deg)",
               transformOrigin: "right center",
               pointerEvents: "none",
               boxShadow: "0 1px 6px rgba(0, 0, 0, .24)",
