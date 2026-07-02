@@ -5104,12 +5104,13 @@ export default function App() {
     const monthlyIncome = yearlyIncome / 12;
     const filteredIncome = row.includeIncome ? yearlyIncome : 0;
     const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
-    const account = accountMap[normalizeLookupKey(row.account)];
+    const accountKey = normalizeLookupKey(row.account);
+    const account = accountMap[accountKey];
     const includeInAfterTaxIncome = normalizeYesNo(account?.includeInFreeCashflow ?? "yes") === "yes";
     const displayYearlyIncome = includeInAfterTaxIncome ? yearlyIncome : 0;
     const displayMonthlyIncome = displayYearlyIncome / 12;
     const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
-    const taxStatus = String(account?.taxStatus || "taxable").toLowerCase();
+    const taxStatus = String(accountTaxStatusByName[accountKey] || account?.taxStatus || "taxable").toLowerCase();
     const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
     const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
     const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
@@ -5168,7 +5169,7 @@ export default function App() {
       realEstate: investmentType === "real estate" ? includedTotal : 0,
       bitcoin: investmentType === "bitcoin" ? includedTotal : 0,
     };
-  }), [investments, tickerMap, accountMap, isWhatIfActive, selectedStateCode]);
+  }), [investments, tickerMap, accountMap, accountTaxStatusByName, isWhatIfActive, selectedStateCode]);
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
