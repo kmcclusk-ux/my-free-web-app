@@ -1232,12 +1232,14 @@ function assetTaxToneLabel(tone: AssetTaxTone) {
   return "Federal and state taxable";
 }
 
-function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, onChange, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; onChange: (value: string) => void; ariaLabel: string }) {
+function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const [jumpMenuStyle, setJumpMenuStyle] = useState<CSSProperties | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const jumpMenuRef = useRef<HTMLDivElement | null>(null);
   const taxToneForOption = (option: string) => getAssetTaxTone(accountTaxStatus, tickerMap[normalizeLookupKey(option)]?.taxTreatment || "income", stateCode);
   const selectedTone = taxToneForOption(value);
   const updateMenuPosition = () => {
@@ -1247,13 +1249,19 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen && !jumpMenuStyle) return;
     updateMenuPosition();
     const handlePointerDown = (event: PointerEvent) => {
-      if (pickerRef.current?.contains(event.target as Node) || menuRef.current?.contains(event.target as Node)) return;
+      if (pickerRef.current?.contains(event.target as Node) || menuRef.current?.contains(event.target as Node) || jumpMenuRef.current?.contains(event.target as Node)) return;
       setIsOpen(false);
+      setJumpMenuStyle(null);
     };
-    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setIsOpen(false); };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        setJumpMenuStyle(null);
+      }
+    };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", updateMenuPosition);
@@ -1264,7 +1272,7 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [isOpen]);
+  }, [isOpen, jumpMenuStyle]);
 
   return (
     <div className="account-picker asset-picker" ref={pickerRef}>
@@ -1273,7 +1281,15 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
         type="button"
         ref={triggerRef}
         disabled={disabled}
+        onContextMenu={(event) => {
+          if (!onJumpToAsset || disabled || !value.trim()) return;
+          event.preventDefault();
+          setIsOpen(false);
+          setJumpMenuStyle({ left: event.clientX, top: event.clientY });
+        }}
+        title={onJumpToAsset ? "Right-click to jump to this asset on the Assets tab" : undefined}
         onClick={() => {
+          setJumpMenuStyle(null);
           if (!isOpen) updateMenuPosition();
           setIsOpen((current) => !current);
         }}
@@ -1301,6 +1317,40 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
               </button>
             );
           })}
+        </div>,
+        document.body
+      )}
+      {jumpMenuStyle && onJumpToAsset && createPortal(
+        <div
+          ref={jumpMenuRef}
+          className="asset-picker__jump-menu"
+          style={{
+            position: "fixed",
+            left: jumpMenuStyle.left,
+            top: jumpMenuStyle.top,
+            zIndex: 7000,
+            minWidth: 190,
+            padding: 10,
+            border: "1px solid rgba(15, 23, 42, .16)",
+            borderRadius: 12,
+            background: "rgba(255, 255, 255, .98)",
+            color: "#172033",
+            boxShadow: "0 18px 44px rgba(16, 38, 43, .22)",
+          }}
+          role="dialog"
+          aria-label={`Asset actions for ${value}`}
+        >
+          <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 650, wordBreak: "break-word" }}>{value}</div>
+          <button
+            className="primary-button ghost-button--compact"
+            type="button"
+            onClick={() => {
+              setJumpMenuStyle(null);
+              onJumpToAsset(value);
+            }}
+          >
+            Jump to asset
+          </button>
         </div>,
         document.body
       )}
@@ -3837,7 +3887,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onJumpToAccount, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -4562,7 +4612,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} excludedFromAfterTaxIncome={excludedAfterTaxAccountNames.has(normalizeLookupKey(row.account))} onChange={(value) => onChange(row.id, "account", value)} onJumpToAccount={onJumpToAccount} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
-                symbol: <td key="symbol"><AssetSelect value={row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} onChange={(value) => onChange(row.id, "symbol", value)} ariaLabel={`Asset for ${row.description || row.account || "investment row"}`} /></td>,
+                symbol: <td key="symbol"><AssetSelect value={row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} onChange={(value) => onChange(row.id, "symbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`Asset for ${row.description || row.account || "investment row"}`} /></td>,
                 normalPercent: <td key="normalPercent"><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>,
                 amount: <td key="amount">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}</td>,
                 year: <td key="year">{derived?.incomeItem ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /> : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}</td>,
@@ -4587,7 +4637,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
                 override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
-                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><AssetSelect value={row.newSymbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} /></td>,
+                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><AssetSelect value={row.newSymbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} /></td>,
                 overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{formatPercent(derived?.newPercent || 0)}</div></td>,
                 usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
@@ -4721,6 +4771,7 @@ export default function App() {
   const [focusGrid, setFocusGrid] = useState(false);
   const [showThermometerRail, setShowThermometerRail] = useState(true);
   const [highlightedAccountRowId, setHighlightedAccountRowId] = useState<number | null>(null);
+  const [highlightedAssetRowId, setHighlightedAssetRowId] = useState<number | null>(null);
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
@@ -4953,6 +5004,14 @@ export default function App() {
     setHighlightedAccountRowId(account.id);
     setActiveTab("accounts");
   }, [accounts]);
+  const jumpToAssetRow = useCallback((assetSymbol: string) => {
+    const assetKey = normalizeLookupKey(assetSymbol);
+    if (!assetKey) return;
+    const asset = tickers.find((row) => normalizeLookupKey(row.symbol) === assetKey);
+    if (!asset) return;
+    setHighlightedAssetRowId(asset.id);
+    setActiveTab("tickers");
+  }, [tickers]);
   const accountTaxStatusOptions = useMemo(() => {
     const values = accountTaxTypes
       .map((row) => String(row.taxStatus || "").trim())
@@ -6747,6 +6806,7 @@ export default function App() {
             onSplit={splitInvestmentRow}
             onReorder={reorderInvestments}
             onJumpToAccount={jumpToAccountRow}
+            onJumpToAsset={jumpToAssetRow}
             onRemoveIncluded={() => {
               const removedIds = new Set(investments.filter((row) => row.includeIncome).map((row) => row.id));
               setInvestments((current) => current.filter((row) => !row.includeIncome));
@@ -6761,7 +6821,7 @@ export default function App() {
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />
         )}
-        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Account type drives the investment tax status; cashflow inclusion comes directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "accountType", label: "Account type", type: "select", options: accountTypeOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} highlightedRowId={highlightedAccountRowId} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Category" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
