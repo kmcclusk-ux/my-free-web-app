@@ -1265,7 +1265,7 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
         <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 7, marginBottom: 4, borderBottom: "1px solid rgba(15, 23, 42, .1)", borderRadius: 8, background: "rgba(248, 250, 252, .98)", color: "#172033" }}>
             <span title={displayedValue} style={{ flex: "1 1 auto", minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#172033", fontSize: 13, fontWeight: 850, lineHeight: 1.2 }}>
-              Current: {displayedValue}
+              {displayedValue}
             </span>
             {selectedAssetName && (
               <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-label={assetTaxToneLabel(selectedTone)} />
