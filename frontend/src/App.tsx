@@ -1211,6 +1211,7 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
   const menuRef = useRef<HTMLDivElement | null>(null);
   const taxToneForOption = (option: string) => getAssetTaxTone(accountTaxStatus, tickerMap[normalizeLookupKey(option)]?.taxTreatment || "income", stateCode);
   const selectedTone = taxToneForOption(value);
+  const displayedValue = value.trim() || "Blank";
   const updateMenuPosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1261,11 +1262,12 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
       </button>
       {isOpen && !disabled && createPortal(
         <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
-          {value && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 7, marginBottom: 4, borderBottom: "1px solid rgba(15, 23, 42, .1)" }}>
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: 750 }}>{value}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 7, marginBottom: 4, borderBottom: "1px solid rgba(15, 23, 42, .1)" }}>
+            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: 750 }}>{displayedValue}</span>
+            {value.trim() && (
               <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-label={assetTaxToneLabel(selectedTone)} />
-              {onJumpToAsset && (
+            )}
+            {onJumpToAsset && value.trim() && (
                 <button
                   className="ghost-button ghost-button--compact"
                   type="button"
@@ -1276,9 +1278,8 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
                 >
                   Jump
                 </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
           {options.map((option) => {
             const tone = taxToneForOption(option);
             return (
@@ -4581,7 +4582,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
                 override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
-                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><AssetSelect value={row.newSymbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} /></td>,
+                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><AssetSelect value={row.newSymbol || row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} /></td>,
                 overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{formatPercent(derived?.newPercent || 0)}</div></td>,
                 usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
