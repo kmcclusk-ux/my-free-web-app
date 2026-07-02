@@ -1207,7 +1207,6 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
           role="dialog"
           aria-label={`Account actions for ${value}`}
         >
-          <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 800 }}>Account</div>
           <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 650, wordBreak: "break-word" }}>{value}</div>
           <button
             className="primary-button ghost-button--compact"
