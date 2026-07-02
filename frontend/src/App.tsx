@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, federalCombinedTax2025 } from "./taxMath";
 import "./App.css";
@@ -1061,11 +1061,9 @@ function AccountFavicon({ accountName }: { accountName: string }) {
 function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onChange, onJumpToAccount, ariaLabel }: { value: string; options: string[]; excludedFromAfterTaxIncome?: boolean; onChange: (value: string) => void; onJumpToAccount?: (accountName: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-  const [jumpMenuStyle, setJumpMenuStyle] = useState<CSSProperties | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const jumpMenuRef = useRef<HTMLDivElement | null>(null);
   const updateMenuPosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1077,19 +1075,16 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
   };
 
   useEffect(() => {
-    if (!isOpen && !jumpMenuStyle) return;
+    if (!isOpen) return;
     updateMenuPosition();
     const handlePointerDown = (event: PointerEvent) => {
       if (pickerRef.current?.contains(event.target as Node)) return;
       if (menuRef.current?.contains(event.target as Node)) return;
-      if (jumpMenuRef.current?.contains(event.target as Node)) return;
       setIsOpen(false);
-      setJumpMenuStyle(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsOpen(false);
-        setJumpMenuStyle(null);
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
@@ -1102,30 +1097,20 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [isOpen, jumpMenuStyle]);
-
-  const handleJumpContextMenu = (event: ReactMouseEvent) => {
-    if (!onJumpToAccount || !value.trim()) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setIsOpen(false);
-    setJumpMenuStyle({ left: event.clientX, top: event.clientY });
-  };
+  }, [isOpen]);
 
   return (
-    <div className="account-picker" ref={pickerRef} onContextMenuCapture={handleJumpContextMenu} onContextMenu={handleJumpContextMenu}>
+    <div className="account-picker" ref={pickerRef}>
       <button
         className={`account-picker__trigger ${excludedFromAfterTaxIncome ? "account-picker__trigger--excluded-income" : ""}`.trim()}
         type="button"
         ref={triggerRef}
         style={excludedFromAfterTaxIncome ? { paddingTop: 10 } : undefined}
-        title={onJumpToAccount ? "Right-click to jump to this account on the Accounts tab" : undefined}
+        title={onJumpToAccount ? "Open dropdown to jump to this account on the Accounts tab" : undefined}
         onDoubleClick={() => {
-          setJumpMenuStyle(null);
           setIsOpen(false);
         }}
         onClick={() => {
-          setJumpMenuStyle(null);
           if (!isOpen) updateMenuPosition();
           setIsOpen((current) => !current);
         }}
@@ -1170,6 +1155,24 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
       </button>
       {isOpen && createPortal(
         <div className="account-picker__menu account-picker__menu--portal" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
+          {value && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 7, marginBottom: 4, borderBottom: "1px solid rgba(15, 23, 42, .1)" }}>
+              <AccountFavicon accountName={value} />
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: 750 }}>{value}</span>
+              {onJumpToAccount && (
+                <button
+                  className="ghost-button ghost-button--compact"
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onJumpToAccount(value);
+                  }}
+                >
+                  Jump
+                </button>
+              )}
+            </div>
+          )}
           {options.map((option) => (
             <button
               className={`account-picker__option ${option === value ? "account-picker__option--selected" : ""}`.trim()}
@@ -1189,40 +1192,6 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
         </div>,
         document.body
       )}
-      {jumpMenuStyle && onJumpToAccount && createPortal(
-        <div
-          ref={jumpMenuRef}
-          className="account-picker__jump-menu"
-          style={{
-            position: "fixed",
-            left: jumpMenuStyle.left,
-            top: jumpMenuStyle.top,
-            zIndex: 7000,
-            minWidth: 210,
-            padding: 10,
-            border: "1px solid rgba(15, 23, 42, .16)",
-            borderRadius: 12,
-            background: "rgba(255, 255, 255, .98)",
-            color: "#172033",
-            boxShadow: "0 18px 44px rgba(16, 38, 43, .22)",
-          }}
-          role="dialog"
-          aria-label={`Account actions for ${value}`}
-        >
-          <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 650, wordBreak: "break-word" }}>{value}</div>
-          <button
-            className="primary-button ghost-button--compact"
-            type="button"
-            onClick={() => {
-              setJumpMenuStyle(null);
-              onJumpToAccount(value);
-            }}
-          >
-            Jump to account
-          </button>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
@@ -1237,11 +1206,9 @@ function assetTaxToneLabel(tone: AssetTaxTone) {
 function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
-  const [jumpMenuStyle, setJumpMenuStyle] = useState<CSSProperties | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const jumpMenuRef = useRef<HTMLDivElement | null>(null);
   const taxToneForOption = (option: string) => getAssetTaxTone(accountTaxStatus, tickerMap[normalizeLookupKey(option)]?.taxTreatment || "income", stateCode);
   const selectedTone = taxToneForOption(value);
   const updateMenuPosition = () => {
@@ -1251,17 +1218,15 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
   };
 
   useEffect(() => {
-    if (!isOpen && !jumpMenuStyle) return;
+    if (!isOpen) return;
     updateMenuPosition();
     const handlePointerDown = (event: PointerEvent) => {
-      if (pickerRef.current?.contains(event.target as Node) || menuRef.current?.contains(event.target as Node) || jumpMenuRef.current?.contains(event.target as Node)) return;
+      if (pickerRef.current?.contains(event.target as Node) || menuRef.current?.contains(event.target as Node)) return;
       setIsOpen(false);
-      setJumpMenuStyle(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsOpen(false);
-        setJumpMenuStyle(null);
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
@@ -1274,26 +1239,17 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [isOpen, jumpMenuStyle]);
-
-  const handleJumpContextMenu = (event: ReactMouseEvent) => {
-    if (!onJumpToAsset || disabled || !value.trim()) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setIsOpen(false);
-    setJumpMenuStyle({ left: event.clientX, top: event.clientY });
-  };
+  }, [isOpen]);
 
   return (
-    <div className="account-picker asset-picker" ref={pickerRef} onContextMenuCapture={handleJumpContextMenu} onContextMenu={handleJumpContextMenu}>
+    <div className="account-picker asset-picker" ref={pickerRef}>
       <button
         className={`account-picker__trigger asset-picker__trigger asset-tax-select asset-tax-select--${selectedTone}`}
         type="button"
         ref={triggerRef}
         disabled={disabled}
-        title={onJumpToAsset ? "Right-click to jump to this asset on the Assets tab" : undefined}
+        title={onJumpToAsset ? "Open dropdown to jump to this asset on the Assets tab" : undefined}
         onClick={() => {
-          setJumpMenuStyle(null);
           if (!isOpen) updateMenuPosition();
           setIsOpen((current) => !current);
         }}
@@ -1305,6 +1261,24 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
       </button>
       {isOpen && !disabled && createPortal(
         <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
+          {value && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 7, marginBottom: 4, borderBottom: "1px solid rgba(15, 23, 42, .1)" }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, fontWeight: 750 }}>{value}</span>
+              <span className={`asset-tax-indicator asset-tax-indicator--${selectedTone}`} title={assetTaxToneLabel(selectedTone)} aria-label={assetTaxToneLabel(selectedTone)} />
+              {onJumpToAsset && (
+                <button
+                  className="ghost-button ghost-button--compact"
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onJumpToAsset(value);
+                  }}
+                >
+                  Jump
+                </button>
+              )}
+            </div>
+          )}
           {options.map((option) => {
             const tone = taxToneForOption(option);
             return (
@@ -1321,40 +1295,6 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
               </button>
             );
           })}
-        </div>,
-        document.body
-      )}
-      {jumpMenuStyle && onJumpToAsset && createPortal(
-        <div
-          ref={jumpMenuRef}
-          className="asset-picker__jump-menu"
-          style={{
-            position: "fixed",
-            left: jumpMenuStyle.left,
-            top: jumpMenuStyle.top,
-            zIndex: 7000,
-            minWidth: 190,
-            padding: 10,
-            border: "1px solid rgba(15, 23, 42, .16)",
-            borderRadius: 12,
-            background: "rgba(255, 255, 255, .98)",
-            color: "#172033",
-            boxShadow: "0 18px 44px rgba(16, 38, 43, .22)",
-          }}
-          role="dialog"
-          aria-label={`Asset actions for ${value}`}
-        >
-          <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 650, wordBreak: "break-word" }}>{value}</div>
-          <button
-            className="primary-button ghost-button--compact"
-            type="button"
-            onClick={() => {
-              setJumpMenuStyle(null);
-              onJumpToAsset(value);
-            }}
-          >
-            Jump to asset
-          </button>
         </div>,
         document.body
       )}
