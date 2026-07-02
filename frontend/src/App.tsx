@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, federalCombinedTax2025 } from "./taxMath";
 import "./App.css";
@@ -1104,19 +1104,21 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
     };
   }, [isOpen, jumpMenuStyle]);
 
+  const handleJumpContextMenu = (event: ReactMouseEvent) => {
+    if (!onJumpToAccount || !value.trim()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsOpen(false);
+    setJumpMenuStyle({ left: event.clientX, top: event.clientY });
+  };
+
   return (
-    <div className="account-picker" ref={pickerRef}>
+    <div className="account-picker" ref={pickerRef} onContextMenuCapture={handleJumpContextMenu} onContextMenu={handleJumpContextMenu}>
       <button
         className={`account-picker__trigger ${excludedFromAfterTaxIncome ? "account-picker__trigger--excluded-income" : ""}`.trim()}
         type="button"
         ref={triggerRef}
         style={excludedFromAfterTaxIncome ? { paddingTop: 10 } : undefined}
-        onContextMenu={(event) => {
-          if (!onJumpToAccount || !value.trim()) return;
-          event.preventDefault();
-          setIsOpen(false);
-          setJumpMenuStyle({ left: event.clientX, top: event.clientY });
-        }}
         title={onJumpToAccount ? "Right-click to jump to this account on the Accounts tab" : undefined}
         onDoubleClick={() => {
           setJumpMenuStyle(null);
@@ -1274,19 +1276,21 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
     };
   }, [isOpen, jumpMenuStyle]);
 
+  const handleJumpContextMenu = (event: ReactMouseEvent) => {
+    if (!onJumpToAsset || disabled || !value.trim()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsOpen(false);
+    setJumpMenuStyle({ left: event.clientX, top: event.clientY });
+  };
+
   return (
-    <div className="account-picker asset-picker" ref={pickerRef}>
+    <div className="account-picker asset-picker" ref={pickerRef} onContextMenuCapture={handleJumpContextMenu} onContextMenu={handleJumpContextMenu}>
       <button
         className={`account-picker__trigger asset-picker__trigger asset-tax-select asset-tax-select--${selectedTone}`}
         type="button"
         ref={triggerRef}
         disabled={disabled}
-        onContextMenu={(event) => {
-          if (!onJumpToAsset || disabled || !value.trim()) return;
-          event.preventDefault();
-          setIsOpen(false);
-          setJumpMenuStyle({ left: event.clientX, top: event.clientY });
-        }}
         title={onJumpToAsset ? "Right-click to jump to this asset on the Assets tab" : undefined}
         onClick={() => {
           setJumpMenuStyle(null);
