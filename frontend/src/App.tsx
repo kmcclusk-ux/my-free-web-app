@@ -1061,9 +1061,11 @@ function AccountFavicon({ accountName }: { accountName: string }) {
 function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onChange, onJumpToAccount, ariaLabel }: { value: string; options: string[]; excludedFromAfterTaxIncome?: boolean; onChange: (value: string) => void; onJumpToAccount?: (accountName: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const [jumpMenuStyle, setJumpMenuStyle] = useState<CSSProperties | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const jumpMenuRef = useRef<HTMLDivElement | null>(null);
   const updateMenuPosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1075,15 +1077,20 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen && !jumpMenuStyle) return;
     updateMenuPosition();
     const handlePointerDown = (event: PointerEvent) => {
       if (pickerRef.current?.contains(event.target as Node)) return;
       if (menuRef.current?.contains(event.target as Node)) return;
+      if (jumpMenuRef.current?.contains(event.target as Node)) return;
       setIsOpen(false);
+      setJumpMenuStyle(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        setJumpMenuStyle(null);
+      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -1095,7 +1102,7 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [isOpen]);
+  }, [isOpen, jumpMenuStyle]);
 
   return (
     <div className="account-picker" ref={pickerRef}>
@@ -1107,10 +1114,16 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
         onContextMenu={(event) => {
           if (!onJumpToAccount || !value.trim()) return;
           event.preventDefault();
-          onJumpToAccount(value);
+          setIsOpen(false);
+          setJumpMenuStyle({ left: event.clientX, top: event.clientY });
+        }}
+        title={onJumpToAccount ? "Right-click to jump to this account on the Accounts tab" : undefined}
+        onDoubleClick={() => {
+          setJumpMenuStyle(null);
           setIsOpen(false);
         }}
         onClick={() => {
+          setJumpMenuStyle(null);
           if (!isOpen) updateMenuPosition();
           setIsOpen((current) => !current);
         }}
@@ -1171,6 +1184,41 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
               <span>{option || "Blank"}</span>
             </button>
           ))}
+        </div>,
+        document.body
+      )}
+      {jumpMenuStyle && onJumpToAccount && createPortal(
+        <div
+          ref={jumpMenuRef}
+          className="account-picker__jump-menu"
+          style={{
+            position: "fixed",
+            left: jumpMenuStyle.left,
+            top: jumpMenuStyle.top,
+            zIndex: 7000,
+            minWidth: 210,
+            padding: 10,
+            border: "1px solid rgba(15, 23, 42, .16)",
+            borderRadius: 12,
+            background: "rgba(255, 255, 255, .98)",
+            color: "#172033",
+            boxShadow: "0 18px 44px rgba(16, 38, 43, .22)",
+          }}
+          role="dialog"
+          aria-label={`Account actions for ${value}`}
+        >
+          <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 800 }}>Account</div>
+          <div style={{ marginBottom: 10, fontSize: 13, fontWeight: 650, wordBreak: "break-word" }}>{value}</div>
+          <button
+            className="primary-button ghost-button--compact"
+            type="button"
+            onClick={() => {
+              setJumpMenuStyle(null);
+              onJumpToAccount(value);
+            }}
+          >
+            Jump to account
+          </button>
         </div>,
         document.body
       )}
