@@ -1058,7 +1058,7 @@ function AccountFavicon({ accountName }: { accountName: string }) {
   return <img className="account-favicon" src={src} alt="" aria-hidden="true" loading="lazy" onError={() => setHasImageError(true)} />;
 }
 
-function AccountSelect({ value, options, onChange, ariaLabel }: { value: string; options: string[]; onChange: (value: string) => void; ariaLabel: string }) {
+function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onChange, ariaLabel }: { value: string; options: string[]; excludedFromAfterTaxIncome?: boolean; onChange: (value: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -1100,9 +1100,10 @@ function AccountSelect({ value, options, onChange, ariaLabel }: { value: string;
   return (
     <div className="account-picker" ref={pickerRef}>
       <button
-        className="account-picker__trigger"
+        className={`account-picker__trigger ${excludedFromAfterTaxIncome ? "account-picker__trigger--excluded-income" : ""}`.trim()}
         type="button"
         ref={triggerRef}
+        style={excludedFromAfterTaxIncome ? { paddingTop: 10 } : undefined}
         onClick={() => {
           if (!isOpen) updateMenuPosition();
           setIsOpen((current) => !current);
@@ -1113,6 +1114,33 @@ function AccountSelect({ value, options, onChange, ariaLabel }: { value: string;
       >
         <AccountFavicon accountName={value} />
         <span>{value || "Select account"}</span>
+        {excludedFromAfterTaxIncome && (
+          <span
+            className="account-picker__excluded-badge"
+            style={{
+              position: "absolute",
+              top: 1,
+              left: 38,
+              maxWidth: "calc(100% - 74px)",
+              padding: "1px 5px",
+              border: "1px solid rgba(251, 191, 36, .42)",
+              borderRadius: 999,
+              background: "rgba(69, 39, 11, .96)",
+              color: "#fde68a",
+              fontSize: 9,
+              fontWeight: 800,
+              lineHeight: 1,
+              letterSpacing: ".04em",
+              textTransform: "uppercase",
+              pointerEvents: "none",
+              boxShadow: "0 1px 6px rgba(0, 0, 0, .24)",
+              zIndex: 2,
+            }}
+            title="This account is excluded from after-tax income totals. Change this on the Accounts tab."
+          >
+            Excluded
+          </span>
+        )}
       </button>
       {isOpen && createPortal(
         <div className="account-picker__menu account-picker__menu--portal" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
@@ -3742,7 +3770,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -4466,7 +4494,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
-                account: <td key="account"><AccountSelect value={row.account} options={accountOptions} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
+                account: <td key="account"><AccountSelect value={row.account} options={accountOptions} excludedFromAfterTaxIncome={excludedAfterTaxAccountNames.has(normalizeLookupKey(row.account))} onChange={(value) => onChange(row.id, "account", value)} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
                 symbol: <td key="symbol"><AssetSelect value={row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} onChange={(value) => onChange(row.id, "symbol", value)} ariaLabel={`Asset for ${row.description || row.account || "investment row"}`} /></td>,
                 normalPercent: <td key="normalPercent"><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>,
                 amount: <td key="amount">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}</td>,
@@ -4845,6 +4873,10 @@ export default function App() {
   );
   const accountMap = useMemo(() => buildAccountLookupMap(accounts), [accounts]);
   const accountTaxStatusByName = useMemo(() => buildAccountTaxStatusMap(accounts, accountTypes), [accounts, accountTypes]);
+  const excludedAfterTaxAccountNames = useMemo(() => new Set(accounts
+    .filter((row) => normalizeYesNo(row.includeInFreeCashflow) !== "yes")
+    .map((row) => normalizeLookupKey(row.account))
+    .filter(Boolean)), [accounts]);
   const accountTaxStatusOptions = useMemo(() => {
     const values = accountTaxTypes
       .map((row) => String(row.taxStatus || "").trim())
@@ -6618,6 +6650,7 @@ export default function App() {
             tickerMap={tickerMap}
             stateCode={selectedStateCode}
             accountTaxStatusByName={accountTaxStatusByName}
+            excludedAfterTaxAccountNames={excludedAfterTaxAccountNames}
             derivedRows={derivedRows}
             favorites={uiSettings.investmentFavorites}
             filters={investmentFilters}
