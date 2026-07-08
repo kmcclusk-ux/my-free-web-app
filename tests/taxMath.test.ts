@@ -5,6 +5,7 @@ import {
   federalCombinedTax2025,
   federalOrdinaryTax2025,
   federalPreferredTax2025,
+  getSupportedW2PayrollTaxStateCodes,
   isW2IncomeType,
 } from "../frontend/src/taxMath";
 
@@ -51,6 +52,26 @@ describe("frontend tax math helpers", () => {
     expect(result.federal.additionalMedicare).toBeCloseTo(450, 2);
     expect(result.state.total).toBeCloseTo(3600, 2);
     expect(result.total).toBeCloseTo(19318.2, 2);
+  });
+
+  test("W2 payroll tax has explicit coverage for all states plus DC", () => {
+    const supportedCodes = getSupportedW2PayrollTaxStateCodes();
+    expect(supportedCodes).toHaveLength(51);
+    expect(new Set(supportedCodes).size).toBe(51);
+    for (const stateCode of supportedCodes) {
+      const result = calculateW2PayrollTax(100000, "single", stateCode);
+      expect(result.state.stateCode).toBe(stateCode);
+      expect(result.state.total).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  test("W2 payroll tax includes state-specific components only where employee withholding applies", () => {
+    expect(calculateW2PayrollTax(100000, "single", "TX").state.components).toHaveLength(0);
+    expect(calculateW2PayrollTax(100000, "single", "NY").state.components.map((component) => component.label)).toEqual([
+      "NY state disability insurance",
+      "NY paid family leave",
+    ]);
+    expect(calculateW2PayrollTax(100000, "single", "HI").state.components[0]?.label).toBe("HI temporary disability insurance employee share");
   });
 
   test("W2 payroll tax is only selected for W2 income type labels", () => {

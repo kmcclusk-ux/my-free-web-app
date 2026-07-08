@@ -5527,6 +5527,9 @@ export default function App() {
         <div><span>W2 additional Medicare</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.additionalMedicare)}</strong></div>
         <div><span>Federal total</span><strong>{formatCurrencyDetailed(federalTaxTotal)}</strong></div>
         <div><span>{selectedStateCode} state income tax</span><strong>{formatCurrencyDetailed(displayedStateResult.tax)}</strong></div>
+        {w2PayrollTax.state.components.map((component) => (
+          <div key={component.label}><span>{component.label}</span><strong>{formatCurrencyDetailed(component.tax)}</strong></div>
+        ))}
         <div><span>{selectedStateCode} W2 payroll withholding</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Total tax removed</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
       </div>
