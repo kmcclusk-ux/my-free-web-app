@@ -236,7 +236,12 @@ type WorkbookResponse = {
 
 type PortfolioHistorySnapshot = ModelDataSnapshot;
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL = typeof window !== "undefined" &&
+  CONFIGURED_API_BASE_URL?.includes(".execute-api.") &&
+  !["localhost", "127.0.0.1"].includes(window.location.hostname)
+  ? "/api"
+  : CONFIGURED_API_BASE_URL || "/api";
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";

@@ -15,6 +15,8 @@ type WorkerEnv = {
   ALLOW_PUBLIC_MCP?: string;
 };
 
+const DEFAULT_PORTFOLIO_API_BASE_URL = "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio";
+
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
     ...init,
@@ -82,6 +84,31 @@ async function handleMcpRequest(request: Request, env: WorkerEnv, tokenConfig: {
   return transport.handleRequest(request);
 }
 
+function portfolioApiBaseUrl(env: WorkerEnv) {
+  return (env.PORTFOLIO_API_BASE_URL || DEFAULT_PORTFOLIO_API_BASE_URL).replace(/\/+$/, "");
+}
+
+function proxiedPortfolioUrl(requestUrl: URL, env: WorkerEnv) {
+  const upstreamBase = new URL(portfolioApiBaseUrl(env));
+  const strippedPath = requestUrl.pathname.replace(/^\/api(?=\/|$)/, "") || "/";
+  const upstreamPath = `${upstreamBase.pathname.replace(/\/+$/, "")}${strippedPath}`;
+  return new URL(`${upstreamPath}${requestUrl.search}`, upstreamBase.origin);
+}
+
+async function handlePortfolioApiProxy(request: Request, env: WorkerEnv) {
+  const requestUrl = new URL(request.url);
+  const upstreamUrl = proxiedPortfolioUrl(requestUrl, env);
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+
+  return fetch(upstreamUrl, {
+    method: request.method,
+    headers,
+    body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+    redirect: "manual",
+  });
+}
+
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -112,6 +139,10 @@ export default {
       }
 
       return handleMcpRequest(request, env, tokenConfig);
+    }
+
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+      return handlePortfolioApiProxy(request, env);
     }
 
     if (env.ASSETS) {
