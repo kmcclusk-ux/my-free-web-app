@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal } from "react-dom";
-import { calculateDisplayedAfterTaxIncome, federalCombinedTax2025 } from "./taxMath";
+import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import "./App.css";
 
 type TabKey =
@@ -2049,6 +2049,9 @@ function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { re
 function sumTaxWhatIfItems(items: TaxWhatIfItem[] | undefined, legacyAmount = 0) {
   const itemTotal = Array.isArray(items) ? items.reduce((total, item) => total + toNumber(item.amount), 0) : 0;
   return itemTotal > 0 ? itemTotal : toNumber(legacyAmount);
+}
+function sumW2TaxWhatIfItems(items: TaxWhatIfItem[] | undefined) {
+  return (Array.isArray(items) ? items : []).reduce((total, item) => total + (isW2IncomeType(item.incomeType) ? toNumber(item.amount) : 0), 0);
 }
 function buildPortfolioSnapshot({
   activeTab,
@@ -5219,8 +5222,11 @@ export default function App() {
 
   const extraOrdinaryWhatIfTotal = sumTaxWhatIfItems(federalSettings.extraOrdinaryItems, federalSettings.extraOrdinaryIncome);
   const extraPreferredWhatIfTotal = sumTaxWhatIfItems(federalSettings.extraPreferredItems, federalSettings.extraPreferredIncome);
+  const extraW2WhatIfTotal = sumW2TaxWhatIfItems(federalSettings.extraOrdinaryItems);
   const effectiveExtraOrdinaryIncome = isFederalTaxWhatIfOpen ? extraOrdinaryWhatIfTotal : 0;
   const effectiveExtraPreferredIncome = isFederalTaxWhatIfOpen ? extraPreferredWhatIfTotal : 0;
+  const effectiveW2Income = isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0;
+  const w2PayrollTax = calculateW2PayrollTax(effectiveW2Income, federalSettings.filingStatus, selectedStateCode);
   const effectiveExtraStateIncome = isStateTaxWhatIfOpen ? stateSettings.extraStateIncome : 0;
   const ordinaryBeforeDeductions = flows.federalOrdinary + effectiveExtraOrdinaryIncome;
   const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
@@ -5248,7 +5254,7 @@ export default function App() {
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
   const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
   const magi = grossFederalTaxable;
-  const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome, 0);
+  const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome - effectiveW2Income, 0);
   const niitThreshold = niitThresholdForStatus(federalSettings.filingStatus);
   const niitBase = Math.max(Math.min(netInvestmentIncome, Math.max(magi - niitThreshold, 0)), 0);
   const displayedFederalTaxableBeforeDeductions = flows.displayFederalOrdinary + flows.displayFederalPreferred;
@@ -5439,7 +5445,10 @@ export default function App() {
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
   }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, selectedInvestmentIds, hasRealData, authEnabled, authState.status, authToken]);
 
-  const calculatedTotalTax = (federalResult?.tax || 0) + displayedStateResult.tax;
+  const federalIncomeTaxTotal = federalResult?.tax || 0;
+  const federalTaxWithPayroll = federalIncomeTaxTotal + w2PayrollTax.federal.total;
+  const stateTaxWithPayroll = displayedStateResult.tax + w2PayrollTax.state.total;
+  const calculatedTotalTax = federalTaxWithPayroll + stateTaxWithPayroll;
   const totalIncome = flows.totalIncome;
   const totalTax = calculatedTotalTax;
   const taxAttributedToDisplayedIncome = Math.max(totalTax - excludedOnlyTax, 0);
@@ -5448,7 +5457,7 @@ export default function App() {
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
   const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
   const hiddenFromAfterTaxIncome = flows.totalIncome - flows.displayIncome;
-  const federalTaxTotal = federalResult?.tax || 0;
+  const federalTaxTotal = federalTaxWithPayroll;
   const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
@@ -5513,8 +5522,12 @@ export default function App() {
         <div><span>Federal ordinary tax</span><strong>{formatCurrencyDetailed(federalOrdinaryTax)}</strong></div>
         <div><span>Federal preferred tax</span><strong>{formatCurrencyDetailed(federalPreferredTax)}</strong></div>
         <div><span>NIIT</span><strong>{formatCurrencyDetailed(federalNiit)}</strong></div>
+        <div><span>W2 Social Security</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.socialSecurity)}</strong></div>
+        <div><span>W2 Medicare</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.medicare)}</strong></div>
+        <div><span>W2 additional Medicare</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.additionalMedicare)}</strong></div>
         <div><span>Federal total</span><strong>{formatCurrencyDetailed(federalTaxTotal)}</strong></div>
-        <div><span>{selectedStateCode} state tax</span><strong>{formatCurrencyDetailed(displayedStateResult.tax)}</strong></div>
+        <div><span>{selectedStateCode} state income tax</span><strong>{formatCurrencyDetailed(displayedStateResult.tax)}</strong></div>
+        <div><span>{selectedStateCode} W2 payroll withholding</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Total tax removed</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
       </div>
     </div>
@@ -5784,8 +5797,8 @@ export default function App() {
       totalIncome,
       portfolioYield,
       afterTaxIncome,
-      federalTax: federalResult?.tax || 0,
-      stateTax: displayedStateResult.tax,
+      federalTax: federalTaxWithPayroll,
+      stateTax: stateTaxWithPayroll,
       totalTax,
       federalTaxable: federalTaxableAfterDeductions,
       stateTaxable: stateTaxableAfterDeductions,
@@ -6656,8 +6669,8 @@ export default function App() {
                 {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
                 <span className="content-topbar__title-stack">
                   <span>{navItems.find((item) => item.key === activeTab)?.label}</span>
-                  {activeTab === "federal" && <TumblingCurrency className="content-topbar__tax-total" value={federalResult?.tax || 0} />}
-                  {activeTab === "state" && <TumblingCurrency className="content-topbar__tax-total" value={displayedStateResult.tax} />}
+                  {activeTab === "federal" && <TumblingCurrency className="content-topbar__tax-total" value={federalTaxWithPayroll} />}
+                  {activeTab === "state" && <TumblingCurrency className="content-topbar__tax-total" value={stateTaxWithPayroll} />}
                 </span>
               </h2>
             </div>
@@ -6787,10 +6800,13 @@ export default function App() {
               <summary>Tax outputs</summary>
               {federalResult && (
                 <div className="api-grid federal-tax-panel__tiles federal-tax-panel__tiles--result">
-                  <MetricCard label="Federal total" value={formatCurrencyDetailed(federalResult.tax)} />
+                  <MetricCard label="Federal total" value={formatCurrencyDetailed(federalTaxWithPayroll)} />
+                  <MetricCard label="Federal income tax" value={formatCurrencyDetailed(federalIncomeTaxTotal)} />
                   <MetricCard label="Ordinary tax" value={formatCurrencyDetailed(federalResult.ordinaryTax || 0)} />
                   <MetricCard label="Preferred tax" value={formatCurrencyDetailed(federalResult.prefTax || 0)} />
                   <MetricCard label="NIIT" value={formatCurrencyDetailed(federalResult.niit || 0)} />
+                  <MetricCard label="W2 FICA" value={formatCurrencyDetailed(w2PayrollTax.federal.total)} />
+                  <MetricCard label={`${selectedStateCode} W2 withholding`} value={formatCurrencyDetailed(w2PayrollTax.state.total)} />
                 </div>
               )}
               <div className="metric-grid federal-tax-panel__tiles">
@@ -6804,6 +6820,7 @@ export default function App() {
                 <MetricCard label="Net investment income" value={formatCurrency(netInvestmentIncome)} />
                 <MetricCard label="NIIT base" value={formatCurrency(niitBase)} />
                 <MetricCard label={`${selectedStateCode} income tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
+                <MetricCard label="W2 wages" value={formatCurrency(effectiveW2Income)} />
               </div>
             </details>
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
@@ -6865,7 +6882,9 @@ export default function App() {
             <details className="tax-output-disclosure">
               <summary>Tax outputs</summary>
               <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
-                <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
+                <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(stateTaxWithPayroll)} />
+                <MetricCard label={`${selectedStateCode} income tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
+                <MetricCard label={`${selectedStateCode} W2 withholding`} value={formatCurrencyDetailed(w2PayrollTax.state.total)} />
               </div>
               <div className="metric-grid state-tax-panel__tiles">
                 <MetricCard label="Total included income" value={formatCurrency(flows.totalIncome)} />
@@ -6923,8 +6942,8 @@ export default function App() {
               <TaxThermometerPanel
                 federalTaxable={federalTaxableAfterDeductions}
                 stateTaxable={stateTaxableAfterDeductions}
-                federalTax={federalResult?.tax || 0}
-                stateTax={displayedStateResult.tax}
+                federalTax={federalTaxWithPayroll}
+                stateTax={stateTaxWithPayroll}
                 filingStatus={federalSettings.filingStatus}
                 stateCode={selectedStateCode}
                 stateName={selectedStateName}

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
+  calculateW2PayrollTax,
   calculateDisplayedAfterTaxIncome,
   federalCombinedTax2025,
   federalOrdinaryTax2025,
   federalPreferredTax2025,
+  isW2IncomeType,
 } from "../frontend/src/taxMath";
 
 describe("frontend tax math helpers", () => {
@@ -40,5 +42,20 @@ describe("frontend tax math helpers", () => {
 
   test("displayed after-tax income does not go up when excluded-only tax exceeds total tax", () => {
     expect(calculateDisplayedAfterTaxIncome(100000, 50000, 60000)).toBe(100000);
+  });
+
+  test("W2 payroll tax applies FICA caps and additional Medicare threshold", () => {
+    const result = calculateW2PayrollTax(300000, "mfj", "CA");
+    expect(result.federal.socialSecurity).toBeCloseTo(10918.2, 2);
+    expect(result.federal.medicare).toBeCloseTo(4350, 2);
+    expect(result.federal.additionalMedicare).toBeCloseTo(450, 2);
+    expect(result.state.total).toBeCloseTo(3600, 2);
+    expect(result.total).toBeCloseTo(19318.2, 2);
+  });
+
+  test("W2 payroll tax is only selected for W2 income type labels", () => {
+    expect(isW2IncomeType("W2 wages")).toBe(true);
+    expect(isW2IncomeType("Ordinary dividends")).toBe(false);
+    expect(isW2IncomeType("Business income")).toBe(false);
   });
 });
