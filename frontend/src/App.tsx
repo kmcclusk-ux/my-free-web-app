@@ -203,6 +203,7 @@ type ChatResponse = { message: string; actions?: AssistantAction[]; model?: stri
 type InvestmentFilters = { account: string; category: string; asset: string };
 type InvestmentSortColumn = "description" | "account" | "category" | "totalInvestment" | "yearlyIncome" | "symbol" | "includedTotal" | "filteredIncome";
 type InvestmentSort = { tableId: "investments"; column: InvestmentSortColumn | ""; direction: "asc" | "desc" };
+type SymbolFinderScope = "current" | "all";
 type AssistantActionResult = { ok: boolean; message: string; requiresConfirmation?: boolean };
 type AssistantEditableRow = Record<string, unknown> & { id: number };
 type AssistantTableConfig = {
@@ -3894,8 +3895,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [isSymbolFinderOpen, setIsSymbolFinderOpen] = useState(false);
   const [symbolFinderQuery, setSymbolFinderQuery] = useState("");
+  const [symbolFinderScope, setSymbolFinderScope] = useState<SymbolFinderScope>("current");
   const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
   const [activeFinderQuery, setActiveFinderQuery] = useState("");
+  const [activeFinderScope, setActiveFinderScope] = useState<SymbolFinderScope>("current");
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
   const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
@@ -4011,38 +4014,38 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   };
   const includedRowsLabel = `${includedRowCount} included row${includedRowCount === 1 ? "" : "s"}`;
   const symbolFinderOptions = useMemo(() => Array.from(new Set(rows
-    .flatMap((row) => [row.symbol, row.newSymbol])
+    .flatMap((row) => symbolFinderScope === "current" ? [row.symbol] : [row.symbol, row.newSymbol])
     .map((symbol) => symbol.trim())
     .filter(Boolean)))
-    .sort((a, b) => a.localeCompare(b)), [rows]);
+    .sort((a, b) => a.localeCompare(b)), [rows, symbolFinderScope]);
   const normalizedSymbolFinderQuery = normalizeLookupKey(symbolFinderQuery);
+  const rowMatchesSymbolFinder = (row: InvestmentRow, normalizedQuery: string, scope: SymbolFinderScope) => (
+    normalizeLookupKey(row.symbol) === normalizedQuery ||
+    (scope === "all" && normalizeLookupKey(row.newSymbol) === normalizedQuery)
+  );
   const symbolFinderMatches = useMemo(() => {
     if (!normalizedSymbolFinderQuery) return [];
     return displayedRows
       .map((row, index) => ({ row, index }))
-      .filter(({ row }) => (
-        normalizeLookupKey(row.symbol) === normalizedSymbolFinderQuery ||
-        normalizeLookupKey(row.newSymbol) === normalizedSymbolFinderQuery
-      ));
-  }, [displayedRows, normalizedSymbolFinderQuery]);
+      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedSymbolFinderQuery, symbolFinderScope));
+  }, [displayedRows, normalizedSymbolFinderQuery, symbolFinderScope]);
   const activeFinderMatches = useMemo(() => {
     const normalizedActiveQuery = normalizeLookupKey(activeFinderQuery);
     if (!normalizedActiveQuery) return [];
     return displayedRows
       .map((row, index) => ({ row, index }))
-      .filter(({ row }) => (
-        normalizeLookupKey(row.symbol) === normalizedActiveQuery ||
-        normalizeLookupKey(row.newSymbol) === normalizedActiveQuery
-      ));
-  }, [activeFinderQuery, displayedRows]);
+      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedActiveQuery, activeFinderScope));
+  }, [activeFinderQuery, activeFinderScope, displayedRows]);
   const canNavigateFinderMatches = highlightedFinderRowId !== null && activeFinderMatches.length > 1;
   const openBlankSymbolFinder = () => {
     setSymbolFinderQuery("");
+    setSymbolFinderScope("current");
     setIsSymbolFinderOpen(true);
   };
-  const jumpToInvestmentRow = (rowId: number, query = symbolFinderQuery.trim() || activeFinderQuery) => {
+  const jumpToInvestmentRow = (rowId: number, query = symbolFinderQuery.trim() || activeFinderQuery, scope = symbolFinderScope) => {
     setHighlightedFinderRowId(rowId);
     setActiveFinderQuery(query);
+    setActiveFinderScope(scope);
     setIsSymbolFinderOpen(false);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
@@ -4057,7 +4060,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       ? (currentIndex >= 0 ? currentIndex + 1 : fallbackIndex + 1) % activeFinderMatches.length
       : (currentIndex >= 0 ? currentIndex - 1 + activeFinderMatches.length : activeFinderMatches.length - 1) % activeFinderMatches.length;
     const nextRow = activeFinderMatches[nextIndex]?.row;
-    if (nextRow) jumpToInvestmentRow(nextRow.id, activeFinderQuery);
+    if (nextRow) jumpToInvestmentRow(nextRow.id, activeFinderQuery, activeFinderScope);
   };
   const handleRemoveIncludedRows = () => {
     if (includedRowCount === 0) return;
@@ -4453,6 +4456,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 <select value={symbolFinderQuery} onChange={(event) => setSymbolFinderQuery(event.target.value)}>
                   <option value="">Choose symbol</option>
                   {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Search in</span>
+                <select value={symbolFinderScope} onChange={(event) => setSymbolFinderScope(event.target.value as SymbolFinderScope)}>
+                  <option value="current">Current asset only</option>
+                  <option value="all">Current + WhatIf asset</option>
                 </select>
               </label>
             </div>
