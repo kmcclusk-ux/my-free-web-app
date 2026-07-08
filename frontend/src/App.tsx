@@ -739,7 +739,20 @@ const initialAccountTypes: AccountTypeRow[] = [
   { id: 2, name: "401k", taxStatus: "deferred" },
   { id: 3, name: "inherited Brokerage", taxStatus: "taxable" },
   { id: 4, name: "Brokerage Account", taxStatus: "taxable" },
+  { id: 5, name: "W2 income", taxStatus: "taxable" },
 ];
+function mergeDefaultAccountTypes(rows: AccountTypeRow[]) {
+  const seen = new Set(rows.map((row) => normalizeLookupKey(row.name)).filter(Boolean));
+  const nextRows = [...rows];
+  let nextId = Math.max(0, ...rows.map((row) => Number(row.id) || 0)) + 1;
+  for (const defaultRow of initialAccountTypes) {
+    const key = normalizeLookupKey(defaultRow.name);
+    if (!key || seen.has(key)) continue;
+    nextRows.push({ ...defaultRow, id: nextId++ });
+    seen.add(key);
+  }
+  return nextRows;
+}
 const initialAccounts: AccountRow[] = [
   { id: 1, account: "Example Brokerage", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" },
   { id: 2, account: "Example IRA", accountType: "IRA", taxStatus: "deferred", dividendAccrued: "no", includeInFreeCashflow: "yes" },
@@ -982,6 +995,7 @@ function buildAccountLookupMap(rows: AccountRow[]) {
 function inferAccountTypeFromAccountName(accountName: string) {
   const key = normalizeLookupKey(accountName);
   if (!key) return "";
+  if (key.includes("w2") || key.includes("w-2") || key.includes("wage")) return "W2 income";
   if (key.includes("401k") || key.includes("401")) return "401k";
   if (key.includes("inherited") && key.includes("brokerage")) return "inherited Brokerage";
   if (key.includes("ira")) return "IRA";
@@ -991,6 +1005,7 @@ function inferAccountTypeFromAccountName(accountName: string) {
 function inferAccountTypeTaxStatus(typeName: string) {
   const key = normalizeLookupKey(typeName);
   if (!key) return "";
+  if (key.includes("w2") || key.includes("wage")) return "taxable";
   if (key.includes("401") || key.includes("ira")) return "deferred";
   if (key.includes("brokerage")) return "taxable";
   return "";
@@ -1428,7 +1443,7 @@ function normalizeModelVersions(raw: unknown): ModelVersion[] {
         taxTreatments: snapshot.taxTreatments as TaxTreatmentRow[],
         accounts: snapshot.accounts as AccountRow[],
         accountTaxTypes: snapshot.accountTaxTypes as AccountTaxTypeRow[],
-        accountTypes: Array.isArray(snapshot.accountTypes) ? snapshot.accountTypes as AccountTypeRow[] : initialAccountTypes,
+        accountTypes: mergeDefaultAccountTypes(Array.isArray(snapshot.accountTypes) ? snapshot.accountTypes as AccountTypeRow[] : initialAccountTypes),
         federalSettings: normalizeFederalSettings(snapshot.federalSettings),
         stateSettings: mergeSettings(initialStateSettings, snapshot.stateSettings),
         plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
@@ -4815,7 +4830,7 @@ export default function App() {
     setTaxTreatments(snapshot.taxTreatments);
     setAccounts(snapshot.accounts);
     setAccountTaxTypes(snapshot.accountTaxTypes);
-    setAccountTypes(snapshot.accountTypes);
+    setAccountTypes(mergeDefaultAccountTypes(snapshot.accountTypes));
     setFederalSettings(normalizeFederalSettings(snapshot.federalSettings));
     setStateSettings(snapshot.stateSettings);
     setPlannerSettings(snapshot.plannerSettings);
@@ -5334,7 +5349,7 @@ export default function App() {
         mapWorkbookRows(initialAccountTaxTypes, response.tabs?.accountTaxType, workbookToAccountTaxTypeRow)
       );
       setAccountTypes(
-        mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow)
+        mergeDefaultAccountTypes(mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow))
       );
       setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
       setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
