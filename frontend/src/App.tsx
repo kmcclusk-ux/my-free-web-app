@@ -65,6 +65,7 @@ type DerivedInvestmentRow = InvestmentRow & {
   displayPreferredMonthly: number;
   displayStateMonthly: number;
   displayNonInvestmentIncome: number;
+  w2Income: number;
   nonTaxableMonthly: number;
   nonInvestmentIncome: number;
   cash: number;
@@ -1009,6 +1010,10 @@ function inferAccountTypeTaxStatus(typeName: string) {
   if (key.includes("401") || key.includes("ira")) return "deferred";
   if (key.includes("brokerage")) return "taxable";
   return "";
+}
+function isW2AccountType(value: unknown) {
+  const key = normalizeLookupKey(value);
+  return key.includes("w2") || key.includes("wage");
 }
 function buildAccountTypeTaxStatusMap(rows: AccountTypeRow[]) {
   const map: Record<string, string> = {};
@@ -4594,10 +4599,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} excludedFromAfterTaxIncome={excludedAfterTaxAccountNames.has(normalizeLookupKey(row.account))} onChange={(value) => onChange(row.id, "account", value)} onJumpToAccount={onJumpToAccount} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
                 symbol: <td key="symbol"><AssetSelect value={row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} onChange={(value) => onChange(row.id, "symbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`Asset for ${row.description || row.account || "investment row"}`} /></td>,
-                normalPercent: <td key="normalPercent"><div className="readonly-cell">{formatPercent(derived?.currentPercent || 0)}</div></td>,
+                normalPercent: <td key="normalPercent"><div className="readonly-cell">{derived?.incomeItem ? "N.A." : formatPercent(derived?.currentPercent || 0)}</div></td>,
                 amount: <td key="amount">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <MoneyInput value={row.totalInvestment} onChange={(value) => onChange(row.id, "totalInvestment", value)} ariaLabel={`Total investment for ${row.description || row.account || "investment row"}`} />}</td>,
                 year: <td key="year">{derived?.incomeItem ? <MoneyInput value={row.yearlyIncome} onChange={(value) => onChange(row.id, "yearlyIncome", value)} ariaLabel={`Yearly income for ${row.description || row.account || "investment row"}`} /> : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.yearlyIncome || 0)}</div>}</td>,
-                month: <td key="month"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div></td>,
+                month: <td key="month">{derived?.incomeItem ? <MoneyInput value={derived.monthlyIncome || 0} onChange={(value) => onChange(row.id, "yearlyIncome", String(toNumber(value) * 12))} ariaLabel={`Monthly income for ${row.description || row.account || "investment row"}`} /> : <div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.monthlyIncome || 0)}</div>}</td>,
                 filtered: <td key="filtered"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.filteredIncome || 0)}</div></td>,
                 total: <td key="total"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.includedTotal || 0)}</div></td>,
                 taxStatus: <td key="taxStatus"><div className="readonly-cell readonly-cell--text">{derived?.taxStatus || ""}</div></td>,
@@ -4617,10 +4622,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 coveredCall: <td key="coveredCall"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.coveredCall || 0)}</div></td>,
                 realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
-                override: <td key="override" className="checkbox-cell investment-column--override"><input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} /></td>,
-                overrideSymbol: <td key="overrideSymbol" className="investment-column--override"><AssetSelect value={row.newSymbol || row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} /></td>,
-                overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{formatPercent(derived?.newPercent || 0)}</div></td>,
-                usePercent: <td key="usePercent"><div className="readonly-cell">{formatPercent(derived?.effectivePercent || 0)}</div></td>,
+                override: <td key="override" className="checkbox-cell investment-column--override">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} />}</td>,
+                overrideSymbol: <td key="overrideSymbol" className="investment-column--override">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <AssetSelect value={row.newSymbol || row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} disabled={!row.overrideProposal} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} />}</td>,
+                overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{derived?.incomeItem ? "N.A." : formatPercent(derived?.newPercent || 0)}</div></td>,
+                usePercent: <td key="usePercent"><div className="readonly-cell">{derived?.incomeItem ? "N.A." : formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
                 extraData: <td key="extraData"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.extraData || 0)}</div></td>,
               } satisfies Record<InvestmentColumnId, ReactElement>;
@@ -5131,14 +5136,15 @@ export default function App() {
     const proposedPercent = normalizeRate(proposedTicker?.percentReturn ?? row.newPercent);
     const effectivePercent = isRowWhatIfActive ? proposedPercent || currentPercent : currentPercent;
     const importedYearlyIncome = toNumber(row.yearlyIncome);
+    const accountKey = normalizeLookupKey(row.account);
+    const account = accountMap[accountKey];
+    const isW2IncomeAccount = isW2AccountType(account?.accountType || inferAccountTypeFromAccountName(row.account));
     const assetType = String(effectiveTicker?.assetType || "");
-    const incomeItem = isIncomeAssetType(assetType) || (!assetType && Boolean(effectiveTicker?.incomeItem)) || (totalInvestment === 0 && importedYearlyIncome !== 0);
+    const incomeItem = isW2IncomeAccount || isIncomeAssetType(assetType) || (!assetType && Boolean(effectiveTicker?.incomeItem)) || (totalInvestment === 0 && importedYearlyIncome !== 0);
     const yearlyIncome = incomeItem ? importedYearlyIncome : totalInvestment * effectivePercent;
     const monthlyIncome = yearlyIncome / 12;
     const filteredIncome = row.includeIncome ? yearlyIncome : 0;
     const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
-    const accountKey = normalizeLookupKey(row.account);
-    const account = accountMap[accountKey];
     const includeInAfterTaxIncome = normalizeYesNo(account?.includeInFreeCashflow ?? "yes") === "yes";
     const displayYearlyIncome = includeInAfterTaxIncome ? yearlyIncome : 0;
     const displayMonthlyIncome = displayYearlyIncome / 12;
@@ -5149,7 +5155,7 @@ export default function App() {
     const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
     const currentTaxTreatment = String(currentTicker?.taxTreatment || "income").toLowerCase();
     const proposedTaxTreatment = String(proposedTicker?.taxTreatment || "income").toLowerCase();
-    const taxTreatment = String(effectiveTicker?.taxTreatment || "income").toLowerCase();
+    const taxTreatment = isW2IncomeAccount ? "income" : String(effectiveTicker?.taxTreatment || "income").toLowerCase();
     const investmentType = String(effectiveTicker?.category || "").toLowerCase();
     const extraData = toNumber(effectiveTicker?.extraData || 0);
     const taxableMonthlyBase = isTaxableAccount && row.includeIncome ? filteredIncome / 12 : 0;
@@ -5160,7 +5166,8 @@ export default function App() {
     const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false);
     const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true);
     const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode);
-    const nonInvestmentIncome = ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0;
+    const w2Income = isW2IncomeAccount ? filteredIncome : 0;
+    const nonInvestmentIncome = isW2IncomeAccount || ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0;
     const displayNonInvestmentIncome = includeInAfterTaxIncome ? nonInvestmentIncome : 0;
     return {
       ...row,
@@ -5188,6 +5195,7 @@ export default function App() {
       displayOrdinaryMonthly,
       displayPreferredMonthly,
       displayStateMonthly,
+      w2Income,
       nonTaxableMonthly: !isTaxableAccount && row.includeIncome ? monthlyIncome : 0,
       nonInvestmentIncome,
       displayNonInvestmentIncome,
@@ -5214,6 +5222,7 @@ export default function App() {
     acc.displayFederalOrdinary += row.displayOrdinaryMonthly * 12;
     acc.displayFederalPreferred += row.displayPreferredMonthly * 12;
     acc.displayStateTaxable += row.displayStateMonthly * 12;
+    acc.w2Income += row.w2Income;
     acc.nonTaxableIncome += row.nonTaxableMonthly * 12;
     acc.nonInvestmentIncome += row.nonInvestmentIncome;
     acc.displayNonInvestmentIncome += row.displayNonInvestmentIncome;
@@ -5228,7 +5237,7 @@ export default function App() {
     acc.realEstate += row.realEstate;
     acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestmentAmount: 0, totalIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
+  }, { totalInvestmentAmount: 0, totalIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
@@ -5250,7 +5259,7 @@ export default function App() {
   const extraW2WhatIfTotal = sumW2TaxWhatIfItems(federalSettings.extraOrdinaryItems);
   const effectiveExtraOrdinaryIncome = isFederalTaxWhatIfOpen ? extraOrdinaryWhatIfTotal : 0;
   const effectiveExtraPreferredIncome = isFederalTaxWhatIfOpen ? extraPreferredWhatIfTotal : 0;
-  const effectiveW2Income = isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0;
+  const effectiveW2Income = flows.w2Income + (isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0);
   const w2PayrollTax = calculateW2PayrollTax(effectiveW2Income, federalSettings.filingStatus, selectedStateCode);
   const effectiveExtraStateIncome = isStateTaxWhatIfOpen ? stateSettings.extraStateIncome : 0;
   const ordinaryBeforeDeductions = flows.federalOrdinary + effectiveExtraOrdinaryIncome;
