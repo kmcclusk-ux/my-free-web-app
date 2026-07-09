@@ -3943,6 +3943,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const previousWhatIfActiveRef = useRef(isWhatIfActive);
+  const [isWhatIfRevealAnimating, setIsWhatIfRevealAnimating] = useState(false);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   useEffect(() => {
@@ -4336,7 +4338,33 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     "sheet-table",
     "sheet-table--compact",
     "sheet-table--workbook",
+    isWhatIfRevealAnimating ? "sheet-table--what-if-reveal" : "",
   ].filter(Boolean).join(" ");
+
+  useEffect(() => {
+    const wasWhatIfActive = previousWhatIfActiveRef.current;
+    previousWhatIfActiveRef.current = isWhatIfActive;
+    if (!isWhatIfActive || wasWhatIfActive) return;
+
+    const scrollContainer = tableScrollRef.current;
+    if (!scrollContainer) return;
+
+    const revealStart = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => {
+      const group = "group" in column ? column.group : undefined;
+      if (group === "override") return sum;
+      if (group === "tax" || group === "debug") return sum;
+      return sum + columnWidths[column.id];
+    }, 0);
+
+    setIsWhatIfRevealAnimating(true);
+    window.setTimeout(() => setIsWhatIfRevealAnimating(false), 900);
+    window.requestAnimationFrame(() => {
+      scrollContainer.scrollTo({
+        left: Math.max(0, revealStart - 28),
+        behavior: "smooth",
+      });
+    });
+  }, [columnWidths, isWhatIfActive]);
 
   return (
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When WhatIf is checked, the new asset and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>

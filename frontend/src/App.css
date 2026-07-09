@@ -3387,6 +3387,28 @@
   table-layout: fixed;
   width: max-content;
   min-width: 2456px;
+  transition: width 260ms ease, min-width 260ms ease;
+}
+
+.investments-workspace .sheet-table--what-if-reveal .investment-column--override {
+  animation: what-if-column-reveal 860ms ease-out both;
+}
+
+@keyframes what-if-column-reveal {
+  0% {
+    background-color: rgba(255, 244, 214, .98);
+    box-shadow: inset 0 0 0 999px rgba(255, 255, 255, .18);
+    transform: translateX(-8px);
+  }
+  55% {
+    background-color: rgba(255, 214, 102, .44);
+    box-shadow: inset 0 0 0 999px rgba(255, 235, 165, .16);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+    transform: translateX(0);
+  }
 }
 
 .investments-workspace .sheet-table--workbook.sheet-table--hide-override {
