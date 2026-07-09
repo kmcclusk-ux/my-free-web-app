@@ -4383,7 +4383,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__icon" aria-hidden="true">{isWhatIfActive ? "✦" : "▸"}</span>
             <span className="investment-what-if-toggle__label">WhatIf</span>
-            <span className="investment-what-if-toggle__state">{isWhatIfActive ? "Open" : "Closed"}</span>
+            <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "WhatIf columns open" : "WhatIf columns closed"} title={isWhatIfActive ? "WhatIf open" : "WhatIf closed"}>{isWhatIfActive ? "✓" : "○"}</span>
           </button>
         </div>
       </div>
