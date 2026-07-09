@@ -4381,7 +4381,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         )}
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
-            WhatIf
+            <span className="investment-what-if-toggle__icon" aria-hidden="true">{isWhatIfActive ? "✦" : "▸"}</span>
+            <span className="investment-what-if-toggle__label">WhatIf</span>
+            <span className="investment-what-if-toggle__state">{isWhatIfActive ? "Open" : "Closed"}</span>
           </button>
         </div>
       </div>

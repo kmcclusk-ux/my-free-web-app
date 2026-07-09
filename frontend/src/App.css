@@ -3255,35 +3255,79 @@
 .investment-what-if-toggle {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   width: fit-content;
-  min-height: 28px;
-  padding: 4px 9px;
-  border: 1px solid rgba(24,49,58,.2);
-  border-radius: 8px;
-  background: #fff8e7;
-  color: #7a5417;
+  min-height: 42px;
+  padding: 8px 12px 8px 10px;
+  border: 1px solid rgba(116, 82, 20, .22);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(255, 248, 227, .96), rgba(244, 232, 202, .92));
+  color: #714612;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .82), 0 8px 20px rgba(76, 50, 14, .08);
   cursor: pointer;
-  font-size: .72rem;
-  font-weight: 850;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .02em;
   line-height: 1;
   user-select: none;
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease, transform 180ms ease;
 }
 
-.investment-what-if-toggle::before {
-  content: "▸";
-  margin-right: 6px;
-  font-size: .75rem;
-  transition: transform 160ms ease;
+.investment-what-if-toggle__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(113, 70, 18, .12);
+  color: #87530f;
+  font-size: .82rem;
+  line-height: 1;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease;
 }
 
-.investment-what-if-toggle--open::before {
-  transform: rotate(90deg);
+.investment-what-if-toggle__label {
+  font-size: .86rem;
+}
+
+.investment-what-if-toggle__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(113, 70, 18, .10);
+  color: #714612;
+  font-size: .62rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.investment-what-if-toggle--open {
+  border-color: rgba(34, 131, 107, .42);
+  background: linear-gradient(135deg, rgba(29, 131, 107, .98), rgba(28, 96, 133, .94));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), 0 14px 28px rgba(21, 94, 117, .24);
+}
+
+.investment-what-if-toggle--open .investment-what-if-toggle__icon {
+  transform: rotate(90deg) scale(1.05);
+  background: rgba(255, 255, 255, .22);
+  color: #fff7d6;
+}
+
+.investment-what-if-toggle--open .investment-what-if-toggle__state {
+  background: rgba(255, 255, 255, .22);
+  color: #fff;
 }
 
 .investment-what-if-toggle:hover,
 .investment-what-if-toggle:focus-visible {
-  border-color: rgba(122,84,23,.38);
-  background: #fff3d1;
+  transform: translateY(-1px);
+  border-color: rgba(153, 97, 23, .36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 12px 26px rgba(76, 50, 14, .14);
   outline: none;
 }
 
