@@ -3331,6 +3331,28 @@
   outline: none;
 }
 
+.what-if-new-asset-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.what-if-inactive-note {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid rgba(180, 83, 9, .22);
+  border-radius: 999px;
+  background: rgba(255, 251, 235, .96);
+  color: #92400e;
+  font-size: .54rem;
+  font-weight: 850;
+  line-height: 1.15;
+  white-space: normal;
+}
+
 .state-flag-select {
   position: relative;
   min-width: 184px;
