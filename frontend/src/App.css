@@ -3332,14 +3332,14 @@
 }
 
 .investments-workspace .sheet-table--workbook td.investment-column--what-if-different {
-  background: linear-gradient(135deg, rgba(255, 246, 214, .98), rgba(255, 222, 146, .88)) !important;
-  box-shadow: inset 0 0 0 2px rgba(217, 119, 6, .42), 0 0 0 1px rgba(255, 255, 255, .72);
+  background: linear-gradient(135deg, rgba(254, 226, 226, .98), rgba(252, 165, 165, .82)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .56);
 }
 
 .investments-workspace .sheet-table--workbook td.investment-column--what-if-different :is(.asset-picker__trigger, select, input, .readonly-cell) {
-  border-color: rgba(217, 119, 6, .45) !important;
-  background: rgba(255, 251, 235, .98) !important;
-  box-shadow: inset 0 0 0 1px rgba(217, 119, 6, .20), 0 6px 14px rgba(146, 64, 14, .10);
+  border-color: rgba(239, 68, 68, .28) !important;
+  background: rgba(255, 241, 242, .98) !important;
+  box-shadow: none;
 }
 
 .state-flag-select {
