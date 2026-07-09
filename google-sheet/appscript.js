@@ -800,13 +800,114 @@ function normalizeTickerExportRecord_(record) {
   }
 }
 
-function sheetToRowObjects_(sheet, normalizeRecord, stopAtBlankRow) {
+function normalizeCategoryExportRecord_(record) {
+  var name = firstExportValue_(record, ['name', 'category', 'asset_class', 'assetclass', 'label', 'col_1']);
+  if (!exportValueIsBlank_(name)) {
+    record.name = name;
+    record.category = name;
+    record.label = name;
+  }
+}
+
+function normalizeTaxTreatmentExportRecord_(record) {
+  var label = firstExportValue_(record, ['label', 'tax_treatment', 'taxtreatment', 'tax_status', 'status', 'col_1']);
+  if (!exportValueIsBlank_(label)) {
+    record.label = label;
+    record.tax_treatment = label;
+  }
+}
+
+function normalizeAccountTaxTypeExportRecord_(record) {
+  var taxStatus = firstExportValue_(record, ['tax_status', 'taxStatus', 'tax_category', 'account_tax_category', 'status', 'col_1']);
+  if (!exportValueIsBlank_(taxStatus)) {
+    record.tax_status = taxStatus;
+    record.taxStatus = taxStatus;
+  }
+}
+
+function inferExportAccountTypeTaxStatus_(name) {
+  var key = String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!key) return '';
+  if (key.indexOf('w2') >= 0 || key.indexOf('wage') >= 0) return 'taxable';
+  if (key.indexOf('401') >= 0 || key.indexOf('ira') >= 0) return 'deferred';
+  if (key.indexOf('brokerage') >= 0) return 'taxable';
+  return '';
+}
+
+function normalizeAccountTypeExportRecord_(record) {
+  var name = firstExportValue_(record, ['name', 'accountType', 'account_type', 'accounttype', 'type', 'label', 'col_1']);
+  var taxStatus = firstExportValue_(record, ['tax_status', 'taxStatus', 'tax_treatment', 'status', 'col_2']);
+  if (!exportValueIsBlank_(name)) {
+    record.name = name;
+    record.accountType = name;
+    record.account_type = name;
+  }
+  if (exportValueIsBlank_(taxStatus)) {
+    taxStatus = inferExportAccountTypeTaxStatus_(name);
+  }
+  if (!exportValueIsBlank_(taxStatus)) {
+    record.tax_status = taxStatus;
+    record.taxStatus = taxStatus;
+  }
+}
+
+function normalizeAccountExportRecord_(record) {
+  var account = firstExportValue_(record, ['account', 'account_name', 'account_names', 'acct', 'accnt', 'col_1']);
+  var accountType = firstExportValue_(record, ['account_type', 'accountType', 'accounttype', 'type', 'acct_type', 'col_2']);
+  var taxStatus = firstExportValue_(record, ['tax_status', 'taxStatus', 'tax_treatment', 'status', 'col_3']);
+  var dividendAccrued = firstExportValue_(record, ['dividend_accrued', 'dividendAccrued', 'dividend_accrual', 'col_4']);
+  var excludeAfterTax = firstExportValue_(record, [
+    'exclude_from_aftertax_income',
+    'exclude_from_after_tax_income',
+    'exclude_aftertax_income',
+    'exclude_after_tax_income',
+    'excluded_from_aftertax_income',
+    'include_in_free_cashflow',
+    'includeInFreeCashflow',
+    'include_in_free_cash_flow',
+    'include',
+    'col_5'
+  ]);
+
+  if (!exportValueIsBlank_(account)) {
+    record.account = account;
+    record.account_name = account;
+  }
+  if (!exportValueIsBlank_(accountType)) {
+    record.account_type = accountType;
+    record.accountType = accountType;
+  }
+  if (!exportValueIsBlank_(taxStatus)) {
+    record.tax_status = taxStatus;
+    record.taxStatus = taxStatus;
+  }
+  if (!exportValueIsBlank_(dividendAccrued)) {
+    record.dividend_accrued = dividendAccrued;
+    record.dividendAccrued = dividendAccrued;
+  }
+  if (!exportValueIsBlank_(excludeAfterTax)) {
+    var headerSaysExclude = !exportValueIsBlank_(firstExportValue_(record, [
+      'exclude_from_aftertax_income',
+      'exclude_from_after_tax_income',
+      'exclude_aftertax_income',
+      'exclude_after_tax_income',
+      'excluded_from_aftertax_income'
+    ]));
+    var includeValue = headerSaysExclude ? !exportBoolean_(excludeAfterTax) : exportBoolean_(excludeAfterTax);
+    record.include_in_free_cashflow = includeValue ? 'yes' : 'no';
+    record.includeInFreeCashflow = includeValue ? 'yes' : 'no';
+  }
+}
+
+function sheetToRowObjects_(sheet, normalizeRecord, options) {
   if (!sheet) return [];
 
   var values = sheet.getDataRange().getDisplayValues();
   if (!values || values.length < 2) return [];
 
+  options = options || {};
   var headers = values[0].map(normalizeExportHeader_);
+  var stopColumnIndex = typeof options.stopOnBlankColumn === 'number' ? options.stopOnBlankColumn : -1;
   var descIndex = headers.indexOf('desc');
   if (descIndex < 0) {
     descIndex = headers.indexOf('description');
@@ -815,6 +916,9 @@ function sheetToRowObjects_(sheet, normalizeRecord, stopAtBlankRow) {
 
   for (var r = 1; r < values.length; r++) {
     var row = values[r];
+    if (stopColumnIndex >= 0 && String(row[stopColumnIndex] || '').trim() === '') {
+      break;
+    }
     if (descIndex >= 0) {
       var descValue = String(row[descIndex] || '').trim().toUpperCase();
       if (descValue === 'END') break;
@@ -824,10 +928,7 @@ function sheetToRowObjects_(sheet, normalizeRecord, stopAtBlankRow) {
       return String(cell || '').trim() !== '';
     });
 
-    if (!hasData) {
-      if (stopAtBlankRow) break;
-      continue;
-    }
+    if (!hasData) continue;
 
     var record = {};
     for (var c = 0; c < headers.length; c++) {
@@ -959,37 +1060,158 @@ function getSheetByNames_(spreadsheet, names) {
   return null;
 }
 
+function parseExportString_(value) {
+  if (exportValueIsBlank_(value)) return undefined;
+  return String(value).trim();
+}
+
+function findExportRowValue_(rows, labels) {
+  if (!rows) return undefined;
+  var labelMap = {};
+  for (var i = 0; i < labels.length; i++) {
+    labelMap[String(labels[i]).trim().toLowerCase()] = true;
+  }
+  for (var r = 0; r < rows.length; r++) {
+    var row = rows[r];
+    for (var c = 0; c < row.length; c++) {
+      var cell = String(row[c] || '').trim().toLowerCase();
+      if (!labelMap[cell]) continue;
+      for (var next = c + 1; next < row.length; next++) {
+        if (!exportValueIsBlank_(row[next])) return row[next];
+      }
+    }
+  }
+  return undefined;
+}
+
+function exportFilingStatus_(value) {
+  var text = String(value || '').trim().toLowerCase();
+  if (!text) return undefined;
+  if (text === 'mfj' || text.indexOf('joint') >= 0) return 'mfj';
+  if (text === 'mfs' || text.indexOf('separate') >= 0) return 'mfs';
+  if (text === 'hoh' || text.indexOf('head') >= 0) return 'hoh';
+  if (text === 'single') return 'single';
+  return text;
+}
+
+function exportDeductionMode_(value) {
+  var text = String(value || '').trim().toLowerCase();
+  if (!text) return undefined;
+  if (text.indexOf('item') >= 0) return 'itemized';
+  return 'standard';
+}
+
+function rowsToAmountTypeItems_(sheet, amountKeys, typeKeys, defaultType) {
+  var rows = sheetToRowObjects_(sheet, null, { stopOnBlankColumn: 0 });
+  var items = [];
+  for (var i = 0; i < rows.length; i++) {
+    var record = rows[i];
+    var amount = firstExportValue_(record, amountKeys.concat(['amount', 'col_1']));
+    var type = firstExportValue_(record, typeKeys.concat(['income_type', 'deduction_type', 'type', 'col_2']));
+    if (exportValueIsBlank_(amount) && exportValueIsBlank_(type)) continue;
+    items.push({
+      id: Number(record.id) || i + 1,
+      amount: exportNumber_(amount),
+      incomeType: parseExportString_(type) || defaultType,
+      deductionType: parseExportString_(type) || defaultType
+    });
+  }
+  return items;
+}
+
+function buildFederalSettingsExport_(federalSheet, extraOrdinarySheet, extraPreferredSheet, aboveLineSheet, itemizedSheet) {
+  var rows = sheetToMatrix_(federalSheet);
+  var settings = {
+    sheetName: federalSheet ? federalSheet.getName() : null,
+    rows: rows
+  };
+  var filingStatus = exportFilingStatus_(findExportRowValue_(rows, ['Filing status', 'Filing Status']));
+  var deductionMode = exportDeductionMode_(findExportRowValue_(rows, ['Deduction mode', 'Deduction Method', 'Federal deduction method']));
+  var mortgageInterest = findExportRowValue_(rows, ['Mortgage interest', 'Mortgage Interest']);
+  var propertyTax = findExportRowValue_(rows, ['Property tax', 'Property Tax']);
+  var standardDeduction = findExportRowValue_(rows, ['Standard deduction', 'Standard Deduction']);
+  var saltCap = findExportRowValue_(rows, ['SALT cap', 'SALT Cap']);
+  var extraOrdinaryIncome = findExportRowValue_(rows, ['Extra ordinary income', 'Extra Ordinary Income']);
+  var extraPreferredIncome = findExportRowValue_(rows, ['Extra preferred income', 'Extra Preferred Income']);
+
+  if (filingStatus) settings.filingStatus = filingStatus;
+  if (deductionMode) settings.deductionMode = deductionMode;
+  if (!exportValueIsBlank_(mortgageInterest)) settings.mortgageInterest = exportNumber_(mortgageInterest);
+  if (!exportValueIsBlank_(propertyTax)) settings.propertyTax = exportNumber_(propertyTax);
+  if (!exportValueIsBlank_(standardDeduction)) settings.standardDeduction = exportNumber_(standardDeduction);
+  if (!exportValueIsBlank_(saltCap)) settings.saltCap = exportNumber_(saltCap);
+  if (!exportValueIsBlank_(extraOrdinaryIncome)) settings.extraOrdinaryIncome = exportNumber_(extraOrdinaryIncome);
+  if (!exportValueIsBlank_(extraPreferredIncome)) settings.extraPreferredIncome = exportNumber_(extraPreferredIncome);
+
+  var extraOrdinaryItems = rowsToAmountTypeItems_(extraOrdinarySheet, ['ordinary_amount'], ['ordinary_type'], 'W2 wages')
+    .map(function(item) { return { id: item.id, amount: item.amount, incomeType: item.incomeType }; });
+  var extraPreferredItems = rowsToAmountTypeItems_(extraPreferredSheet, ['preferred_amount'], ['preferred_type'], 'Long-term capital gains')
+    .map(function(item) { return { id: item.id, amount: item.amount, incomeType: item.incomeType }; });
+  var aboveLineItems = rowsToAmountTypeItems_(aboveLineSheet, ['deduction_amount'], ['deduction_type'], '')
+    .map(function(item) { return { id: item.id, amount: item.amount, deductionType: item.deductionType }; });
+  var deductionItems = rowsToAmountTypeItems_(itemizedSheet, ['deduction_amount'], ['deduction_type'], '')
+    .map(function(item) { return { id: item.id, amount: item.amount, deductionType: item.deductionType }; });
+
+  if (extraOrdinaryItems.length) settings.extraOrdinaryItems = extraOrdinaryItems;
+  if (extraPreferredItems.length) settings.extraPreferredItems = extraPreferredItems;
+  if (aboveLineItems.length) settings.aboveLineDeductionItems = aboveLineItems;
+  if (deductionItems.length) settings.deductionItems = deductionItems;
+
+  return settings;
+}
+
+function buildStateSettingsExport_(stateSheet) {
+  var rows = sheetToMatrix_(stateSheet);
+  var settings = {
+    sheetName: stateSheet ? stateSheet.getName() : null,
+    rows: rows
+  };
+  var stateCode = findExportRowValue_(rows, ['State', 'State code', 'State Code']);
+  var extraStateIncome = findExportRowValue_(rows, ['Extra state income', 'Extra State Income']);
+  var mortgageInterest = findExportRowValue_(rows, ['Mortgage interest', 'Mortgage Interest']);
+  var propertyTax = findExportRowValue_(rows, ['Property tax', 'Property Tax']);
+  var standardDeduction = findExportRowValue_(rows, ['Standard deduction', 'Standard Deduction']);
+
+  if (!exportValueIsBlank_(stateCode)) settings.stateCode = String(stateCode).trim().slice(0, 2).toUpperCase();
+  if (!exportValueIsBlank_(extraStateIncome)) settings.extraStateIncome = exportNumber_(extraStateIncome);
+  if (!exportValueIsBlank_(mortgageInterest)) settings.mortgageInterest = exportNumber_(mortgageInterest);
+  if (!exportValueIsBlank_(propertyTax)) settings.propertyTax = exportNumber_(propertyTax);
+  if (!exportValueIsBlank_(standardDeduction)) settings.standardDeduction = exportNumber_(standardDeduction);
+
+  return settings;
+}
+
 function collectWorkbookExportPayload_() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
 
   var investmentsSheet = getSheetByNames_(spreadsheet, ['investments', 'Investments']);
   var tickersSheet = getSheetByNames_(spreadsheet, ['Assets', 'assets', 'tickers', 'Tickers']);
+  var categoriesSheet = getSheetByNames_(spreadsheet, ['Asset Classes', 'asset classes', 'Asset Class', 'asset class', 'categories', 'Categories']);
   var taxTreatmentSheet = getSheetByNames_(spreadsheet, ['tax treatment', 'Tax Treatment', 'tax-treatment', 'Tax-Treatment', 'tax_treatment', 'TaxTreatment', 'taxTreatment']);
   var accountsSheet = getSheetByNames_(spreadsheet, ['accounts', 'Accounts']);
-  var accountTaxTypeSheet = getSheetByNames_(spreadsheet, ['account tax type', 'Account Tax Type']);
-  var investmentTypeSheet = getSheetByNames_(spreadsheet, ['investment type', 'Investment Type']);
+  var accountTaxTypeSheet = getSheetByNames_(spreadsheet, ['Account Tax Category', 'account tax category', 'account tax type', 'Account Tax Type']);
+  var accountTypeSheet = getSheetByNames_(spreadsheet, ['Account Type', 'account type', 'Account Types', 'account types']);
   var federalSheet = getSheetByNames_(spreadsheet, ['Federal Tax', 'federal tax']);
   var stateSheet = getSheetByNames_(spreadsheet, ['State Tax', 'state tax']);
   var plannerSheet = getSheetByNames_(spreadsheet, ['tax-calculator', 'Tax Calculator', 'tax calculator']);
+  var extraOrdinarySheet = getSheetByNames_(spreadsheet, ['Federal Extra Ordinary Income', 'Extra Ordinary Income', 'extra ordinary income']);
+  var extraPreferredSheet = getSheetByNames_(spreadsheet, ['Federal Extra Preferred Income', 'Extra Preferred Income', 'extra preferred income']);
+  var aboveLineSheet = getSheetByNames_(spreadsheet, ['Federal Above Line Deductions', 'Above Line Deductions', 'Standard Deduction Deductions']);
+  var itemizedSheet = getSheetByNames_(spreadsheet, ['Federal Itemized Deductions', 'Itemized Deductions', 'Deductions']);
 
   return {
     tabs: {
       investments: sheetToRowObjectsFromLine8UntilEndDescription_(investmentsSheet),
-      tickers: sheetToRowObjects_(tickersSheet, normalizeTickerExportRecord_, true),
-      taxTreatment: sheetToRowObjects_(taxTreatmentSheet),
-      accounts: sheetToRowObjects_(accountsSheet),
-      accountTaxType: sheetToRowObjects_(accountTaxTypeSheet),
-      investmentType: sheetToRowObjects_(investmentTypeSheet)
+      tickers: sheetToRowObjects_(tickersSheet, normalizeTickerExportRecord_, { stopOnBlankColumn: 0 }),
+      categories: sheetToRowObjects_(categoriesSheet, normalizeCategoryExportRecord_, { stopOnBlankColumn: 0 }),
+      taxTreatment: sheetToRowObjects_(taxTreatmentSheet, normalizeTaxTreatmentExportRecord_, { stopOnBlankColumn: 0 }),
+      accounts: sheetToRowObjects_(accountsSheet, normalizeAccountExportRecord_, { stopOnBlankColumn: 0 }),
+      accountTaxType: sheetToRowObjects_(accountTaxTypeSheet, normalizeAccountTaxTypeExportRecord_, { stopOnBlankColumn: 0 }),
+      accountType: sheetToRowObjects_(accountTypeSheet, normalizeAccountTypeExportRecord_, { stopOnBlankColumn: 0 })
     },
       settings: {
-        federal: {
-        sheetName: federalSheet ? federalSheet.getName() : null,
-        rows: sheetToMatrix_(federalSheet)
-      },
-      state: {
-        sheetName: stateSheet ? stateSheet.getName() : null,
-        rows: sheetToMatrix_(stateSheet)
-      },
+        federal: buildFederalSettingsExport_(federalSheet, extraOrdinarySheet, extraPreferredSheet, aboveLineSheet, itemizedSheet),
+      state: buildStateSettingsExport_(stateSheet),
       planner: {
         sheetName: plannerSheet ? plannerSheet.getName() : null,
         rows: sheetToMatrix_(plannerSheet)
@@ -999,10 +1221,11 @@ function collectWorkbookExportPayload_() {
         sheets: {
           investments: sheetToFormulaSnapshot_(investmentsSheet),
           tickers: sheetToFormulaSnapshot_(tickersSheet),
+          categories: sheetToFormulaSnapshot_(categoriesSheet),
           taxTreatment: sheetToFormulaSnapshot_(taxTreatmentSheet),
           accounts: sheetToFormulaSnapshot_(accountsSheet),
           accountTaxType: sheetToFormulaSnapshot_(accountTaxTypeSheet),
-          investmentType: sheetToFormulaSnapshot_(investmentTypeSheet),
+          accountType: sheetToFormulaSnapshot_(accountTypeSheet),
           federal: sheetToFormulaSnapshot_(federalSheet),
           state: sheetToFormulaSnapshot_(stateSheet),
           planner: sheetToFormulaSnapshot_(plannerSheet)
