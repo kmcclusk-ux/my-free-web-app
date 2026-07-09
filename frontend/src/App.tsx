@@ -5107,9 +5107,11 @@ export default function App() {
 
         if (field === "newSymbol") {
           const nextSymbol = String(value || "").trim();
+          const hasNewWhatIfAsset = normalizeLookupKey(nextSymbol) !== "" && normalizeLookupKey(nextSymbol) !== normalizeLookupKey(row.symbol);
           return {
             ...row,
             newSymbol: nextSymbol,
+            overrideProposal: hasNewWhatIfAsset || row.overrideProposal,
             newPercent: overridePercentForSymbol(nextSymbol),
           };
         }
@@ -5157,7 +5159,8 @@ export default function App() {
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
     const currentTicker = isPlaceholderAssetSymbol(row.symbol) ? undefined : tickerMap[normalizeLookupKey(row.symbol)];
-    const isRowWhatIfActive = isWhatIfActive && row.overrideProposal;
+    const hasNewWhatIfAsset = normalizeLookupKey(row.newSymbol) !== "" && normalizeLookupKey(row.newSymbol) !== normalizeLookupKey(row.symbol);
+    const isRowWhatIfActive = isWhatIfActive && (row.overrideProposal || hasNewWhatIfAsset);
     const effectiveSymbol = isRowWhatIfActive && row.newSymbol ? row.newSymbol : row.symbol;
     const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
     const effectiveTicker = isPlaceholderAssetSymbol(effectiveSymbol) ? undefined : tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
