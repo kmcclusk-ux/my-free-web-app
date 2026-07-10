@@ -301,7 +301,7 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "realEstate", label: "Real estate", defaultWidth: 62, minWidth: 46, group: "tax" },
   { id: "bitcoin", label: "Bitcoin", defaultWidth: 50, minWidth: 40, group: "tax" },
   { id: "override", label: "WhatIf", defaultWidth: 30, minWidth: 26, group: "override" },
-  { id: "overrideSymbol", label: "New", defaultWidth: 88, minWidth: 68, group: "override" },
+  { id: "overrideSymbol", label: "New", defaultWidth: 104, minWidth: 84, group: "override" },
   { id: "overridePercent", label: "New %", defaultWidth: 48, minWidth: 38, group: "override" },
   { id: "usePercent", label: "Use %", defaultWidth: 44, minWidth: 36, group: "debug" },
   { id: "useSymbol", label: "Use asset", defaultWidth: 62, minWidth: 48, group: "debug" },
@@ -5135,6 +5135,26 @@ export default function App() {
     );
   };
 
+  const toggleInvestmentWhatIf = () => {
+    setIsWhatIfActive((current) => {
+      const nextActive = !current;
+      if (nextActive) {
+        setInvestments((rows) =>
+          rows.map((row) => {
+            const nextSymbol = String(row.newSymbol || row.symbol || "").trim();
+            if (!nextSymbol) return row;
+            return {
+              ...row,
+              newSymbol: nextSymbol,
+              newPercent: row.newPercent || overridePercentForSymbol(nextSymbol),
+            };
+          })
+        );
+      }
+      return nextActive;
+    });
+  };
+
   const splitInvestmentRow = (id: number, requestedAllocations: number[]) => {
     const investmentAmounts = requestedAllocations.slice(0, 20).map((amount) => Math.round(toNumber(amount) * 100) / 100);
     if (investmentAmounts.length < 2) return;
@@ -6830,7 +6850,7 @@ export default function App() {
             sort={investmentSort}
             selectedAssetIds={selectedInvestmentIds}
             isWhatIfActive={isWhatIfActive}
-            onToggleWhatIf={() => setIsWhatIfActive((current) => !current)}
+            onToggleWhatIf={toggleInvestmentWhatIf}
             onSaveFavorite={saveFavorite}
             onApplyFavorite={applyFavorite}
             onDeleteFavorite={deleteFavorite}
