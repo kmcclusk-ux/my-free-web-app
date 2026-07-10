@@ -270,47 +270,47 @@ const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
-const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths";
+const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths-compact-v2";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 84, minWidth: 82 },
-  { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 36, minWidth: 32 },
-  { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 30, minWidth: 28 },
-  { id: "account", label: "Account", defaultWidth: 150, minWidth: 96 },
-  { id: "symbol", label: "Asset", defaultWidth: 124, minWidth: 116 },
-  { id: "normalPercent", label: "Dividend", defaultWidth: 50, minWidth: 46 },
-  { id: "amount", label: "Investment", defaultWidth: 104, minWidth: 100 },
-  { id: "year", label: "Year", defaultWidth: 82, minWidth: 62 },
-  { id: "month", label: "Month", defaultWidth: 54, minWidth: 46 },
-  { id: "filtered", label: "Filtered", defaultWidth: 72, minWidth: 58, group: "debug" },
-  { id: "total", label: "Total", defaultWidth: 72, minWidth: 58, group: "debug" },
-  { id: "taxStatus", label: "Tax Status", defaultWidth: 78, minWidth: 62, group: "tax" },
-  { id: "ordinary", label: "Ordinary", defaultWidth: 66, minWidth: 54, group: "tax" },
-  { id: "preferred", label: "Preferred", defaultWidth: 70, minWidth: 54, group: "tax" },
-  { id: "state", label: "State", defaultWidth: 58, minWidth: 48, group: "tax" },
-  { id: "nonTaxable", label: "Non taxable", defaultWidth: 78, minWidth: 58, group: "tax" },
-  { id: "investmentType", label: "Inv. type", defaultWidth: 78, minWidth: 60, group: "tax" },
-  { id: "nonInvestmentIncome", label: "Non-invest income", defaultWidth: 82, minWidth: 62, group: "tax" },
-  { id: "cash", label: "Cash", defaultWidth: 58, minWidth: 48, group: "tax" },
-  { id: "stocks", label: "Stocks", defaultWidth: 62, minWidth: 48, group: "tax" },
-  { id: "preferredStock", label: "Preferred stock", defaultWidth: 78, minWidth: 58, group: "tax" },
-  { id: "bonds", label: "Bonds", defaultWidth: 62, minWidth: 48, group: "tax" },
-  { id: "muniBond", label: "Muni-bond", defaultWidth: 70, minWidth: 52, group: "tax" },
-  { id: "muniInterest", label: "Muni-int", defaultWidth: 66, minWidth: 52, group: "tax" },
-  { id: "businessDevelopment", label: "Bus dev", defaultWidth: 66, minWidth: 52, group: "tax" },
-  { id: "coveredCall", label: "Covered call", defaultWidth: 78, minWidth: 58, group: "tax" },
-  { id: "realEstate", label: "Real estate", defaultWidth: 76, minWidth: 56, group: "tax" },
-  { id: "bitcoin", label: "Bitcoin", defaultWidth: 62, minWidth: 48, group: "tax" },
-  { id: "override", label: "WhatIf", defaultWidth: 34, minWidth: 30, group: "override" },
-  { id: "overrideSymbol", label: "New", defaultWidth: 110, minWidth: 76, group: "override" },
-  { id: "overridePercent", label: "New %", defaultWidth: 58, minWidth: 48, group: "override" },
-  { id: "usePercent", label: "Use %", defaultWidth: 52, minWidth: 44, group: "debug" },
-  { id: "useSymbol", label: "Use asset", defaultWidth: 78, minWidth: 62, group: "debug" },
-  { id: "extraData", label: "$", defaultWidth: 62, minWidth: 48, group: "debug" },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 78, minWidth: 76 },
+  { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 30, minWidth: 28 },
+  { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 28, minWidth: 26 },
+  { id: "account", label: "Account", defaultWidth: 116, minWidth: 82 },
+  { id: "symbol", label: "Asset", defaultWidth: 86, minWidth: 70 },
+  { id: "normalPercent", label: "Dividend", defaultWidth: 48, minWidth: 38 },
+  { id: "amount", label: "Investment", defaultWidth: 82, minWidth: 70 },
+  { id: "year", label: "Year", defaultWidth: 68, minWidth: 52 },
+  { id: "month", label: "Month", defaultWidth: 58, minWidth: 44 },
+  { id: "filtered", label: "Filtered", defaultWidth: 58, minWidth: 46, group: "debug" },
+  { id: "total", label: "Total", defaultWidth: 58, minWidth: 44, group: "debug" },
+  { id: "taxStatus", label: "Tax Status", defaultWidth: 62, minWidth: 48, group: "tax" },
+  { id: "ordinary", label: "Ordinary", defaultWidth: 56, minWidth: 44, group: "tax" },
+  { id: "preferred", label: "Preferred", defaultWidth: 58, minWidth: 44, group: "tax" },
+  { id: "state", label: "State", defaultWidth: 48, minWidth: 40, group: "tax" },
+  { id: "nonTaxable", label: "Non taxable", defaultWidth: 62, minWidth: 46, group: "tax" },
+  { id: "investmentType", label: "Inv. type", defaultWidth: 60, minWidth: 46, group: "tax" },
+  { id: "nonInvestmentIncome", label: "Non-invest income", defaultWidth: 68, minWidth: 50, group: "tax" },
+  { id: "cash", label: "Cash", defaultWidth: 48, minWidth: 40, group: "tax" },
+  { id: "stocks", label: "Stocks", defaultWidth: 50, minWidth: 40, group: "tax" },
+  { id: "preferredStock", label: "Preferred stock", defaultWidth: 64, minWidth: 46, group: "tax" },
+  { id: "bonds", label: "Bonds", defaultWidth: 50, minWidth: 40, group: "tax" },
+  { id: "muniBond", label: "Muni-bond", defaultWidth: 56, minWidth: 42, group: "tax" },
+  { id: "muniInterest", label: "Muni-int", defaultWidth: 54, minWidth: 42, group: "tax" },
+  { id: "businessDevelopment", label: "Bus dev", defaultWidth: 54, minWidth: 42, group: "tax" },
+  { id: "coveredCall", label: "Covered call", defaultWidth: 64, minWidth: 46, group: "tax" },
+  { id: "realEstate", label: "Real estate", defaultWidth: 62, minWidth: 46, group: "tax" },
+  { id: "bitcoin", label: "Bitcoin", defaultWidth: 50, minWidth: 40, group: "tax" },
+  { id: "override", label: "WhatIf", defaultWidth: 30, minWidth: 26, group: "override" },
+  { id: "overrideSymbol", label: "New", defaultWidth: 88, minWidth: 68, group: "override" },
+  { id: "overridePercent", label: "New %", defaultWidth: 48, minWidth: 38, group: "override" },
+  { id: "usePercent", label: "Use %", defaultWidth: 44, minWidth: 36, group: "debug" },
+  { id: "useSymbol", label: "Use asset", defaultWidth: 62, minWidth: 48, group: "debug" },
+  { id: "extraData", label: "$", defaultWidth: 48, minWidth: 38, group: "debug" },
 ] as const;
 type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
 type InvestmentColumnWidths = Record<InvestmentColumnId, number>;
 function investmentColumnLabelWidth(label: string) {
-  return label ? Math.ceil(label.length * 6.8) + 24 : 26;
+  return label ? Math.ceil(label.length * 4.9) + 16 : 22;
 }
 
 function investmentColumnMinWidth(column: typeof INVESTMENT_COLUMN_DEFS[number]) {
