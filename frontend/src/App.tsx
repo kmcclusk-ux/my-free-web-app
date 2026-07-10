@@ -4295,6 +4295,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     "--investment-col-2-left": `${columnWidths.move}px`,
     "--investment-col-3-left": `${columnWidths.move + columnWidths.row}px`,
     "--investment-col-4-left": `${columnWidths.move + columnWidths.row + columnWidths.included}px`,
+    "--investment-col-5-left": `${columnWidths.move + columnWidths.row + columnWidths.included + columnWidths.account}px`,
+    "--investment-col-6-left": `${columnWidths.move + columnWidths.row + columnWidths.included + columnWidths.account + columnWidths.symbol}px`,
   } as CSSProperties;
   const handleColumnResizeStart = (event: ReactPointerEvent<HTMLButtonElement>, columnId: InvestmentColumnId) => {
     event.preventDefault();

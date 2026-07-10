@@ -3644,25 +3644,41 @@
 .investments-workspace .sheet-table--workbook td:nth-child(3) { left: var(--investment-col-3-left, 66px); }
 .investments-workspace .sheet-table--workbook th:nth-child(4),
 .investments-workspace .sheet-table--workbook td:nth-child(4) { left: var(--investment-col-4-left, 94px); }
-.investments-workspace .sheet-table--workbook tbody td:nth-child(5) {
-  position: static;
-  left: auto;
-  z-index: auto;
-  box-shadow: none;
+.investments-workspace .sheet-table--workbook th:nth-child(5),
+.investments-workspace .sheet-table--workbook td:nth-child(5) {
+  position: sticky;
+  left: var(--investment-col-5-left, 210px);
+  z-index: 5;
 }
-.investments-workspace .sheet-table--workbook th:nth-child(5) {
-  left: auto;
-  z-index: 4;
-  box-shadow: none;
+.investments-workspace .sheet-table--workbook th:nth-child(6),
+.investments-workspace .sheet-table--workbook td:nth-child(6) {
+  position: sticky;
+  left: var(--investment-col-6-left, 296px);
+  z-index: 5;
+  box-shadow: 8px 0 14px rgba(24,49,58,.06);
 }
-.investments-workspace .sheet-table--workbook tfoot td:nth-child(5) {
+.investments-workspace .sheet-table--workbook thead th:nth-child(5),
+.investments-workspace .sheet-table--workbook thead th:nth-child(6) {
+  z-index: 8;
+  background: rgba(228,239,241,.98);
+}
+.investments-workspace .sheet-table--workbook tbody td:nth-child(5),
+.investments-workspace .sheet-table--workbook tbody td:nth-child(6) {
+  background: var(--row-bg) !important;
+}
+.investments-workspace .sheet-table--workbook tfoot td:nth-child(5),
+.investments-workspace .sheet-table--workbook tfoot td:nth-child(6) {
   position: sticky;
   bottom: 0;
-  left: auto;
+  left: var(--investment-col-5-left, 210px);
   z-index: 8;
-  box-shadow: none;
+  background: rgba(255,250,232,.98) !important;
 }
-.investments-workspace .sheet-table--workbook tfoot :is(th, td):nth-child(-n+4) {
+.investments-workspace .sheet-table--workbook tfoot td:nth-child(6) {
+  left: var(--investment-col-6-left, 296px);
+  box-shadow: 8px 0 14px rgba(24,49,58,.06);
+}
+.investments-workspace .sheet-table--workbook tfoot :is(th, td):nth-child(-n+6) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
