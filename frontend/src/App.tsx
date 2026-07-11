@@ -2546,6 +2546,33 @@ function SnapshotToggleIcon({ type }: { type: "afterTax" | "beforeTax" | "monthl
   </svg>;
 }
 
+function WhatIfStateIcon({ isOpen }: { isOpen: boolean }) {
+  return (
+    <svg
+      className={`what-if-state-icon ${isOpen ? "what-if-state-icon--open" : "what-if-state-icon--closed"}`}
+      viewBox="0 0 44 26"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect className="what-if-state-icon__frame" x="1" y="1" width="42" height="24" rx="2.2" />
+      <rect className="what-if-state-icon__panel" x="4.5" y="4" width="11" height="18" rx="1.1" />
+      <rect className="what-if-state-icon__panel" x="28.5" y="4" width="11" height="18" rx="1.1" />
+      <path className="what-if-state-icon__split" d="M22 4 L22 22" />
+      {isOpen ? (
+        <>
+          <path className="what-if-state-icon__arrow" d="M20 13h-7.7v4.2L5 13l7.3-4.2V13H20z" />
+          <path className="what-if-state-icon__arrow" d="M24 13h7.7V8.8L39 13l-7.3 4.2V13H24z" />
+        </>
+      ) : (
+        <>
+          <path className="what-if-state-icon__arrow" d="M5 13h7.7V8.8L20 13l-7.3 4.2V13H5z" />
+          <path className="what-if-state-icon__arrow" d="M39 13h-7.7v4.2L24 13l7.3-4.2V13H39z" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function IncomeSnapshotControl({
   snapshot,
   deltas,
@@ -4385,7 +4412,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__icon" aria-hidden="true">{isWhatIfActive ? "✦" : "▸"}</span>
             <span className="investment-what-if-toggle__label">WhatIf</span>
-            <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "WhatIf columns open" : "WhatIf columns closed"} title={isWhatIfActive ? "WhatIf open" : "WhatIf closed"}>{isWhatIfActive ? "✓" : "○"}</span>
+            <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "WhatIf columns open" : "WhatIf columns closed"} title={isWhatIfActive ? "WhatIf open" : "WhatIf closed"}><WhatIfStateIcon isOpen={isWhatIfActive} /></span>
           </button>
         </div>
       </div>
@@ -7053,3 +7080,4 @@ export default function App() {
     </div>
   );
 }
+

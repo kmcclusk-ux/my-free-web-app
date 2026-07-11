@@ -3294,8 +3294,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 58px;
-  padding: 4px 8px;
+  min-width: 40px;
+  padding: 3px 6px;
   border-radius: 999px;
   background: rgba(113, 70, 18, .10);
   color: #714612;
@@ -3303,6 +3303,34 @@
   font-weight: 950;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+
+.what-if-state-icon {
+  display: block;
+  width: 34px;
+  height: 20px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18));
+}
+
+.what-if-state-icon__frame {
+  fill: #07090d;
+}
+
+.what-if-state-icon__panel {
+  fill: #ffffff;
+}
+
+.what-if-state-icon__arrow {
+  fill: #07090d;
+  stroke: #07090d;
+  stroke-linejoin: round;
+  stroke-width: .4;
+}
+
+.what-if-state-icon__split {
+  stroke: rgba(255, 255, 255, .38);
+  stroke-linecap: round;
+  stroke-width: 1.1;
 }
 
 .investment-what-if-toggle--open {
