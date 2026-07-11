@@ -1229,7 +1229,7 @@ function assetTaxToneLabel(tone: AssetTaxTone) {
   return "Federal and state taxable";
 }
 
-function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
+function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, resetToValue, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; resetToValue?: string; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -1239,6 +1239,8 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
   const selectedTone = taxToneForOption(value);
   const selectedAssetName = value.trim();
   const displayedValue = selectedAssetName || "No asset selected";
+  const resetAssetName = String(resetToValue || "").trim();
+  const showResetOption = resetAssetName !== "" && normalizeLookupKey(resetAssetName) !== normalizeLookupKey(value);
   const updateMenuPosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1309,6 +1311,18 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, d
                 </button>
             )}
           </div>
+          {showResetOption && (
+            <button
+              className="account-picker__option asset-picker__option"
+              type="button"
+              role="option"
+              aria-selected={false}
+              onClick={() => { onChange(resetAssetName); setIsOpen(false); }}
+            >
+              <span>Reset to {resetAssetName}</span>
+              <span className={`asset-tax-indicator asset-tax-indicator--${taxToneForOption(resetAssetName)}`} title={assetTaxToneLabel(taxToneForOption(resetAssetName))} aria-label={assetTaxToneLabel(taxToneForOption(resetAssetName))} />
+            </button>
+          )}
           {options.map((option) => {
             const tone = taxToneForOption(option);
             return (
@@ -4683,7 +4697,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 realEstate: <td key="realEstate"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.realEstate || 0)}</div></td>,
                 bitcoin: <td key="bitcoin"><div className="readonly-cell readonly-cell--money">{formatGridCurrency(derived?.bitcoin || 0)}</div></td>,
                 override: <td key="override" className="checkbox-cell investment-column--override">{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <input type="checkbox" checked={row.overrideProposal} onChange={(event) => onChange(row.id, "overrideProposal", event.target.checked)} />}</td>,
-                overrideSymbol: <td key="overrideSymbol" className={`investment-column--override ${hasDifferentWhatIfAsset ? "investment-column--what-if-different" : ""}`.trim()}>{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <div className="what-if-symbol-cell"><AssetSelect value={row.newSymbol || row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} />{hasDifferentWhatIfAsset && <span className="what-if-overridden-badge">Overridden</span>}</div>}</td>,
+                overrideSymbol: <td key="overrideSymbol" className={`investment-column--override ${hasDifferentWhatIfAsset ? "investment-column--what-if-different" : ""}`.trim()}>{derived?.incomeItem ? <div className="readonly-cell readonly-cell--text">N.A.</div> : <div className="what-if-symbol-cell"><AssetSelect value={row.newSymbol || row.symbol} options={symbolOptions} accountTaxStatus={rowTaxStatus} tickerMap={tickerMap} stateCode={stateCode} resetToValue={hasDifferentWhatIfAsset ? row.symbol : undefined} onChange={(value) => onChange(row.id, "newSymbol", value)} onJumpToAsset={onJumpToAsset} ariaLabel={`What-If asset for ${row.description || row.account || "investment row"}`} />{hasDifferentWhatIfAsset && <span className="what-if-overridden-badge">Overridden</span>}</div>}</td>,
                 overridePercent: <td key="overridePercent" className="investment-column--override"><div className="readonly-cell">{derived?.incomeItem ? "N.A." : formatPercent(derived?.newPercent || 0)}</div></td>,
                 usePercent: <td key="usePercent"><div className="readonly-cell">{derived?.incomeItem ? "N.A." : formatPercent(derived?.effectivePercent || 0)}</div></td>,
                 useSymbol: <td key="useSymbol"><div className="readonly-cell readonly-cell--text">{derived?.effectiveSymbol || ""}</div></td>,
@@ -5141,7 +5155,7 @@ export default function App() {
           return {
             ...row,
             newSymbol: nextSymbol,
-            overrideProposal: hasNewWhatIfAsset || row.overrideProposal,
+            overrideProposal: hasNewWhatIfAsset,
             newPercent: overridePercentForSymbol(nextSymbol),
           };
         }
