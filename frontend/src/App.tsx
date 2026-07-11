@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import "./App.css";
 
@@ -5179,17 +5179,19 @@ export default function App() {
 
   const toggleInvestmentWhatIf = () => {
     if (!isWhatIfActive) {
-      setInvestments((rows) =>
-        rows.map((row) => {
-          const nextSymbol = String(row.newSymbol || row.symbol || "").trim();
-          if (!nextSymbol) return row;
-          return {
-            ...row,
-            newSymbol: nextSymbol,
-            newPercent: row.newPercent || overridePercentForSymbol(nextSymbol),
-          };
-        })
-      );
+      flushSync(() => {
+        setInvestments((rows) =>
+          rows.map((row) => {
+            const nextSymbol = String(row.newSymbol || row.symbol || "").trim();
+            if (!nextSymbol) return row;
+            return {
+              ...row,
+              newSymbol: nextSymbol,
+              newPercent: row.newPercent || overridePercentForSymbol(nextSymbol),
+            };
+          })
+        );
+      });
     }
     setIsWhatIfActive((current) => !current);
   };
