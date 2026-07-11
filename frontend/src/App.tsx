@@ -5178,23 +5178,20 @@ export default function App() {
   };
 
   const toggleInvestmentWhatIf = () => {
-    setIsWhatIfActive((current) => {
-      const nextActive = !current;
-      if (nextActive) {
-        setInvestments((rows) =>
-          rows.map((row) => {
-            const nextSymbol = String(row.newSymbol || row.symbol || "").trim();
-            if (!nextSymbol) return row;
-            return {
-              ...row,
-              newSymbol: nextSymbol,
-              newPercent: row.newPercent || overridePercentForSymbol(nextSymbol),
-            };
-          })
-        );
-      }
-      return nextActive;
-    });
+    if (!isWhatIfActive) {
+      setInvestments((rows) =>
+        rows.map((row) => {
+          const nextSymbol = String(row.newSymbol || row.symbol || "").trim();
+          if (!nextSymbol) return row;
+          return {
+            ...row,
+            newSymbol: nextSymbol,
+            newPercent: row.newPercent || overridePercentForSymbol(nextSymbol),
+          };
+        })
+      );
+    }
+    setIsWhatIfActive((current) => !current);
   };
 
   const splitInvestmentRow = (id: number, requestedAllocations: number[]) => {
