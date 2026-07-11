@@ -4419,7 +4419,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__label">WhatIf</span>
-            <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "WhatIf columns open" : "WhatIf columns closed"} title={isWhatIfActive ? "WhatIf open" : "WhatIf closed"}><WhatIfStateIcon isOpen={isWhatIfActive} /></span>
+            <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "Click to close WhatIf columns" : "Click to open WhatIf columns"} title={isWhatIfActive ? "Close WhatIf columns" : "Open WhatIf columns"}><WhatIfStateIcon isOpen={!isWhatIfActive} /></span>
           </button>
         </div>
       </div>
