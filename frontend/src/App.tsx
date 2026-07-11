@@ -5429,7 +5429,7 @@ export default function App() {
       );
       const activeInvestments = authenticatedWorkbook && isStarterInvestmentSet(loadedInvestments) ? [] : loadedInvestments;
       setInvestments(activeInvestments);
-      setIsWhatIfActive(activeInvestments.some((row) => row.overrideProposal));
+      setIsWhatIfActive(false);
       setTickers(
         mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
       );
