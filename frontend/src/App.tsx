@@ -5221,8 +5221,7 @@ export default function App() {
 
   const derivedRows = useMemo<DerivedInvestmentRow[]>(() => investments.map((row) => {
     const currentTicker = isPlaceholderAssetSymbol(row.symbol) ? undefined : tickerMap[normalizeLookupKey(row.symbol)];
-    const hasNewWhatIfAsset = normalizeLookupKey(row.newSymbol) !== "" && normalizeLookupKey(row.newSymbol) !== normalizeLookupKey(row.symbol);
-    const isRowWhatIfActive = isWhatIfActive && (row.overrideProposal || hasNewWhatIfAsset);
+    const isRowWhatIfActive = isWhatIfActive && row.overrideProposal;
     const effectiveSymbol = isRowWhatIfActive && row.newSymbol ? row.newSymbol : row.symbol;
     const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
     const effectiveTicker = isPlaceholderAssetSymbol(effectiveSymbol) ? undefined : tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
