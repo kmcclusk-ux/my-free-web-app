@@ -23,15 +23,34 @@ function callTaxApi(payload) {
     } : {}
   };
 
-  var resp = UrlFetchApp.fetch(TAX_API_URL, options);
-  var code = resp.getResponseCode();
-  var text = resp.getContentText();
+  var maxAttempts = 6;
+  var resp;
+  var code;
+  var text;
+
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    resp = UrlFetchApp.fetch(TAX_API_URL, options);
+    code = resp.getResponseCode();
+    text = resp.getContentText();
+
+    if (code === 200) {
+      return JSON.parse(text);
+    }
+
+    if (code !== 429 && code !== 502 && code !== 503 && code !== 504) {
+      break;
+    }
+
+    if (attempt < maxAttempts) {
+      var retryAfter = Number(resp.getHeaders()["Retry-After"] || 0);
+      var delayMs = retryAfter > 0 ? retryAfter * 1000 : Math.min(30000, Math.pow(2, attempt - 1) * 1500);
+      Utilities.sleep(delayMs);
+    }
+  }
 
   if (code !== 200) {
     throw new Error("HTTP " + code + ": " + text);
   }
-
-  return JSON.parse(text);
 }
 
 /**
