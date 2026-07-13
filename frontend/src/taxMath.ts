@@ -99,8 +99,8 @@ export function federalCombinedTax2025({
   return { ordinaryTax, preferredTax, niit, tax: ordinaryTax + preferredTax + niit };
 }
 
-export function calculateDisplayedAfterTaxIncome(displayIncome: number, totalTax: number, excludedOnlyTax = 0) {
-  return displayIncome - Math.max(totalTax - excludedOnlyTax, 0);
+export function calculateDisplayedAfterTaxIncome(displayIncome: number, totalTax: number) {
+  return displayIncome - Math.max(totalTax, 0);
 }
 
 export type W2PayrollTaxComponent = {

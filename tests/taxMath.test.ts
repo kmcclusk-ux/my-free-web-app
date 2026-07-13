@@ -37,12 +37,12 @@ describe("frontend tax math helpers", () => {
     expect(result.tax).toBe(28478);
   });
 
-  test("displayed after-tax income subtracts only tax attributable to displayed income", () => {
-    expect(calculateDisplayedAfterTaxIncome(100000, 90000, 70000)).toBe(80000);
+  test("displayed after-tax income subtracts the full tax burden", () => {
+    expect(calculateDisplayedAfterTaxIncome(100000, 90000, 70000)).toBe(10000);
   });
 
-  test("displayed after-tax income does not go up when excluded-only tax exceeds total tax", () => {
-    expect(calculateDisplayedAfterTaxIncome(100000, 50000, 60000)).toBe(100000);
+  test("excluded-only tax never shields spendable income from total tax", () => {
+    expect(calculateDisplayedAfterTaxIncome(100000, 50000, 60000)).toBe(50000);
   });
 
   test("W2 payroll tax applies FICA caps and additional Medicare threshold", () => {
