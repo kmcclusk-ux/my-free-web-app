@@ -5380,6 +5380,17 @@ export default function App() {
   const niitThreshold = niitThresholdForStatus(federalSettings.filingStatus);
   const niitBase = Math.max(Math.min(netInvestmentIncome, Math.max(magi - niitThreshold, 0)), 0);
   const displayedFederalTaxableBeforeDeductions = flows.displayFederalOrdinary + flows.displayFederalPreferred;
+  const marginalFederalMarkers = federalOrdinaryRateMarkers[federalSettings.filingStatus];
+  const marginalStateMarkers = getStateTaxRateMarkers(selectedStateCode, federalSettings.filingStatus);
+  const marginalStateBaseRateLabel = getStateTaxBaseRateLabel(selectedStateCode, federalSettings.filingStatus);
+  const marginalCombinedBaseRateLabel = formatPercent(0.10 + rateLabelToDecimal(marginalStateBaseRateLabel));
+  const marginalCombinedTaxable = Math.max(federalTaxableAfterDeductions, stateTaxableAfterDeductions);
+  const marginalCombinedRateLabel = getReachedTaxRateLabel(
+    buildCombinedTaxRateMarkers(marginalFederalMarkers, marginalStateMarkers, selectedStateCode, selectedStateName, marginalStateBaseRateLabel, federalSettings.filingStatus),
+    marginalCombinedTaxable,
+    marginalCombinedBaseRateLabel
+  );
+  const marginalCombinedRate = rateLabelToDecimal(marginalCombinedRateLabel);
   const hasRealData = useMemo(
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
     [investments]
@@ -5876,6 +5887,13 @@ export default function App() {
       value: formatCurrency(isMonthlyIncomePrimary ? monthlyIncome : totalIncome),
       secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? totalIncome : monthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
       numericValue: isMonthlyIncomePrimary ? monthlyIncome : totalIncome,
+    },
+    {
+      label: "Marginal tax rate",
+      value: marginalCombinedRateLabel,
+      secondaryValue: `Fed + ${selectedStateCode}`,
+      numericValue: marginalCombinedRate,
+      deltaKind: "percent",
     },
     { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
