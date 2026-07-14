@@ -59,6 +59,22 @@
   font-size: .76rem;
   line-height: 1.05;
 }
+.app-top-nav .kpi-pill__main-line {
+  gap: 5px;
+}
+.app-top-nav .kpi-pill__value-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: rgba(255, 255, 255, .68);
+  font-size: .48rem;
+  font-weight: 780;
+  letter-spacing: .02em;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
 .app-top-nav .kpi-pill--primary strong {
   font-size: 1.08rem;
   font-weight: 920;
@@ -686,9 +702,29 @@
 .kpi-pill__value {
   display: inline-flex;
   align-items: baseline;
+  flex: 0 0 auto;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
+}
+.kpi-pill__main-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+.kpi-pill__value-label {
+  color: #62767a;
+  font-size: .62rem;
+  font-weight: 780;
+  letter-spacing: .02em;
+  line-height: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 .kpi-odometer-char,
 .kpi-odometer {

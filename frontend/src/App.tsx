@@ -2358,6 +2358,7 @@ function FederalAboveLineDeductionTable({ rows, summary, onChange }: { rows: Abo
 type KpiMetricConfig = {
   label: string;
   value: string;
+  valueLabel?: string;
   secondaryValue?: string;
   numericValue?: number;
   primary?: boolean;
@@ -2450,7 +2451,7 @@ function TumblingCurrency({ value, className = "" }: { value: number; className?
   );
 }
 
-function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge }: KpiMetricConfig) {
+function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
@@ -2490,7 +2491,10 @@ function KpiPill({ label, value, secondaryValue, numericValue, primary, deltaKin
   return (
     <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()} tabIndex={details ? 0 : undefined}>
       <span className="kpi-pill__label-line">{label}{badge}</span>
-      <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
+      <span className="kpi-pill__main-line">
+        <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
+        {valueLabel && <span className="kpi-pill__value-label">{valueLabel}</span>}
+      </span>
       {secondaryValue && <small>{secondaryValue}</small>}
       {formattedDelta && deltaValue !== null && (
         <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
@@ -5917,6 +5921,7 @@ export default function App() {
     {
       label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} after-tax income`,
       value: formatCurrency(isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome),
+      valueLabel: isMonthlyIncomePrimary ? "monthly after tax" : "annual after tax",
       secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? afterTaxIncome : afterTaxMonthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
       numericValue: isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome,
       primary: true,
@@ -5927,12 +5932,14 @@ export default function App() {
     {
       label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} income`,
       value: formatCurrency(isMonthlyIncomePrimary ? monthlyIncome : totalIncome),
+      valueLabel: isMonthlyIncomePrimary ? "monthly income" : "annual income",
       secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? totalIncome : monthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
       numericValue: isMonthlyIncomePrimary ? monthlyIncome : totalIncome,
     },
     {
       label: "Marginal tax rate",
       value: marginalCombinedRateLabel,
+      valueLabel: "marginal",
       secondaryValue: `Fed + ${selectedStateCode}`,
       numericValue: marginalCombinedRate,
       deltaKind: "percent",
@@ -5940,6 +5947,7 @@ export default function App() {
     {
       label: "Total investment",
       value: formatCurrency(flows.totalInvestmentAmount),
+      valueLabel: "invested",
       secondaryValue: `${formatPercent(portfolioAfterTaxYield)} after tax • ${formatPercent(portfolioBeforeTaxYield)} before tax yield`,
       numericValue: flows.totalInvestmentAmount,
       tone: "accent",
