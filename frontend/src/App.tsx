@@ -5414,6 +5414,8 @@ export default function App() {
     marginalCombinedTaxable,
     marginalCombinedBaseRateLabel
   );
+  const marginalFederalRateLabel = getReachedTaxRateLabel(marginalFederalMarkers, federalTaxableAfterDeductions, "10%");
+  const marginalStateRateLabel = marginalStateMarkers.length ? getReachedTaxRateLabel(marginalStateMarkers, stateTaxableAfterDeductions, marginalStateBaseRateLabel) : "0%";
   const marginalCombinedRate = rateLabelToDecimal(marginalCombinedRateLabel);
   const hasRealData = useMemo(
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
@@ -5590,6 +5592,7 @@ export default function App() {
   const afterTaxIncome = calculateDisplayedAfterTaxIncome(flows.displayIncome, totalTax);
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
+  const isMonthlyIncomePrimary = uiSettings.incomePrimaryPeriod === "monthly";
   const ordinaryBeforeDeductionsWithoutInvestments = Math.max(ordinaryBeforeDeductions - flows.investmentFederalOrdinary, 0);
   const preferredBeforeDeductionsWithoutInvestments = Math.max(preferredBeforeDeductions - flows.investmentFederalPreferred, 0);
   const grossFederalTaxableWithoutInvestments = ordinaryBeforeDeductionsWithoutInvestments + preferredBeforeDeductionsWithoutInvestments;
@@ -5688,6 +5691,74 @@ export default function App() {
         ))}
         <div><span>{selectedStateCode} W2 payroll withholding</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Total tax removed</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+      </div>
+    </div>
+  );
+  const incomeBreakdownDetails = (
+    <div className="tax-breakdown-popover">
+      <div className="tax-breakdown-popover__header">
+        <strong>Income breakdown</strong>
+        <span>Annual and monthly income before taxes from selected rows.</span>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Annual income</h4>
+        <div><span>Total included income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div><span>Investment dividends and interest</span><strong>{formatCurrencyDetailed(flows.investmentIncome)}</strong></div>
+        <div><span>Non-investment income</span><strong>{formatCurrencyDetailed(flows.nonInvestmentIncome)}</strong></div>
+        <div><span>Tax-free income</span><strong>{formatCurrencyDetailed(flows.nonTaxableIncome)}</strong></div>
+        <div><span>Excluded from after-tax KPI</span><strong>{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Annual income tile value</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Monthly income</h4>
+        <div><span>Total monthly income</span><strong>{formatCurrencyDetailed(monthlyIncome)}</strong></div>
+        <div><span>Monthly after-tax income</span><strong>{formatCurrencyDetailed(afterTaxMonthlyIncome)}</strong></div>
+        <div><span>Monthly tax burden</span><strong>{formatCurrencyDetailed(totalTax / 12)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Displayed period</span><strong>{isMonthlyIncomePrimary ? "Monthly" : "Annual"}</strong></div>
+      </div>
+    </div>
+  );
+  const marginalTaxBreakdownDetails = (
+    <div className="tax-breakdown-popover">
+      <div className="tax-breakdown-popover__header">
+        <strong>Marginal tax rate breakdown</strong>
+        <span>Combined federal + {selectedStateName} marginal bracket for the current taxable income.</span>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Current bracket</h4>
+        <div><span>Federal marginal rate</span><strong>{marginalFederalRateLabel}</strong></div>
+        <div><span>{selectedStateCode} marginal rate</span><strong>{marginalStateRateLabel}</strong></div>
+        <div><span>NIIT included when threshold applies</span><strong>{marginalCombinedTaxable >= niitThreshold && netInvestmentIncome > 0 ? "Yes" : "No"}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Combined marginal rate</span><strong>{marginalCombinedRateLabel}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Taxable income used</h4>
+        <div><span>Federal taxable income</span><strong>{formatCurrencyDetailed(federalTaxableAfterDeductions)}</strong></div>
+        <div><span>{selectedStateCode} taxable income</span><strong>{formatCurrencyDetailed(stateTaxableAfterDeductions)}</strong></div>
+        <div><span>Thermometer base</span><strong>{formatCurrencyDetailed(marginalCombinedTaxable)}</strong></div>
+      </div>
+    </div>
+  );
+  const investmentYieldBreakdownDetails = (
+    <div className="tax-breakdown-popover">
+      <div className="tax-breakdown-popover__header">
+        <strong>Investment and yield breakdown</strong>
+        <span>Only selected non-income investment rows are included in these values.</span>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Investment base</h4>
+        <div><span>Selected investment principal</span><strong>{formatCurrencyDetailed(flows.totalInvestmentAmount)}</strong></div>
+        <div><span>Gross investment income</span><strong>{formatCurrencyDetailed(flows.investmentIncome)}</strong></div>
+        <div><span>Income items excluded from yield</span><strong>{formatCurrencyDetailed(Math.max(totalIncome - flows.investmentIncome, 0))}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Before-tax yield</span><strong>{formatPercent(portfolioBeforeTaxYield)}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>After-tax yield</h4>
+        <div><span>Federal tax from investments</span><strong>{formatCurrencyDetailed(Math.max(federalIncomeTaxTotal - federalTaxWithoutInvestments, 0))}</strong></div>
+        <div><span>{selectedStateCode} tax from investments</span><strong>{formatCurrencyDetailed(Math.max(displayedStateResult.tax - stateTaxWithoutInvestments, 0))}</strong></div>
+        <div><span>Total investment tax burden</span><strong>-{formatCurrencyDetailed(investmentTaxBurden)}</strong></div>
+        <div><span>After-tax investment income</span><strong>{formatCurrencyDetailed(investmentAfterTaxIncome)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>After-tax yield</span><strong>{formatPercent(portfolioAfterTaxYield)}</strong></div>
       </div>
     </div>
   );
@@ -5916,7 +5987,6 @@ export default function App() {
       )}
     </div>
   );
-  const isMonthlyIncomePrimary = uiSettings.incomePrimaryPeriod === "monthly";
   const kpiMetrics: KpiMetricConfig[] = [
     {
       label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} after-tax income`,
@@ -5935,6 +6005,7 @@ export default function App() {
       valueLabel: isMonthlyIncomePrimary ? "monthly income" : "annual income",
       secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? totalIncome : monthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
       numericValue: isMonthlyIncomePrimary ? monthlyIncome : totalIncome,
+      details: incomeBreakdownDetails,
     },
     {
       label: "Marginal tax rate",
@@ -5943,6 +6014,7 @@ export default function App() {
       secondaryValue: `Fed + ${selectedStateCode}`,
       numericValue: marginalCombinedRate,
       deltaKind: "percent",
+      details: marginalTaxBreakdownDetails,
     },
     {
       label: "Total investment",
@@ -5951,6 +6023,7 @@ export default function App() {
       secondaryValue: `${formatPercent(portfolioAfterTaxYield)} after tax • ${formatPercent(portfolioBeforeTaxYield)} before tax yield`,
       numericValue: flows.totalInvestmentAmount,
       tone: "accent",
+      details: investmentYieldBreakdownDetails,
     },
   ];
   const portfolioSnapshot = buildPortfolioSnapshot({
