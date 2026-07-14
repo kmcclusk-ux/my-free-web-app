@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, isW2IncomeType } from "./taxMath";
+import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import "./App.css";
 
 type TabKey =
@@ -49,6 +49,10 @@ type DerivedInvestmentRow = InvestmentRow & {
   incomeItem: boolean;
   extraData: number;
   filteredIncome: number;
+  investmentIncome: number;
+  investmentOrdinaryMonthly: number;
+  investmentPreferredMonthly: number;
+  investmentStateMonthly: number;
   displayYearlyIncome: number;
   displayMonthlyIncome: number;
   displayFilteredIncome: number;
@@ -168,6 +172,10 @@ type PortfolioSnapshot = {
     totalInvestmentAmount: number;
     totalIncome: number;
     portfolioYield: number;
+    portfolioBeforeTaxYield: number;
+    portfolioAfterTaxYield: number;
+    investmentIncome: number;
+    investmentAfterTaxIncome: number;
     afterTaxIncome: number;
     federalTax: number;
     stateTax: number;
@@ -5251,6 +5259,10 @@ export default function App() {
     const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false);
     const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true);
     const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode);
+    const investmentIncome = !incomeItem ? filteredIncome : 0;
+    const investmentOrdinaryMonthly = !incomeItem ? ordinaryMonthly : 0;
+    const investmentPreferredMonthly = !incomeItem ? preferredMonthly : 0;
+    const investmentStateMonthly = !incomeItem ? stateMonthly : 0;
     const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false);
     const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true);
     const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode);
@@ -5268,6 +5280,10 @@ export default function App() {
       incomeItem,
       extraData,
       filteredIncome,
+      investmentIncome,
+      investmentOrdinaryMonthly,
+      investmentPreferredMonthly,
+      investmentStateMonthly,
       displayYearlyIncome,
       displayMonthlyIncome,
       displayFilteredIncome,
@@ -5303,6 +5319,10 @@ export default function App() {
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
     acc.totalIncome += row.filteredIncome;
+    acc.investmentIncome += row.investmentIncome;
+    acc.investmentFederalOrdinary += row.investmentOrdinaryMonthly * 12;
+    acc.investmentFederalPreferred += row.investmentPreferredMonthly * 12;
+    acc.investmentStateTaxable += row.investmentStateMonthly * 12;
     acc.displayIncome += row.displayFilteredIncome;
     acc.federalOrdinary += row.ordinaryMonthly * 12;
     acc.federalPreferred += row.preferredMonthly * 12;
@@ -5325,7 +5345,7 @@ export default function App() {
     acc.realEstate += row.realEstate;
     acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestmentAmount: 0, totalIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
+  }, { totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0, investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
@@ -5566,7 +5586,29 @@ export default function App() {
   const afterTaxIncome = calculateDisplayedAfterTaxIncome(flows.displayIncome, totalTax);
   const monthlyIncome = totalIncome / 12;
   const afterTaxMonthlyIncome = afterTaxIncome / 12;
-  const portfolioYield = flows.totalInvestmentAmount > 0 ? totalIncome / flows.totalInvestmentAmount : 0;
+  const ordinaryBeforeDeductionsWithoutInvestments = Math.max(ordinaryBeforeDeductions - flows.investmentFederalOrdinary, 0);
+  const preferredBeforeDeductionsWithoutInvestments = Math.max(preferredBeforeDeductions - flows.investmentFederalPreferred, 0);
+  const grossFederalTaxableWithoutInvestments = ordinaryBeforeDeductionsWithoutInvestments + preferredBeforeDeductionsWithoutInvestments;
+  const federalTaxableBeforeStandardOrItemizedWithoutInvestments = Math.max(grossFederalTaxableWithoutInvestments - federalAboveLineDeductionSummary.total, 0);
+  const federalTaxableAfterDeductionsWithoutInvestments = Math.max(federalTaxableBeforeStandardOrItemizedWithoutInvestments - federalDeduction, 0);
+  const preferredTaxableWithoutInvestments = Math.min(preferredBeforeDeductionsWithoutInvestments, federalTaxableAfterDeductionsWithoutInvestments);
+  const ordinaryTaxableWithoutInvestments = Math.max(federalTaxableAfterDeductionsWithoutInvestments - preferredTaxableWithoutInvestments, 0);
+  const netInvestmentIncomeWithoutInvestments = Math.max(grossFederalTaxableWithoutInvestments - flows.nonInvestmentIncome - effectiveW2Income, 0);
+  const federalTaxWithoutInvestments = federalCombinedTax2025({
+    ordinaryTaxable: ordinaryTaxableWithoutInvestments,
+    preferredTaxable: preferredTaxableWithoutInvestments,
+    filingStatus: federalSettings.filingStatus,
+    magi: grossFederalTaxableWithoutInvestments,
+    netInvestmentIncome: netInvestmentIncomeWithoutInvestments,
+  }).tax;
+  const stateGrossWithoutInvestments = Math.max(stateGross - flows.investmentStateTaxable, 0);
+  const stateTaxableAfterDeductionsWithoutInvestments = Math.max(stateGrossWithoutInvestments - stateDeduction, 0);
+  const stateTaxWithoutInvestments = localStateTax2025(stateTaxableAfterDeductionsWithoutInvestments, selectedStateCode, federalSettings.filingStatus).tax;
+  const investmentTaxBurden = Math.max((federalIncomeTaxTotal - federalTaxWithoutInvestments) + (displayedStateResult.tax - stateTaxWithoutInvestments), 0);
+  const investmentAfterTaxIncome = flows.investmentIncome - investmentTaxBurden;
+  const portfolioBeforeTaxYield = flows.totalInvestmentAmount > 0 ? flows.investmentIncome / flows.totalInvestmentAmount : 0;
+  const portfolioAfterTaxYield = flows.totalInvestmentAmount > 0 ? investmentAfterTaxIncome / flows.totalInvestmentAmount : 0;
+  const portfolioYield = portfolioAfterTaxYield;
   const hiddenFromAfterTaxIncome = flows.totalIncome - flows.displayIncome;
   const federalTaxTotal = federalTaxWithPayroll;
   const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
@@ -5895,7 +5937,7 @@ export default function App() {
       numericValue: marginalCombinedRate,
       deltaKind: "percent",
     },
-    { label: "Portfolio yield", value: formatPercent(portfolioYield), numericValue: portfolioYield, deltaKind: "percent" },
+    { label: "Portfolio yield", value: formatPercent(portfolioAfterTaxYield), secondaryValue: `${formatPercent(portfolioBeforeTaxYield)} before tax`, numericValue: portfolioAfterTaxYield, deltaKind: "percent" },
     { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
   ];
   const portfolioSnapshot = buildPortfolioSnapshot({
@@ -5916,6 +5958,10 @@ export default function App() {
       totalInvestmentAmount: flows.totalInvestmentAmount,
       totalIncome,
       portfolioYield,
+      portfolioBeforeTaxYield,
+      portfolioAfterTaxYield,
+      investmentIncome: flows.investmentIncome,
+      investmentAfterTaxIncome,
       afterTaxIncome,
       federalTax: federalTaxWithPayroll,
       stateTax: stateTaxWithPayroll,
