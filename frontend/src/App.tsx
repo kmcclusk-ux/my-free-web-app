@@ -5937,8 +5937,13 @@ export default function App() {
       numericValue: marginalCombinedRate,
       deltaKind: "percent",
     },
-    { label: "Portfolio yield", value: formatPercent(portfolioAfterTaxYield), secondaryValue: `${formatPercent(portfolioBeforeTaxYield)} before tax`, numericValue: portfolioAfterTaxYield, deltaKind: "percent" },
-    { label: "Total investment", value: formatCurrency(flows.totalInvestmentAmount), numericValue: flows.totalInvestmentAmount, tone: "accent" },
+    {
+      label: "Total investment",
+      value: formatCurrency(flows.totalInvestmentAmount),
+      secondaryValue: `${formatPercent(portfolioAfterTaxYield)} after tax • ${formatPercent(portfolioBeforeTaxYield)} before tax yield`,
+      numericValue: flows.totalInvestmentAmount,
+      tone: "accent",
+    },
   ];
   const portfolioSnapshot = buildPortfolioSnapshot({
     activeTab,
