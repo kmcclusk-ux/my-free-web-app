@@ -125,14 +125,14 @@ export default {
       );
       return jsonResponse({
         ...payload,
-        mcpPathAliases: [mcpPath, "/mcp-v2"],
+        mcpPathAliases: [mcpPath, "/mcp-v2", "/mcp-v3"],
         authProtected: !publicMcpAccessAllowed(env),
         supportsUserMcpTokens: true,
         acceptsBearerAuthOnly: false,
       });
     }
 
-    if (url.pathname === mcpPath || url.pathname === "/mcp-v2") {
+    if (url.pathname === mcpPath || url.pathname === "/mcp-v2" || url.pathname === "/mcp-v3") {
       const tokenConfig = resolveMcpToken(request, env);
       if (!tokenConfig.ok) {
         return jsonResponse({ error: "Unauthorized MCP request." }, { status: 401 });

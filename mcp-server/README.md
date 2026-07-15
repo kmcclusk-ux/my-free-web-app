@@ -78,8 +78,9 @@ The public MCP URL will be one of these after deployment:
 - `https://my-free-web-app.kmcclusk.workers.dev/mcp`
 - `https://www.aftertaxus.com/mcp`
 - `https://www.aftertaxus.com/mcp-v2`
+- `https://www.aftertaxus.com/mcp-v3`
 
-Use `/mcp-v2` for new ChatGPT connector setup if ChatGPT still shows an older cached tool list for `/mcp`.
+Use `/mcp-v3` for new ChatGPT connector setup if ChatGPT still shows an older cached tool list for `/mcp` or `/mcp-v2`.
 
 If `MCP_AUTH_TOKEN` is set and you use the shared admin auth, configure the MCP client with:
 
