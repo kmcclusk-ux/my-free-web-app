@@ -5416,6 +5416,7 @@ export default function App() {
   );
   const marginalFederalRateLabel = getReachedTaxRateLabel(marginalFederalMarkers, federalTaxableAfterDeductions, "10%");
   const marginalStateRateLabel = marginalStateMarkers.length ? getReachedTaxRateLabel(marginalStateMarkers, stateTaxableAfterDeductions, marginalStateBaseRateLabel) : "0%";
+  const marginalNiitRate = marginalCombinedTaxable >= niitThreshold && netInvestmentIncome > 0 ? 0.038 : 0;
   const marginalCombinedRate = rateLabelToDecimal(marginalCombinedRateLabel);
   const hasRealData = useMemo(
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
@@ -5728,7 +5729,7 @@ export default function App() {
         <h4>Current bracket</h4>
         <div><span>Federal marginal rate</span><strong>{marginalFederalRateLabel}</strong></div>
         <div><span>{selectedStateCode} marginal rate</span><strong>{marginalStateRateLabel}</strong></div>
-        <div><span>NIIT included when threshold applies</span><strong>{marginalCombinedTaxable >= niitThreshold && netInvestmentIncome > 0 ? "Yes" : "No"}</strong></div>
+        <div><span>NIIT marginal rate</span><strong>{formatPercent(marginalNiitRate)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Combined marginal rate</span><strong>{marginalCombinedRateLabel}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
