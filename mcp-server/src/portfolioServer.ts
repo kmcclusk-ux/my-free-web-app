@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.1";
+export const SERVER_VERSION = "1.0.2";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -953,6 +953,13 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   server.tool(
     "highlight_investment_rows",
     "Highlight specific investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. Use this when ChatGPT is asked to highlight rows in the app.",
+    investmentRowHighlightSchema,
+    highlightInvestmentRows
+  );
+
+  server.tool(
+    "set_row_highlight",
+    "Set visual row highlights in the AfterTaxUS React frontend for investment rows. Use ids to highlight exact row numbers, symbols to highlight ticker rows, queries to highlight matching text, or clear=true to remove all row highlights.",
     investmentRowHighlightSchema,
     highlightInvestmentRows
   );
