@@ -869,18 +869,22 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     }
   );
 
-  server.tool(
-    "select_investment_rows",
-    "Select/highlight investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. This updates workbook UI settings so the app highlights those rows when loaded or refreshed.",
-    {
-      workspaceId: z.string().optional(),
-      ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to select/highlight."),
-      symbols: z.array(z.string()).optional().describe("Symbols/tickers to select by exact current or WhatIf symbol match."),
-      queries: z.array(z.string()).optional().describe("Free-text queries to match against exported investment row fields."),
-      mode: z.enum(["replace", "add", "remove"]).default("replace").describe("replace overwrites current selection; add appends; remove unselects matching rows."),
-      clear: z.boolean().optional().describe("When true, clears all selected rows. Overrides ids/symbols/queries."),
-    },
-    async ({ workspaceId, ids, symbols, queries, mode, clear }) => {
+  const investmentRowHighlightSchema = {
+    workspaceId: z.string().optional(),
+    ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to highlight/select."),
+    symbols: z.array(z.string()).optional().describe("Symbols/tickers to highlight by exact current or WhatIf symbol match."),
+    queries: z.array(z.string()).optional().describe("Free-text queries to match against exported investment row fields."),
+    mode: z.enum(["replace", "add", "remove"]).default("replace").describe("replace overwrites current highlights; add appends; remove clears matching row highlights."),
+    clear: z.boolean().optional().describe("When true, clears all highlighted rows. Overrides ids/symbols/queries."),
+  };
+  const highlightInvestmentRows = async ({ workspaceId, ids, symbols, queries, mode, clear }: {
+    workspaceId?: string;
+    ids?: Array<number | string>;
+    symbols?: string[];
+    queries?: string[];
+    mode: "replace" | "add" | "remove";
+    clear?: boolean;
+  }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
       const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
@@ -937,7 +941,20 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         })),
         note: "Open or refresh AfterTaxUS to see persisted row highlights if the app is already running.",
       });
-    }
+  };
+
+  server.tool(
+    "select_investment_rows",
+    "Select/highlight investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. This updates workbook UI settings so the app highlights those rows when loaded or refreshed.",
+    investmentRowHighlightSchema,
+    highlightInvestmentRows
+  );
+
+  server.tool(
+    "highlight_investment_rows",
+    "Highlight specific investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. Use this when ChatGPT is asked to highlight rows in the app.",
+    investmentRowHighlightSchema,
+    highlightInvestmentRows
   );
 
   server.tool(
