@@ -3972,6 +3972,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
   const [activeFinderQuery, setActiveFinderQuery] = useState("");
   const [activeFinderScope, setActiveFinderScope] = useState<SymbolFinderScope>("current");
+  const [rowNavigationMode, setRowNavigationMode] = useState<"search" | "highlighted">("search");
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
   const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
@@ -4111,7 +4112,29 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedActiveQuery, activeFinderScope));
   }, [activeFinderQuery, activeFinderScope, displayedRows]);
-  const canNavigateFinderMatches = highlightedFinderRowId !== null && activeFinderMatches.length > 1;
+  const highlightedInvestmentRows = useMemo(() => selectedAssetIds
+    .map((id) => displayedRows.find((row) => row.id === id))
+    .filter((row): row is InvestmentRow => Boolean(row)), [displayedRows, selectedAssetIds]);
+  const hasSearchNavigation = highlightedFinderRowId !== null && activeFinderMatches.length > 0;
+  const hasHighlightedNavigation = highlightedInvestmentRows.length > 0;
+  const activeNavigationMode = rowNavigationMode === "search" && hasSearchNavigation
+    ? "search"
+    : hasHighlightedNavigation
+      ? "highlighted"
+      : "search";
+  const canNavigateActiveRows = activeNavigationMode === "search" ? activeFinderMatches.length > 1 : highlightedInvestmentRows.length > 1;
+  const showRowNavigationControls = hasSearchNavigation || hasHighlightedNavigation;
+  const showRowNavigationModeSelect = hasSearchNavigation && hasHighlightedNavigation;
+  const rowNavigationLabel = activeNavigationMode === "search"
+    ? `${activeFinderMatches.length} search match${activeFinderMatches.length === 1 ? "" : "es"}`
+    : `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
+  useEffect(() => {
+    if (rowNavigationMode === "search" && !hasSearchNavigation && hasHighlightedNavigation) {
+      setRowNavigationMode("highlighted");
+    } else if (rowNavigationMode === "highlighted" && !hasHighlightedNavigation && hasSearchNavigation) {
+      setRowNavigationMode("search");
+    }
+  }, [hasHighlightedNavigation, hasSearchNavigation, rowNavigationMode]);
   const openBlankSymbolFinder = () => {
     setSymbolFinderQuery("");
     setSymbolFinderScope("current");
@@ -4121,7 +4144,16 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     setHighlightedFinderRowId(rowId);
     setActiveFinderQuery(query);
     setActiveFinderScope(scope);
+    setRowNavigationMode("search");
     setIsSymbolFinderOpen(false);
+    window.requestAnimationFrame(() => {
+      const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
+      rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    });
+  };
+  const focusInvestmentRow = (rowId: number, mode: "search" | "highlighted") => {
+    setHighlightedFinderRowId(rowId);
+    setRowNavigationMode(mode);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
       rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
@@ -4136,6 +4168,23 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       : (currentIndex >= 0 ? currentIndex - 1 + activeFinderMatches.length : activeFinderMatches.length - 1) % activeFinderMatches.length;
     const nextRow = activeFinderMatches[nextIndex]?.row;
     if (nextRow) jumpToInvestmentRow(nextRow.id, activeFinderQuery, activeFinderScope);
+  };
+  const cycleHighlightedRow = (direction: "previous" | "next") => {
+    if (highlightedInvestmentRows.length === 0) return;
+    const currentIndex = highlightedInvestmentRows.findIndex((row) => row.id === highlightedFinderRowId);
+    const fallbackIndex = direction === "next" ? -1 : 0;
+    const nextIndex = direction === "next"
+      ? (currentIndex >= 0 ? currentIndex + 1 : fallbackIndex + 1) % highlightedInvestmentRows.length
+      : (currentIndex >= 0 ? currentIndex - 1 + highlightedInvestmentRows.length : highlightedInvestmentRows.length - 1) % highlightedInvestmentRows.length;
+    const nextRow = highlightedInvestmentRows[nextIndex];
+    if (nextRow) focusInvestmentRow(nextRow.id, "highlighted");
+  };
+  const cycleActiveInvestmentRows = (direction: "previous" | "next") => {
+    if (activeNavigationMode === "search") {
+      cycleFinderMatch(direction);
+    } else {
+      cycleHighlightedRow(direction);
+    }
   };
   const handleRemoveIncludedRows = () => {
     if (includedRowCount === 0) return;
@@ -4422,11 +4471,19 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={openBlankSymbolFinder} aria-label="Find asset rows" title="Find asset rows"><RowActionIcon name="find" /></button>
-        {highlightedFinderRowId !== null && (
-          <>
-            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleFinderMatch("previous")} aria-label="Previous matching asset row" title="Previous matching asset row" disabled={!canNavigateFinderMatches}><RowActionIcon name="previous" /></button>
-            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleFinderMatch("next")} aria-label="Next matching asset row" title="Next matching asset row" disabled={!canNavigateFinderMatches}><RowActionIcon name="next" /></button>
-          </>
+        {showRowNavigationControls && (
+          <div className="row-navigation-controls" role="group" aria-label="Cycle investment rows">
+            {showRowNavigationModeSelect ? (
+              <select className="row-navigation-controls__mode" value={rowNavigationMode} onChange={(event) => setRowNavigationMode(event.target.value as "search" | "highlighted")} aria-label="Choose rows to cycle">
+                <option value="search">Search matches</option>
+                <option value="highlighted">Highlighted rows</option>
+              </select>
+            ) : (
+              <span className="row-navigation-controls__label">{rowNavigationLabel}</span>
+            )}
+            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("previous")} aria-label={`Previous ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} title={`Previous ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} disabled={!canNavigateActiveRows}><RowActionIcon name="previous" /></button>
+            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("next")} aria-label={`Next ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} title={`Next ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} disabled={!canNavigateActiveRows}><RowActionIcon name="next" /></button>
+          </div>
         )}
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
