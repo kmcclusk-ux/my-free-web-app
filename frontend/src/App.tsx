@@ -3941,17 +3941,22 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
+  const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
+  const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const displayedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
     const categoryFilter = normalizeLookupKey(filters.category);
     const assetFilter = normalizeLookupKey(filters.asset);
-    const filtered = rows.filter((row) => {
+    const filteredRows = rows.filter((row) => {
       const derived = derivedMap[row.id];
       if (accountFilter && normalizeLookupKey(row.account) !== accountFilter) return false;
       if (categoryFilter && normalizeLookupKey(row.category) !== categoryFilter) return false;
       if (assetFilter && normalizeLookupKey(row.symbol) !== assetFilter && normalizeLookupKey(derived?.effectiveSymbol) !== assetFilter && normalizeLookupKey(String(row.id)) !== assetFilter) return false;
       return true;
     });
+    const filtered = showOnlyHighlightedRows && selectedIdSet.size > 0
+      ? filteredRows.filter((row) => selectedIdSet.has(row.id))
+      : filteredRows;
 
     if (sort.tableId !== "investments" || !sort.column) return filtered;
     const sortColumn = sort.column;
@@ -3974,13 +3979,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       if (typeof aValue === "number" && typeof bValue === "number") return (aValue - bValue) * direction;
       return String(aValue).localeCompare(String(bValue)) * direction;
     });
-  }, [rows, derivedMap, filters, sort]);
+  }, [rows, derivedMap, filters, sort, showOnlyHighlightedRows, selectedIdSet]);
   const displayedDerivedRows = displayedRows
     .map((row) => derivedMap[row.id])
     .filter((row): row is DerivedInvestmentRow => Boolean(row));
-  const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const selectedRows = selectedAssetIds.map((id) => rows.find((row) => row.id === id)).filter((row): row is InvestmentRow => Boolean(row));
-  const hasViewState = Boolean(filters.account || filters.category || filters.asset || sort.column || selectedRows.length > 0);
+  const hasHighlightedRows = selectedRows.length > 0;
+  const hasViewState = Boolean(filters.account || filters.category || filters.asset || sort.column || hasHighlightedRows || showOnlyHighlightedRows);
   const includedRowCount = rows.filter((row) => row.includeIncome).length;
   const [isFavoritesPanelOpen, setIsFavoritesPanelOpen] = useState(false);
   const [newFavoriteName, setNewFavoriteName] = useState("");
@@ -4023,6 +4028,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [isWhatIfRevealAnimating, setIsWhatIfRevealAnimating] = useState(false);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
+  const selectedIdsSignature = selectedAssetIds.join("|");
+  useEffect(() => {
+    if (selectedAssetIds.length === 0) {
+      setShowOnlyHighlightedRows(false);
+      return;
+    }
+    setShowOnlyHighlightedRows(true);
+  }, [selectedAssetIds.length, selectedIdsSignature]);
   useEffect(() => {
     window.localStorage.setItem(INVESTMENT_COLUMN_WIDTH_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
@@ -4518,11 +4531,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         <div className="view-state-strip" role="status">
           <strong>Showing {displayedRows.length} of {rows.length} rows</strong>
           {selectedRows.length > 0 && <span>Selected: {selectedRows.length} row{selectedRows.length === 1 ? "" : "s"}</span>}
+          {hasHighlightedRows && <button className="ghost-button ghost-button--compact" type="button" onClick={() => setShowOnlyHighlightedRows((current) => !current)}>{showOnlyHighlightedRows ? "Show all rows" : "Show highlighted rows"}</button>}
           {filters.account && <span>Account: {filters.account}</span>}
           {filters.category && <span>Category: {filters.category}</span>}
           {filters.asset && <span>Asset: {filters.asset}</span>}
           {sort.column && <span>Sorted: {sort.column} {sort.direction}</span>}
-          <button className="ghost-button ghost-button--compact" type="button" onClick={onClearViewState}>Show all rows</button>
+          <button className="ghost-button ghost-button--compact" type="button" onClick={onClearViewState}>{hasHighlightedRows || showOnlyHighlightedRows ? "Clear highlights/filters" : "Show all rows"}</button>
         </div>
       )}
       {isRemoveConfirmOpen && (
