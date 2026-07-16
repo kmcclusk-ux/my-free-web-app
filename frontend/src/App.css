@@ -3791,6 +3791,39 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column {
+  min-width: 0;
+  max-width: none;
+}
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--move,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--row,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--included,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--account,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--symbol,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--normalPercent {
+  position: sticky;
+  z-index: 6;
+}
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--move { left: 0; }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--row { left: var(--investment-col-2-left, 78px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--included { left: var(--investment-col-3-left, 108px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--account { left: var(--investment-col-4-left, 136px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--symbol { left: var(--investment-col-5-left, 252px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--normalPercent {
+  left: var(--investment-col-6-left, 338px);
+  box-shadow: 8px 0 14px rgba(24,49,58,.06);
+}
+.investments-workspace .sheet-table--workbook thead :is(th, td).investment-column {
+  z-index: 9;
+  background: rgba(228,239,241,.98);
+}
+.investments-workspace .sheet-table--workbook tbody :is(td, th).investment-column {
+  background: var(--row-bg) !important;
+}
+.investments-workspace .sheet-table--workbook tfoot :is(th, td).investment-column {
+  z-index: 8;
+  background: rgba(255,250,232,.98) !important;
+}
 .investment-total-row__label {
   letter-spacing: .04em;
   text-align: left;

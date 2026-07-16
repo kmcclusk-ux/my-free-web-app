@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import "./App.css";
@@ -4416,8 +4416,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     acc.bitcoin += row.bitcoin;
     return acc;
   }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
-  const renderTotalCell = (key: InvestmentColumnId, value: number) => <td key={key}><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
-  const renderEmptyTotalCell = (key: InvestmentColumnId) => <td key={key} />;
+  const investmentColumnClassName = (columnId: InvestmentColumnId) => `investment-column investment-column--${columnId}`;
+  const renderTotalCell = (key: InvestmentColumnId, value: number) => <td key={key} className={investmentColumnClassName(key)}><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
+  const renderEmptyTotalCell = (key: InvestmentColumnId) => <td key={key} className={investmentColumnClassName(key)} />;
   const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
     const group = "group" in column ? column.group : undefined;
     if (group === "override") return isWhatIfActive;
@@ -4454,10 +4455,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp, { once: true });
   };
+  const withInvestmentColumnClass = (cell: ReactElement<{ className?: string }>, columnId: InvestmentColumnId) => cloneElement(cell, {
+    className: [cell.props.className, investmentColumnClassName(columnId)].filter(Boolean).join(" "),
+  });
   const renderInvestmentHeader = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => (
     <th
       key={column.id}
       className={[
+        investmentColumnClassName(column.id),
         "className" in column ? column.className : "",
         "group" in column ? `investment-column--${column.group}` : "",
       ].filter(Boolean).join(" ") || undefined}
@@ -4809,7 +4814,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                   onDragOver={(event) => handleDragOver(event, row.id)}
                   onDrop={(event) => handleDrop(event, row.id)}
                 >
-                  {visibleInvestmentColumns.map((column) => investmentCells[column.id])}
+                  {visibleInvestmentColumns.map((column) => withInvestmentColumnClass(investmentCells[column.id], column.id))}
                 </tr>
               );
             })}
@@ -4820,7 +4825,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 move: renderEmptyTotalCell("move"),
                 row: renderEmptyTotalCell("row"),
                 included: renderEmptyTotalCell("included"),
-                account: <th key="account" className="investment-total-row__label" scope="row" title="Included totals">Totals</th>,
+                account: <th key="account" className={`${investmentColumnClassName("account")} investment-total-row__label`} scope="row" title="Included totals">Totals</th>,
                 symbol: renderEmptyTotalCell("symbol"),
                 normalPercent: renderEmptyTotalCell("normalPercent"),
                 amount: renderTotalCell("amount", totals.totalInvestment),
