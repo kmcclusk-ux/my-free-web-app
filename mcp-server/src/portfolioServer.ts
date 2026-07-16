@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.2";
+export const SERVER_VERSION = "1.0.3";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -799,6 +799,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         yearlyIncome: z.number().nonnegative().optional(),
         includeIncome: z.boolean().optional(),
         overrideProposal: z.boolean().optional(),
+        select: z.boolean().optional().describe("Highlight/select this investment row in the AfterTaxUS frontend without changing workbook row data."),
+        highlight: z.boolean().optional().describe("Alias for select. Highlights/selects this investment row in the AfterTaxUS frontend."),
         symbol: z.string().optional(),
         newSymbol: z.string().optional(),
         newPercent: z.number().nonnegative().optional(),
@@ -818,22 +820,33 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       }
 
       const update = safeInvestmentUpdate(values);
-      if (Object.keys(update).length === 0) {
+      const highlightValue = typeof values.select === "boolean" ? values.select : values.highlight;
+      if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
         throw new Error("update_investment received no valid fields to update.");
       }
 
       const targetId = Number(target.id);
-      const updatedInvestments = investments.map((row) =>
-        Number(row.id) === targetId ? { ...row, ...update } : row
-      );
+      const updatedInvestments = Object.keys(update).length > 0
+        ? investments.map((row) => Number(row.id) === targetId ? { ...row, ...update } : row)
+        : investments;
       const updatedRow = updatedInvestments.find((row) => Number(row.id) === targetId);
       workbook.tabs.investments = updatedInvestments;
+      if (typeof highlightValue === "boolean") {
+        const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
+        workbook.settings = setSelectedInvestmentIdsInSettings(
+          workbook.settings,
+          highlightValue
+            ? [...new Set([...existingSelection, targetId])]
+            : existingSelection.filter((selectedId) => selectedId !== targetId)
+        );
+      }
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
         investment: updatedRow,
+        highlighted: typeof highlightValue === "boolean" ? highlightValue : undefined,
       });
     }
   );
@@ -844,7 +857,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     {
       workspaceId: z.string().optional(),
       id: z.number(),
-      field: z.enum(["includeIncome", "overrideProposal"]),
+      field: z.enum(["includeIncome", "overrideProposal", "select", "highlight"]),
       checked: z.boolean(),
     },
     async ({ workspaceId, id, field, checked }) => {
@@ -854,9 +867,19 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         throw new Error(`Investment row ${id} was not found.`);
       }
 
-      workbook.tabs.investments = investments.map((row) =>
-        Number(row.id) === id ? { ...row, [field]: checked } : row
-      );
+      if (field === "select" || field === "highlight") {
+        const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
+        workbook.settings = setSelectedInvestmentIdsInSettings(
+          workbook.settings,
+          checked
+            ? [...new Set([...existingSelection, id])]
+            : existingSelection.filter((selectedId) => selectedId !== id)
+        );
+      } else {
+        workbook.tabs.investments = investments.map((row) =>
+          Number(row.id) === id ? { ...row, [field]: checked } : row
+        );
+      }
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
         ok: true,
@@ -865,6 +888,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         id,
         field,
         checked,
+        highlighted: field === "select" || field === "highlight" ? checked : undefined,
       });
     }
   );
