@@ -3939,24 +3939,21 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
-  const displayedRows = useMemo(() => {
+  const filteredAndSortedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
     const categoryFilter = normalizeLookupKey(filters.category);
     const assetFilter = normalizeLookupKey(filters.asset);
-    const filteredRows = rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       const derived = derivedMap[row.id];
       if (accountFilter && normalizeLookupKey(row.account) !== accountFilter) return false;
       if (categoryFilter && normalizeLookupKey(row.category) !== categoryFilter) return false;
       if (assetFilter && normalizeLookupKey(row.symbol) !== assetFilter && normalizeLookupKey(derived?.effectiveSymbol) !== assetFilter && normalizeLookupKey(String(row.id)) !== assetFilter) return false;
       return true;
     });
-    const filtered = showOnlyHighlightedRows && selectedIdSet.size > 0
-      ? filteredRows.filter((row) => selectedIdSet.has(row.id))
-      : filteredRows;
 
     if (sort.tableId !== "investments" || !sort.column) return filtered;
     const sortColumn = sort.column;
@@ -3979,7 +3976,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       if (typeof aValue === "number" && typeof bValue === "number") return (aValue - bValue) * direction;
       return String(aValue).localeCompare(String(bValue)) * direction;
     });
-  }, [rows, derivedMap, filters, sort, showOnlyHighlightedRows, selectedIdSet]);
+  }, [rows, derivedMap, filters, sort]);
+  const displayedRows = useMemo(() => (
+    showOnlyHighlightedRows && selectedIdSet.size > 0
+      ? filteredAndSortedRows.filter((row) => selectedIdSet.has(row.id))
+      : filteredAndSortedRows
+  ), [filteredAndSortedRows, selectedIdSet, showOnlyHighlightedRows]);
   const displayedDerivedRows = displayedRows
     .map((row) => derivedMap[row.id])
     .filter((row): row is DerivedInvestmentRow => Boolean(row));
@@ -3997,9 +3999,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [symbolFinderQuery, setSymbolFinderQuery] = useState("");
   const [symbolFinderScope, setSymbolFinderScope] = useState<SymbolFinderScope>("current");
   const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
-  const [activeFinderQuery, setActiveFinderQuery] = useState("");
-  const [activeFinderScope, setActiveFinderScope] = useState<SymbolFinderScope>("current");
-  const [rowNavigationMode, setRowNavigationMode] = useState<"search" | "highlighted">("search");
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
   const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
@@ -4136,73 +4135,39 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   );
   const symbolFinderMatches = useMemo(() => {
     if (!normalizedSymbolFinderQuery) return [];
-    return displayedRows
+    return filteredAndSortedRows
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedSymbolFinderQuery, symbolFinderScope));
-  }, [displayedRows, normalizedSymbolFinderQuery, symbolFinderScope]);
-  const activeFinderMatches = useMemo(() => {
-    const normalizedActiveQuery = normalizeLookupKey(activeFinderQuery);
-    if (!normalizedActiveQuery) return [];
-    return displayedRows
-      .map((row, index) => ({ row, index }))
-      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedActiveQuery, activeFinderScope));
-  }, [activeFinderQuery, activeFinderScope, displayedRows]);
+  }, [filteredAndSortedRows, normalizedSymbolFinderQuery, symbolFinderScope]);
   const highlightedInvestmentRows = useMemo(() => selectedAssetIds
     .map((id) => displayedRows.find((row) => row.id === id))
     .filter((row): row is InvestmentRow => Boolean(row)), [displayedRows, selectedAssetIds]);
-  const hasSearchNavigation = highlightedFinderRowId !== null && activeFinderMatches.length > 0;
   const hasHighlightedNavigation = highlightedInvestmentRows.length > 0;
-  const activeNavigationMode = rowNavigationMode === "search" && hasSearchNavigation
-    ? "search"
-    : hasHighlightedNavigation
-      ? "highlighted"
-      : "search";
-  const canNavigateActiveRows = activeNavigationMode === "search" ? activeFinderMatches.length > 1 : highlightedInvestmentRows.length > 1;
-  const showRowNavigationControls = hasSearchNavigation || hasHighlightedNavigation;
-  const showRowNavigationModeSelect = hasSearchNavigation && hasHighlightedNavigation;
-  const rowNavigationLabel = activeNavigationMode === "search"
-    ? `${activeFinderMatches.length} search match${activeFinderMatches.length === 1 ? "" : "es"}`
-    : `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
-  useEffect(() => {
-    if (rowNavigationMode === "search" && !hasSearchNavigation && hasHighlightedNavigation) {
-      setRowNavigationMode("highlighted");
-    } else if (rowNavigationMode === "highlighted" && !hasHighlightedNavigation && hasSearchNavigation) {
-      setRowNavigationMode("search");
-    }
-  }, [hasHighlightedNavigation, hasSearchNavigation, rowNavigationMode]);
+  const canNavigateActiveRows = highlightedInvestmentRows.length > 1;
+  const showRowNavigationControls = hasHighlightedNavigation;
+  const rowNavigationLabel = `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
   const openBlankSymbolFinder = () => {
     setSymbolFinderQuery("");
     setSymbolFinderScope("current");
     setIsSymbolFinderOpen(true);
   };
-  const jumpToInvestmentRow = (rowId: number, query = symbolFinderQuery.trim() || activeFinderQuery, scope = symbolFinderScope) => {
-    setHighlightedFinderRowId(rowId);
-    setActiveFinderQuery(query);
-    setActiveFinderScope(scope);
-    setRowNavigationMode("search");
+  const highlightSymbolFinderMatches = (focusedRowId: number) => {
+    const ids = symbolFinderMatches.map(({ row }) => row.id);
+    onHighlightRows(ids);
+    setHighlightedFinderRowId(focusedRowId);
+    setShowOnlyHighlightedRows(true);
     setIsSymbolFinderOpen(false);
     window.requestAnimationFrame(() => {
-      const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
+      const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${focusedRowId}"]`);
       rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     });
   };
-  const focusInvestmentRow = (rowId: number, mode: "search" | "highlighted") => {
+  const focusInvestmentRow = (rowId: number) => {
     setHighlightedFinderRowId(rowId);
-    setRowNavigationMode(mode);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
       rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     });
-  };
-  const cycleFinderMatch = (direction: "previous" | "next") => {
-    if (activeFinderMatches.length === 0) return;
-    const currentIndex = activeFinderMatches.findIndex(({ row }) => row.id === highlightedFinderRowId);
-    const fallbackIndex = direction === "next" ? -1 : 0;
-    const nextIndex = direction === "next"
-      ? (currentIndex >= 0 ? currentIndex + 1 : fallbackIndex + 1) % activeFinderMatches.length
-      : (currentIndex >= 0 ? currentIndex - 1 + activeFinderMatches.length : activeFinderMatches.length - 1) % activeFinderMatches.length;
-    const nextRow = activeFinderMatches[nextIndex]?.row;
-    if (nextRow) jumpToInvestmentRow(nextRow.id, activeFinderQuery, activeFinderScope);
   };
   const cycleHighlightedRow = (direction: "previous" | "next") => {
     if (highlightedInvestmentRows.length === 0) return;
@@ -4212,14 +4177,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       ? (currentIndex >= 0 ? currentIndex + 1 : fallbackIndex + 1) % highlightedInvestmentRows.length
       : (currentIndex >= 0 ? currentIndex - 1 + highlightedInvestmentRows.length : highlightedInvestmentRows.length - 1) % highlightedInvestmentRows.length;
     const nextRow = highlightedInvestmentRows[nextIndex];
-    if (nextRow) focusInvestmentRow(nextRow.id, "highlighted");
+    if (nextRow) focusInvestmentRow(nextRow.id);
   };
   const cycleActiveInvestmentRows = (direction: "previous" | "next") => {
-    if (activeNavigationMode === "search") {
-      cycleFinderMatch(direction);
-    } else {
-      cycleHighlightedRow(direction);
-    }
+    cycleHighlightedRow(direction);
   };
   const handleRemoveIncludedRows = () => {
     if (includedRowCount === 0) return;
@@ -4513,16 +4474,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={openBlankSymbolFinder} aria-label="Find asset rows" title="Find asset rows"><RowActionIcon name="find" /></button>
         {showRowNavigationControls && (
           <div className="row-navigation-controls" role="group" aria-label="Cycle investment rows">
-            {showRowNavigationModeSelect ? (
-              <select className="row-navigation-controls__mode" value={rowNavigationMode} onChange={(event) => setRowNavigationMode(event.target.value as "search" | "highlighted")} aria-label="Choose rows to cycle">
-                <option value="search">Search matches</option>
-                <option value="highlighted">Highlighted rows</option>
-              </select>
-            ) : (
-              <span className="row-navigation-controls__label">{rowNavigationLabel}</span>
-            )}
-            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("previous")} aria-label={`Previous ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} title={`Previous ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} disabled={!canNavigateActiveRows}><RowActionIcon name="previous" /></button>
-            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("next")} aria-label={`Next ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} title={`Next ${activeNavigationMode === "search" ? "search match" : "highlighted row"}`} disabled={!canNavigateActiveRows}><RowActionIcon name="next" /></button>
+            <span className="row-navigation-controls__label">{rowNavigationLabel}</span>
+            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("previous")} aria-label="Previous highlighted row" title="Previous highlighted row" disabled={!canNavigateActiveRows}><RowActionIcon name="previous" /></button>
+            <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("next")} aria-label="Next highlighted row" title="Next highlighted row" disabled={!canNavigateActiveRows}><RowActionIcon name="next" /></button>
           </div>
         )}
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
@@ -4671,7 +4625,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                   className="symbol-finder-result"
                   type="button"
                   role="listitem"
-                  onClick={() => jumpToInvestmentRow(row.id)}
+                  onClick={() => highlightSymbolFinderMatches(row.id)}
                 >
                   <strong>Row {row.spreadsheetRowNumber ?? index + 1}</strong>
                   <span>{row.description || row.account || "Investment row"}</span>
@@ -7125,6 +7079,7 @@ export default function App() {
             onReorder={reorderInvestments}
             onJumpToAccount={jumpToAccountRow}
             onJumpToAsset={jumpToAssetRow}
+            onHighlightRows={setSelectedInvestmentIds}
             onRemoveIncluded={() => {
               const removedIds = new Set(investments.filter((row) => row.includeIncome).map((row) => row.id));
               setInvestments((current) => current.filter((row) => !row.includeIncome));
