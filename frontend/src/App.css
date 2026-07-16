@@ -3748,6 +3748,11 @@
 .investments-workspace .sheet-table--workbook td:nth-child(3) { left: var(--investment-col-3-left, 66px); }
 .investments-workspace .sheet-table--workbook th:nth-child(4),
 .investments-workspace .sheet-table--workbook td:nth-child(4) { left: var(--investment-col-4-left, 94px); }
+.investments-workspace .sheet-table--workbook th:nth-child(-n+6),
+.investments-workspace .sheet-table--workbook td:nth-child(-n+6) {
+  min-width: 0;
+  max-width: none;
+}
 .investments-workspace .sheet-table--workbook th:nth-child(5),
 .investments-workspace .sheet-table--workbook td:nth-child(5) {
   position: sticky;
