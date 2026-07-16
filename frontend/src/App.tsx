@@ -4162,6 +4162,25 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     });
   };
+  const applySymbolFinderQuery = (query: string) => {
+    const normalizedQuery = normalizeLookupKey(query);
+    if (!normalizedQuery) return false;
+    const matches = filteredAndSortedRows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedQuery, symbolFinderScope));
+    const focusedRow = matches[0]?.row;
+    if (!focusedRow) return false;
+    setSymbolFinderQuery(query);
+    onHighlightRows(matches.map(({ row }) => row.id));
+    setHighlightedFinderRowId(focusedRow.id);
+    setShowOnlyHighlightedRows(true);
+    setIsSymbolFinderOpen(false);
+    window.requestAnimationFrame(() => {
+      const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${focusedRow.id}"]`);
+      rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    });
+    return true;
+  };
   const focusInvestmentRow = (rowId: number) => {
     setHighlightedFinderRowId(rowId);
     window.requestAnimationFrame(() => {
@@ -4594,6 +4613,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                   list="symbol-finder-options"
                   value={symbolFinderQuery}
                   onChange={(event) => setSymbolFinderQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    applySymbolFinderQuery(symbolFinderQuery.trim());
+                  }}
                   placeholder="Enter symbol"
                   autoFocus
                 />
@@ -4603,7 +4627,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
               </datalist>
               <label>
                 <span>Select symbol</span>
-                <select value={symbolFinderQuery} onChange={(event) => setSymbolFinderQuery(event.target.value)}>
+                <select value={symbolFinderQuery} onChange={(event) => {
+                  const selectedSymbol = event.target.value;
+                  setSymbolFinderQuery(selectedSymbol);
+                  if (selectedSymbol) applySymbolFinderQuery(selectedSymbol);
+                }}>
                   <option value="">Choose symbol</option>
                   {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
                 </select>
