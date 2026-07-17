@@ -4163,14 +4163,15 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     });
   };
   const applySymbolFinderQuery = (query: string) => {
-    const normalizedQuery = normalizeLookupKey(query);
+    const trimmedQuery = query.trim();
+    const normalizedQuery = normalizeLookupKey(trimmedQuery);
     if (!normalizedQuery) return false;
     const matches = filteredAndSortedRows
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedQuery, symbolFinderScope));
     const focusedRow = matches[0]?.row;
     if (!focusedRow) return false;
-    setSymbolFinderQuery(query);
+    setSymbolFinderQuery(trimmedQuery);
     onHighlightRows(matches.map(({ row }) => row.id));
     setHighlightedFinderRowId(focusedRow.id);
     setShowOnlyHighlightedRows(true);
@@ -4180,6 +4181,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     });
     return true;
+  };
+  const submitSymbolFinderQueryAfterEvent = (query: string) => {
+    window.setTimeout(() => {
+      applySymbolFinderQuery(query);
+    }, 0);
   };
   const focusInvestmentRow = (rowId: number) => {
     setHighlightedFinderRowId(rowId);
@@ -4612,11 +4618,18 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                   type="text"
                   list="symbol-finder-options"
                   value={symbolFinderQuery}
-                  onChange={(event) => setSymbolFinderQuery(event.target.value)}
+                  onChange={(event) => {
+                    const nextQuery = event.target.value;
+                    setSymbolFinderQuery(nextQuery);
+                    if (symbolFinderOptions.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(nextQuery))) {
+                      submitSymbolFinderQueryAfterEvent(nextQuery);
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter") return;
                     event.preventDefault();
-                    applySymbolFinderQuery(symbolFinderQuery.trim());
+                    const query = event.currentTarget.value;
+                    submitSymbolFinderQueryAfterEvent(query);
                   }}
                   placeholder="Enter symbol"
                   autoFocus
@@ -4630,7 +4643,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                 <select value={symbolFinderQuery} onChange={(event) => {
                   const selectedSymbol = event.target.value;
                   setSymbolFinderQuery(selectedSymbol);
-                  if (selectedSymbol) applySymbolFinderQuery(selectedSymbol);
+                  if (selectedSymbol) submitSymbolFinderQueryAfterEvent(selectedSymbol);
                 }}>
                   <option value="">Choose symbol</option>
                   {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
