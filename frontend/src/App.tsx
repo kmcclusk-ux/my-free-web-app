@@ -4147,6 +4147,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const showRowNavigationControls = hasHighlightedNavigation;
   const rowNavigationLabel = `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
   const openBlankSymbolFinder = () => {
+    lastSymbolFinderSelectSubmitRef.current = "";
     setSymbolFinderQuery("");
     setSymbolFinderScope("current");
     setIsSymbolFinderOpen(true);
@@ -4186,6 +4187,19 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     window.setTimeout(() => {
       applySymbolFinderQuery(query);
     }, 0);
+  };
+  const lastSymbolFinderSelectSubmitRef = useRef("");
+  const submitSymbolFinderSelectValue = (value: string) => {
+    const selectedSymbol = value.trim();
+    setSymbolFinderQuery(selectedSymbol);
+    if (!selectedSymbol) {
+      lastSymbolFinderSelectSubmitRef.current = "";
+      return;
+    }
+    const submitKey = `${selectedSymbol}|${symbolFinderScope}`;
+    if (lastSymbolFinderSelectSubmitRef.current === submitKey) return;
+    lastSymbolFinderSelectSubmitRef.current = submitKey;
+    submitSymbolFinderQueryAfterEvent(selectedSymbol);
   };
   const focusInvestmentRow = (rowId: number) => {
     setHighlightedFinderRowId(rowId);
@@ -4640,11 +4654,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
               </datalist>
               <label>
                 <span>Select symbol</span>
-                <select value={symbolFinderQuery} onChange={(event) => {
-                  const selectedSymbol = event.target.value;
-                  setSymbolFinderQuery(selectedSymbol);
-                  if (selectedSymbol) submitSymbolFinderQueryAfterEvent(selectedSymbol);
-                }}>
+                <select
+                  value={symbolFinderQuery}
+                  onInput={(event) => submitSymbolFinderSelectValue(event.currentTarget.value)}
+                  onChange={(event) => submitSymbolFinderSelectValue(event.currentTarget.value)}
+                >
                   <option value="">Choose symbol</option>
                   {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
                 </select>
