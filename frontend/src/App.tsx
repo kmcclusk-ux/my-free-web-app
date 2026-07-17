@@ -4027,6 +4027,38 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const [isWhatIfRevealAnimating, setIsWhatIfRevealAnimating] = useState(false);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
+  const scrollInvestmentElementIntoTableView = (element: HTMLElement, options: { block?: "center" | "nearest"; inline?: "center" | "nearest" } = {}) => {
+    const container = tableScrollRef.current;
+    if (!container) return;
+    const block = options.block || "center";
+    const inline = options.inline || "nearest";
+    const containerRect = container.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+    let nextTop = container.scrollTop;
+    let nextLeft = container.scrollLeft;
+
+    if (block === "center") {
+      nextTop += elementRect.top - containerRect.top - (container.clientHeight - elementRect.height) / 2;
+    } else if (elementRect.top < containerRect.top) {
+      nextTop += elementRect.top - containerRect.top;
+    } else if (elementRect.bottom > containerRect.bottom) {
+      nextTop += elementRect.bottom - containerRect.bottom;
+    }
+
+    if (inline === "center") {
+      nextLeft += elementRect.left - containerRect.left - (container.clientWidth - elementRect.width) / 2;
+    } else if (elementRect.left < containerRect.left) {
+      nextLeft += elementRect.left - containerRect.left;
+    } else if (elementRect.right > containerRect.right) {
+      nextLeft += elementRect.right - containerRect.right;
+    }
+
+    container.scrollTo({
+      top: Math.max(0, nextTop),
+      left: Math.max(0, nextLeft),
+      behavior: "smooth",
+    });
+  };
   const selectedIdsSignature = selectedAssetIds.join("|");
   useEffect(() => {
     if (selectedAssetIds.length === 0) {
@@ -4044,7 +4076,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     if (!container) return;
     const frame = window.requestAnimationFrame(() => {
       const firstSelectedRow = container.querySelector<HTMLElement>(`tr[data-investment-id="${selectedAssetIds[0]}"]`);
-      firstSelectedRow?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      if (firstSelectedRow) scrollInvestmentElementIntoTableView(firstSelectedRow, { block: "center", inline: "nearest" });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedAssetIds, displayedRows]);
@@ -4161,7 +4193,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     setIsSymbolFinderOpen(false);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${focusedRowId}"]`);
-      rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      if (rowElement) scrollInvestmentElementIntoTableView(rowElement, { block: "center", inline: "nearest" });
     });
   };
   const applySymbolFinderQuery = (query: string) => {
@@ -4180,7 +4212,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     setIsSymbolFinderOpen(false);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${focusedRow.id}"]`);
-      rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      if (rowElement) scrollInvestmentElementIntoTableView(rowElement, { block: "center", inline: "nearest" });
     });
     return true;
   };
@@ -4221,7 +4253,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     setHighlightedFinderRowId(rowId);
     window.requestAnimationFrame(() => {
       const rowElement = tableScrollRef.current?.querySelector<HTMLElement>(`tr[data-investment-id="${rowId}"]`);
-      rowElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      if (rowElement) scrollInvestmentElementIntoTableView(rowElement, { block: "center", inline: "nearest" });
     });
   };
   const cycleHighlightedRow = (direction: "previous" | "next") => {
@@ -4515,7 +4547,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       window.requestAnimationFrame(() => {
         const firstWhatIfColumn = scrollContainer.querySelector(".investment-column--override");
         if (!firstWhatIfColumn) return;
-        firstWhatIfColumn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        scrollInvestmentElementIntoTableView(firstWhatIfColumn as HTMLElement, { block: "nearest", inline: "center" });
       });
     });
   }, [isWhatIfActive]);
