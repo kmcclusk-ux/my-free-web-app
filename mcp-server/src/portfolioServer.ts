@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.3";
+export const SERVER_VERSION = "1.0.4";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -59,6 +59,23 @@ type InvestmentRow = {
   taxTreatment?: string;
   investmentType?: string;
   [key: string]: unknown;
+};
+
+type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
+type TaxWhatIfItem = { amount?: unknown; incomeType?: unknown };
+type DeductionItem = { amount?: unknown; deductionType?: unknown };
+type PortfolioCalculationOptions = {
+  workspaceId?: string;
+  whatIfActive?: boolean;
+  federalWhatIfOpen?: boolean;
+  stateWhatIfOpen?: boolean;
+  stateCode?: string;
+  filingStatus?: FilingStatus;
+  deductionMode?: "standard" | "itemized";
+  extraOrdinaryIncome?: number;
+  extraPreferredIncome?: number;
+  extraStateIncome?: number;
+  includeRows?: boolean;
 };
 
 type WorkbookSaveResponse = {
@@ -542,6 +559,469 @@ function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
   return Object.fromEntries(
     Object.entries(values).filter(([key, value]) => allowedKeys.has(key) && value !== undefined)
   ) as Partial<InvestmentRow>;
+}
+
+function normalizeLookupKey(value: unknown) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeStateCode(value: unknown) {
+  return String(value || "CA").trim().toUpperCase() || "CA";
+}
+
+function normalizeRate(value: unknown) {
+  const numeric = normalizeNumberValue(value);
+  return Math.abs(numeric) > 1 ? numeric / 100 : numeric;
+}
+
+function normalizeYesNo(value: unknown) {
+  return normalizeBooleanValue(value) ? "yes" : "no";
+}
+
+function isPlaceholderAssetSymbol(value: unknown) {
+  const key = normalizeLookupKey(value);
+  return !key || key === "n.a." || key === "na" || key === "n/a";
+}
+
+function isIncomeAssetType(value: unknown) {
+  return normalizeLookupKey(value) === "income";
+}
+
+function inferAccountTypeFromAccountName(accountName: unknown) {
+  const key = normalizeLookupKey(accountName);
+  if (!key) return "";
+  if (key.includes("w2") || key.includes("w-2") || key.includes("wage")) return "W2 income";
+  if (key.includes("401k") || key.includes("401")) return "401k";
+  if (key.includes("inherited") && key.includes("brokerage")) return "inherited Brokerage";
+  if (key.includes("ira")) return "IRA";
+  if (key.includes("brokerage")) return "Brokerage Account";
+  return "";
+}
+
+function inferAccountTypeTaxStatus(typeName: unknown) {
+  const key = normalizeLookupKey(typeName);
+  if (!key) return "";
+  if (key.includes("w2") || key.includes("wage")) return "taxable";
+  if (key.includes("401") || key.includes("ira")) return "deferred";
+  if (key.includes("brokerage")) return "taxable";
+  return "";
+}
+
+function isW2AccountType(value: unknown) {
+  const key = normalizeLookupKey(value);
+  return key.includes("w2") || key.includes("wage");
+}
+
+function fedTaxAdjust(amount: number, taxTreatment: unknown, pref: boolean) {
+  switch (normalizeLookupKey(taxTreatment)) {
+    case "hold":
+    case "tax free":
+    case "fed tax free":
+      return 0;
+    case "state tax free":
+      return pref ? 0 : amount;
+    case "index-60-40":
+      return pref ? amount * 0.6 : amount * 0.4;
+    case "income":
+    case "non-qualified-div":
+    case "short term gain":
+    case "real estate":
+      return pref ? 0 : amount;
+    case "ss-85-fed":
+      return pref ? 0 : amount * 0.85;
+    case "qualified-div":
+    case "long term gain":
+      return pref ? amount : 0;
+    default:
+      return pref ? 0 : amount;
+  }
+}
+
+function stateTaxAdjust(amount: number, taxTreatment: unknown, stateCode = "CA") {
+  const treatment = normalizeLookupKey(taxTreatment);
+  if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0;
+  if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0;
+  return amount;
+}
+
+function isW2IncomeType(incomeType: unknown) {
+  return normalizeLookupKey(incomeType) === "w2 wages";
+}
+
+function sumTaxWhatIfItems(items: unknown, legacyAmount = 0) {
+  const itemTotal = Array.isArray(items)
+    ? items.reduce((total, item) => total + normalizeNumberValue((item as TaxWhatIfItem).amount), 0)
+    : 0;
+  return itemTotal > 0 ? itemTotal : normalizeNumberValue(legacyAmount);
+}
+
+function sumW2TaxWhatIfItems(items: unknown) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (total, item) => total + (isW2IncomeType((item as TaxWhatIfItem).incomeType) ? normalizeNumberValue((item as TaxWhatIfItem).amount) : 0),
+    0
+  );
+}
+
+function deductionTotalByType(items: unknown, deductionType: string) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (total, item) => normalizeLookupKey((item as DeductionItem).deductionType) === normalizeLookupKey(deductionType)
+      ? total + Math.max(normalizeNumberValue((item as DeductionItem).amount), 0)
+      : total,
+    0
+  );
+}
+
+function summarizeAboveLineDeductions(items: unknown) {
+  let capitalLossRaw = 0;
+  let uncappedTotal = 0;
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const amount = Math.max(normalizeNumberValue((item as DeductionItem).amount), 0);
+    const type = String((item as DeductionItem).deductionType || "");
+    if (!type) return;
+    if (type === "Capital loss deduction") capitalLossRaw += amount;
+    else uncappedTotal += amount;
+  });
+  const capitalLossDeduction = Math.min(capitalLossRaw, 3000);
+  return { capitalLossRaw, capitalLossDeduction, total: capitalLossDeduction + uncappedTotal };
+}
+
+function summarizeFederalDeductions(items: unknown, stateTax: number, saltCap: number) {
+  const rows = Array.isArray(items) ? items : [];
+  const mortgageInterest = deductionTotalByType(rows, "Mortgage interest");
+  const propertyTax = deductionTotalByType(rows, "Property tax");
+  const longTermLoss = deductionTotalByType(rows, "Investment loss (Long Term)");
+  const shortTermLoss = deductionTotalByType(rows, "Investment loss (Short Term)");
+  const capitalLossRaw = longTermLoss + shortTermLoss;
+  const capitalLossDeduction = Math.min(Math.max(capitalLossRaw, 0), 3000);
+  const otherItemized = rows.reduce((total, item) => {
+    const type = String((item as DeductionItem).deductionType || "");
+    return type && !["Mortgage interest", "Property tax", "Investment loss (Long Term)", "Investment loss (Short Term)"].includes(type)
+      ? total + Math.max(normalizeNumberValue((item as DeductionItem).amount), 0)
+      : total;
+  }, 0);
+  const saltDeduction = Math.min(Math.max(propertyTax + stateTax, 0), saltCap);
+  return { mortgageInterest, propertyTax, capitalLossRaw, capitalLossDeduction, otherItemized, saltDeduction, itemizedDeduction: mortgageInterest + saltDeduction + capitalLossDeduction + otherItemized };
+}
+
+const SOCIAL_SECURITY_WAGE_BASE_2025 = 176100;
+const STATE_W2_PAYROLL_COMPONENTS_2025: Record<string, Array<{ label: string; rate: number; wageBase?: number; maxTax?: number }>> = {
+  AK: [{ label: "AK employee unemployment insurance", rate: 0.005, wageBase: 51800 }],
+  CA: [{ label: "CA SDI", rate: 0.012 }],
+  CO: [{ label: "CO FAMLI employee share", rate: 0.0045, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
+  CT: [{ label: "CT paid leave", rate: 0.005, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
+  HI: [{ label: "HI temporary disability insurance employee share", rate: 0.005 }],
+  MA: [{ label: "MA PFML employee share", rate: 0.0046, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
+  NJ: [
+    { label: "NJ UI/WF/SWF employee share", rate: 0.003825, wageBase: 43200 },
+    { label: "NJ temporary disability", rate: 0.0023, wageBase: 165400 },
+    { label: "NJ family leave insurance", rate: 0.0033, wageBase: 165400 },
+  ],
+  NY: [
+    { label: "NY state disability insurance", rate: 0.005, maxTax: 31.2 },
+    { label: "NY paid family leave", rate: 0.00388, maxTax: 354.53 },
+  ],
+  OR: [{ label: "OR paid leave employee share", rate: 0.006, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
+  PA: [{ label: "PA employee unemployment withholding", rate: 0.0007 }],
+  RI: [{ label: "RI temporary disability insurance", rate: 0.013, wageBase: 89700 }],
+  WA: [
+    { label: "WA paid family and medical leave employee share", rate: 0.003882, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 },
+    { label: "WA Cares Fund", rate: 0.0058 },
+  ],
+};
+
+function additionalMedicareThreshold(filingStatus: FilingStatus) {
+  if (filingStatus === "mfj") return 250000;
+  if (filingStatus === "mfs") return 125000;
+  return 200000;
+}
+
+function calculateW2PayrollTax(wagesInput: number, filingStatus: FilingStatus, stateCodeInput: string) {
+  const wages = Math.max(Number(wagesInput) || 0, 0);
+  const socialSecurity = Math.min(wages, SOCIAL_SECURITY_WAGE_BASE_2025) * 0.062;
+  const medicare = wages * 0.0145;
+  const additionalMedicare = Math.max(wages - additionalMedicareThreshold(filingStatus), 0) * 0.009;
+  const stateCode = normalizeStateCode(stateCodeInput);
+  const components = (STATE_W2_PAYROLL_COMPONENTS_2025[stateCode] || []).map((component) => {
+    const taxableWages = Math.min(wages, component.wageBase ?? Number.POSITIVE_INFINITY);
+    const tax = Math.min(taxableWages * component.rate, component.maxTax ?? Number.POSITIVE_INFINITY);
+    return { ...component, tax };
+  });
+  const stateTotal = components.reduce((total, component) => total + component.tax, 0);
+  const federalTotal = socialSecurity + medicare + additionalMedicare;
+  return {
+    wages,
+    federal: { socialSecurity, medicare, additionalMedicare, total: federalTotal },
+    state: { stateCode, components, total: stateTotal },
+    total: federalTotal + stateTotal,
+  };
+}
+
+function settingsSection(settings: Record<string, unknown>, key: string) {
+  const value = settings[key];
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function normalizeFilingStatus(value: unknown): FilingStatus {
+  const key = normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
+  if (["mfj", "marriedfilingjointly", "joint"].includes(key)) return "mfj";
+  if (["mfs", "marriedfilingseparately"].includes(key)) return "mfs";
+  if (["hoh", "headofhousehold"].includes(key)) return "hoh";
+  return "single";
+}
+
+function normalizeDeductionMode(value: unknown): "standard" | "itemized" {
+  return normalizeLookupKey(value).includes("item") ? "itemized" : "standard";
+}
+
+function accountTypeTaxStatusMap(workbook: WorkbookResponse) {
+  const rows = toWorkbookRows(workbook.tabs.accountType);
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    const name = rowText(row, "name", "accountType", "account_type", "type", "label");
+    const key = normalizeLookupKey(name);
+    if (!key) continue;
+    map[key] = rowText(row, "taxStatus", "tax_status", "tax_treatment", "status") || inferAccountTypeTaxStatus(name);
+  }
+  return map;
+}
+
+function buildAccountMaps(workbook: WorkbookResponse) {
+  const accountTypes = accountTypeTaxStatusMap(workbook);
+  const accounts = toWorkbookRows(workbook.tabs.accounts);
+  const accountMap: Record<string, WorkbookRow> = {};
+  const accountTaxStatusByName: Record<string, string> = {};
+  for (const row of accounts) {
+    const accountName = rowText(row, "account", "account_name", "account_names");
+    const accountKey = normalizeLookupKey(accountName);
+    if (!accountKey) continue;
+    accountMap[accountKey] = row;
+    const typeName = rowText(row, "accountType", "account_type", "type") || inferAccountTypeFromAccountName(accountName);
+    accountTaxStatusByName[accountKey] =
+      accountTypes[normalizeLookupKey(typeName)] ||
+      rowText(row, "taxStatus", "tax_status", "tax_treatment") ||
+      inferAccountTypeTaxStatus(typeName) ||
+      "taxable";
+  }
+  return { accountMap, accountTaxStatusByName };
+}
+
+function buildTickerMap(workbook: WorkbookResponse) {
+  const map: Record<string, WorkbookRow> = {};
+  for (const row of toWorkbookRows(workbook.tabs.tickers)) {
+    const symbol = rowText(row, "symbol", "ticker");
+    const key = normalizeLookupKey(symbol);
+    if (key) map[key] = row;
+  }
+  return map;
+}
+
+async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPortfolioServerConfig, options: PortfolioCalculationOptions = {}) {
+  const federalSettings = settingsSection(workbook.settings, "federal");
+  const stateSettings = settingsSection(workbook.settings, "state");
+  const filingStatus = options.filingStatus || normalizeFilingStatus(federalSettings.filingStatus || "mfj");
+  const selectedStateCode = normalizeStateCode(options.stateCode || stateSettings.stateCode || "CA");
+  const deductionMode = options.deductionMode || normalizeDeductionMode(federalSettings.deductionMode || "standard");
+  const whatIfActive = Boolean(options.whatIfActive);
+  const federalWhatIfOpen = Boolean(options.federalWhatIfOpen);
+  const stateWhatIfOpen = Boolean(options.stateWhatIfOpen);
+  const tickerMap = buildTickerMap(workbook);
+  const { accountMap, accountTaxStatusByName } = buildAccountMaps(workbook);
+
+  const flowSeed = {
+    totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0,
+    investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0,
+    displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0,
+    displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0,
+    w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0,
+  };
+  const derivedRows = toInvestmentRows(workbook.tabs.investments).map((row) => {
+    const currentTicker = isPlaceholderAssetSymbol(row.symbol) ? undefined : tickerMap[normalizeLookupKey(row.symbol)];
+    const rowWhatIfActive = whatIfActive && normalizeBooleanValue(row.overrideProposal);
+    const effectiveSymbol = rowWhatIfActive && row.newSymbol ? String(row.newSymbol) : getInvestmentSymbol(row);
+    const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
+    const effectiveTicker = isPlaceholderAssetSymbol(effectiveSymbol) ? undefined : tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
+    const totalInvestment = getInvestmentTotal(row);
+    const currentPercent = normalizeRate(rowValue(currentTicker || {}, "percentReturn", "percent_return"));
+    const proposedPercent = normalizeRate(rowValue(proposedTicker || {}, "percentReturn", "percent_return") ?? row.newPercent);
+    const effectivePercent = rowWhatIfActive ? proposedPercent || currentPercent : currentPercent;
+    const importedYearlyIncome = getInvestmentIncome(row);
+    const accountKey = normalizeLookupKey(getInvestmentAccount(row));
+    const account = accountMap[accountKey];
+    const accountType = rowText(account || {}, "accountType", "account_type", "type") || inferAccountTypeFromAccountName(getInvestmentAccount(row));
+    const isW2IncomeAccount = isW2AccountType(accountType);
+    const assetType = rowText(effectiveTicker || {}, "assetType", "asset_type");
+    const incomeItem = isW2IncomeAccount || isIncomeAssetType(assetType) || (!assetType && normalizeBooleanValue(rowValue(effectiveTicker || {}, "incomeItem", "income_item"))) || (totalInvestment === 0 && importedYearlyIncome !== 0);
+    const yearlyIncome = incomeItem ? importedYearlyIncome : totalInvestment * effectivePercent;
+    const included = getInvestmentIncluded(row);
+    const filteredIncome = included ? yearlyIncome : 0;
+    const includeInAfterTaxValue = rowValue(account || {}, "includeInFreeCashflow", "include_in_free_cashflow");
+    const includeInAfterTaxIncome = includeInAfterTaxValue === undefined ? true : normalizeYesNo(includeInAfterTaxValue) === "yes";
+    const displayFilteredIncome = included && includeInAfterTaxIncome ? yearlyIncome : 0;
+    const taxStatus = String(accountTaxStatusByName[accountKey] || "taxable").toLowerCase();
+    const isTaxableAccount = taxStatus === "taxable" || taxStatus.includes("taxable");
+    const taxTreatment = isW2IncomeAccount ? "income" : rowText(effectiveTicker || {}, "taxTreatment", "tax_treatment") || "income";
+    const investmentType = normalizeLookupKey(rowText(effectiveTicker || {}, "category"));
+    const taxableMonthlyBase = isTaxableAccount && included ? filteredIncome / 12 : 0;
+    const displayTaxableMonthlyBase = isTaxableAccount && included && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
+    const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false);
+    const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true);
+    const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode);
+    const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false);
+    const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true);
+    const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode);
+    return {
+      id: row.id,
+      description: rowText(row, "description", "desc"),
+      account: getInvestmentAccount(row),
+      symbol: getInvestmentSymbol(row),
+      newSymbol: rowText(row, "newSymbol", "new_symbol", "overrideSymbol"),
+      effectiveSymbol,
+      overrideProposal: normalizeBooleanValue(row.overrideProposal),
+      includeIncome: included,
+      totalInvestment,
+      yearlyIncome,
+      filteredIncome,
+      displayFilteredIncome,
+      includedTotal: included && !incomeItem ? totalInvestment : 0,
+      incomeItem,
+      taxStatus,
+      taxTreatment,
+      investmentType,
+      investmentIncome: !incomeItem ? filteredIncome : 0,
+      investmentFederalOrdinary: !incomeItem ? ordinaryMonthly * 12 : 0,
+      investmentFederalPreferred: !incomeItem ? preferredMonthly * 12 : 0,
+      investmentStateTaxable: !incomeItem ? stateMonthly * 12 : 0,
+      federalOrdinary: ordinaryMonthly * 12,
+      federalPreferred: preferredMonthly * 12,
+      stateTaxable: stateMonthly * 12,
+      displayFederalOrdinary: displayOrdinaryMonthly * 12,
+      displayFederalPreferred: displayPreferredMonthly * 12,
+      displayStateTaxable: displayStateMonthly * 12,
+      w2Income: isW2IncomeAccount ? filteredIncome : 0,
+      nonInvestmentIncome: isW2IncomeAccount || ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0,
+      nonTaxableIncome: !isTaxableAccount && included ? yearlyIncome : 0,
+    };
+  });
+  const flows = derivedRows.reduce((acc, row) => {
+    acc.totalInvestmentAmount += row.includedTotal;
+    acc.totalIncome += row.filteredIncome;
+    acc.investmentIncome += row.investmentIncome;
+    acc.investmentFederalOrdinary += row.investmentFederalOrdinary;
+    acc.investmentFederalPreferred += row.investmentFederalPreferred;
+    acc.investmentStateTaxable += row.investmentStateTaxable;
+    acc.displayIncome += row.displayFilteredIncome;
+    acc.federalOrdinary += row.federalOrdinary;
+    acc.federalPreferred += row.federalPreferred;
+    acc.stateTaxable += row.stateTaxable;
+    acc.displayFederalOrdinary += row.displayFederalOrdinary;
+    acc.displayFederalPreferred += row.displayFederalPreferred;
+    acc.displayStateTaxable += row.displayStateTaxable;
+    acc.w2Income += row.w2Income;
+    acc.nonTaxableIncome += row.nonTaxableIncome;
+    acc.nonInvestmentIncome += row.nonInvestmentIncome;
+    acc.displayNonInvestmentIncome += row.nonInvestmentIncome;
+    return acc;
+  }, { ...flowSeed });
+
+  const extraOrdinary = options.extraOrdinaryIncome ?? sumTaxWhatIfItems(federalSettings.extraOrdinaryItems, normalizeNumberValue(federalSettings.extraOrdinaryIncome));
+  const extraPreferred = options.extraPreferredIncome ?? sumTaxWhatIfItems(federalSettings.extraPreferredItems, normalizeNumberValue(federalSettings.extraPreferredIncome));
+  const extraW2 = sumW2TaxWhatIfItems(federalSettings.extraOrdinaryItems);
+  const effectiveExtraOrdinaryIncome = federalWhatIfOpen ? extraOrdinary : 0;
+  const effectiveExtraPreferredIncome = federalWhatIfOpen ? extraPreferred : 0;
+  const effectiveW2Income = flows.w2Income + (federalWhatIfOpen ? extraW2 : 0);
+  const w2PayrollTax = calculateW2PayrollTax(effectiveW2Income, filingStatus, selectedStateCode);
+  const effectiveExtraStateIncome = stateWhatIfOpen ? (options.extraStateIncome ?? normalizeNumberValue(stateSettings.extraStateIncome)) : 0;
+  const ordinaryBeforeDeductions = flows.federalOrdinary + effectiveExtraOrdinaryIncome;
+  const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
+  const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
+  const federalTaxableInvestmentIncome = flows.federalOrdinary + flows.federalPreferred;
+  const stateInvestmentAdjustment = flows.stateTaxable - federalTaxableInvestmentIncome;
+  const federalWhatIfIncome = effectiveExtraOrdinaryIncome + effectiveExtraPreferredIncome;
+  const stateGross = federalTaxableInvestmentIncome + stateInvestmentAdjustment + federalWhatIfIncome + effectiveExtraStateIncome;
+  const stateItemized = normalizeNumberValue(stateSettings.mortgageInterest) + normalizeNumberValue(stateSettings.propertyTax);
+  const stateDeduction = Math.max(normalizeNumberValue(stateSettings.standardDeduction) || 11000, stateItemized);
+  const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
+  const stateResult = await postPortfolioApi<Record<string, unknown>>(config, {
+    calc: "STATE_TAX_2025",
+    state: selectedStateCode,
+    filingStatus,
+    taxableIncome: stateTaxableAfterDeductions,
+  });
+  const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, normalizeNumberValue(stateResult.tax), normalizeNumberValue(federalSettings.saltCap) || 40400);
+  const federalAboveLineDeductionSummary = summarizeAboveLineDeductions(federalSettings.aboveLineDeductionItems);
+  const federalDeduction = deductionMode === "itemized"
+    ? federalDeductionSummary.itemizedDeduction
+    : normalizeNumberValue(federalSettings.standardDeduction) || 31500;
+  const federalTaxableBeforeStandardOrItemized = Math.max(grossFederalTaxable - federalAboveLineDeductionSummary.total, 0);
+  const federalTaxableAfterDeductions = Math.max(federalTaxableBeforeStandardOrItemized - federalDeduction, 0);
+  const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
+  const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
+  const magi = grossFederalTaxable;
+  const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome - effectiveW2Income, 0);
+  const federalResult = await postPortfolioApi<Record<string, unknown>>(config, {
+    calc: "FED_TAX_2025_COMBINED",
+    ordinaryTaxable,
+    prefTaxable,
+    filingStatus,
+    magi,
+    netInvestmentIncome,
+  });
+  const federalIncomeTax = normalizeNumberValue(federalResult.tax);
+  const stateIncomeTax = normalizeNumberValue(stateResult.tax);
+  const federalTaxWithPayroll = federalIncomeTax + w2PayrollTax.federal.total;
+  const stateTaxWithPayroll = stateIncomeTax + w2PayrollTax.state.total;
+  const totalTax = federalTaxWithPayroll + stateTaxWithPayroll;
+  const afterTaxIncome = flows.displayIncome - Math.max(totalTax, 0);
+  const investmentTax = Math.max(totalTax - Math.max(0, totalTax - flows.investmentIncome), 0);
+  return {
+    workspaceId: workbook.workspaceId,
+    updatedAt: workbook.updatedAt,
+    options: { whatIfActive, federalWhatIfOpen, stateWhatIfOpen, stateCode: selectedStateCode, filingStatus, deductionMode },
+    income: {
+      annualBeforeTax: flows.totalIncome,
+      monthlyBeforeTax: flows.totalIncome / 12,
+      annualAfterTax: afterTaxIncome,
+      monthlyAfterTax: afterTaxIncome / 12,
+      spendableBeforeTax: flows.displayIncome,
+      excludedFromAfterTaxIncome: flows.totalIncome - flows.displayIncome,
+    },
+    taxes: {
+      totalTax,
+      federalIncomeTax,
+      stateIncomeTax,
+      federalPayrollTax: w2PayrollTax.federal.total,
+      statePayrollTax: w2PayrollTax.state.total,
+      w2PayrollTax,
+      federalResult,
+      stateResult,
+    },
+    taxableIncome: {
+      federalGross: grossFederalTaxable,
+      federalBeforeStandardOrItemized: federalTaxableBeforeStandardOrItemized,
+      federal: federalTaxableAfterDeductions,
+      ordinary: ordinaryTaxable,
+      preferred: prefTaxable,
+      stateGross,
+      state: stateTaxableAfterDeductions,
+      magi,
+      netInvestmentIncome,
+    },
+    deductions: {
+      federalDeduction,
+      federalDeductionMode: deductionMode,
+      federalAboveLineDeductionSummary,
+      federalDeductionSummary,
+      stateDeduction,
+    },
+    portfolio: {
+      totalInvestment: flows.totalInvestmentAmount,
+      investmentIncome: flows.investmentIncome,
+      beforeTaxYield: flows.totalInvestmentAmount > 0 ? flows.investmentIncome / flows.totalInvestmentAmount : 0,
+      afterTaxYield: flows.totalInvestmentAmount > 0 ? Math.max(flows.investmentIncome - investmentTax, 0) / flows.totalInvestmentAmount : 0,
+    },
+    flows,
+    rows: options.includeRows ? derivedRows : undefined,
+  };
 }
 
 export function createPortfolioServer(config: PortfolioServerConfig = {}) {
@@ -1171,13 +1651,193 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     }
   );
 
+  const filingStatusSchema = z.enum(["single", "mfj", "mfs", "hoh"]);
+  const portfolioCalculationOptionsSchema = {
+    workspaceId: z.string().optional(),
+    whatIfActive: z.boolean().default(false).describe("When true, investment-row WhatIf choices with overrideProposal=true are used."),
+    federalWhatIfOpen: z.boolean().default(false).describe("When true, the Federal Tax tab extra income WhatIf rows are included."),
+    stateWhatIfOpen: z.boolean().default(false).describe("When true, the State Tax tab extra state income WhatIf value is included."),
+    stateCode: z.string().optional().describe("Two-letter state code. Defaults to workbook state settings."),
+    filingStatus: filingStatusSchema.optional().describe("Federal/state filing status. Defaults to workbook federal settings."),
+    deductionMode: z.enum(["standard", "itemized"]).optional().describe("Deduction mode. Defaults to workbook federal settings."),
+    extraOrdinaryIncome: z.number().optional().describe("Temporary extra ordinary income for this calculation when federalWhatIfOpen=true."),
+    extraPreferredIncome: z.number().optional().describe("Temporary extra preferred income for this calculation when federalWhatIfOpen=true."),
+    extraStateIncome: z.number().optional().describe("Temporary extra state income for this calculation when stateWhatIfOpen=true."),
+    includeRows: z.boolean().default(false).describe("When true, include row-level derived calculation details."),
+  };
+  const whatIfProposalSchema = z.object({
+    id: z.number().optional().describe("Investment row id to update."),
+    query: z.string().optional().describe("Free text query that must match exactly one investment row if id is not supplied."),
+    newSymbol: z.string().min(1).describe("WhatIf replacement asset/symbol for the row."),
+    newPercent: z.number().nonnegative().optional().describe("Optional WhatIf dividend/yield. Defaults from the assets table when possible."),
+    active: z.boolean().default(true).describe("Whether this row's WhatIf checkbox/overrideProposal should be active."),
+  });
+
+  server.tool(
+    "run_portfolio_calculation",
+    "Calculate the full AfterTaxUS portfolio result from the saved workbook, using the same row derivation and backend federal/state tax engines as the frontend. Use this to answer after-tax income, tax, yield, and taxable-income questions.",
+    portfolioCalculationOptionsSchema,
+    async (options) => {
+      const workbook = await getWorkbook(resolvedConfig, options.workspaceId);
+      const result = await calculatePortfolio(workbook, resolvedConfig, options);
+      return jsonToolResult(result);
+    }
+  );
+
+  server.tool(
+    "set_investment_whatifs",
+    "Set one or more investment-row WhatIf asset choices in bulk, optionally clear other WhatIfs, save the workbook, and return the recalculated after-tax portfolio result.",
+    {
+      workspaceId: z.string().optional(),
+      proposals: z.array(whatIfProposalSchema).min(1),
+      clearOtherWhatIfs: z.boolean().default(false).describe("When true, clears all existing row WhatIf overrides before applying these proposals."),
+      returnCalculation: z.boolean().default(true).describe("When true, return a full portfolio calculation after saving."),
+      calculationOptions: z.object({
+        federalWhatIfOpen: z.boolean().default(false),
+        stateWhatIfOpen: z.boolean().default(false),
+        stateCode: z.string().optional(),
+        filingStatus: filingStatusSchema.optional(),
+        deductionMode: z.enum(["standard", "itemized"]).optional(),
+        includeRows: z.boolean().default(false),
+      }).optional(),
+    },
+    async ({ workspaceId, proposals, clearOtherWhatIfs, returnCalculation, calculationOptions }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      let investments = toInvestmentRows(workbook.tabs.investments);
+      const tickerMap = buildTickerMap(workbook);
+      const updatedIds: number[] = [];
+      const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
+
+      if (clearOtherWhatIfs) {
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+      }
+
+      for (const proposal of proposals) {
+        const target = findInvestmentByIdOrQuery(investments, proposal.id, proposal.query);
+        if (!target) {
+          const matchingCount = proposal.query ? investments.filter((row) => matchQuery(row, proposal.query || "")).length : 0;
+          throw new Error(
+            proposal.query && matchingCount !== 1
+              ? `set_investment_whatifs requires exactly one match for query '${proposal.query}'. Query matched ${matchingCount} rows.`
+              : `set_investment_whatifs could not find investment row ${proposal.id ?? ""}.`
+          );
+        }
+        const targetId = Number(target.id);
+        const symbol = proposal.newSymbol.trim();
+        const ticker = tickerMap[normalizeLookupKey(symbol)];
+        const newPercent = proposal.newPercent ?? normalizeRate(rowValue(ticker || {}, "percentReturn", "percent_return"));
+        investments = investments.map((row) => Number(row.id) === targetId
+          ? { ...row, newSymbol: symbol, newPercent, overrideProposal: proposal.active }
+          : row
+        );
+        updatedIds.push(targetId);
+        updates.push({ id: targetId, previousSymbol: getInvestmentSymbol(target), newSymbol: symbol, active: proposal.active });
+      }
+
+      workbook.tabs.investments = investments;
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const calculation = returnCalculation
+        ? await calculatePortfolio(workbook, resolvedConfig, {
+            ...(calculationOptions || {}),
+            whatIfActive: true,
+            workspaceId,
+          })
+        : undefined;
+
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        updatedIds,
+        updates,
+        calculation,
+        note: "Rows were saved with WhatIf overrideProposal values. The returned calculation treats investment WhatIf mode as active.",
+      });
+    }
+  );
+
+  server.tool(
+    "compare_portfolio_whatif",
+    "Compare the current saved portfolio against a temporary or saved WhatIf scenario and return before/after after-tax income, tax, yield, and deltas.",
+    {
+      workspaceId: z.string().optional(),
+      proposals: z.array(whatIfProposalSchema).optional().describe("Temporary WhatIf proposals to evaluate. They are not saved unless saveScenario=true."),
+      saveScenario: z.boolean().default(false).describe("When true, save the proposal rows to the workbook before returning the comparison."),
+      clearOtherWhatIfs: z.boolean().default(false),
+      calculationOptions: z.object({
+        federalWhatIfOpen: z.boolean().default(false),
+        stateWhatIfOpen: z.boolean().default(false),
+        stateCode: z.string().optional(),
+        filingStatus: filingStatusSchema.optional(),
+        deductionMode: z.enum(["standard", "itemized"]).optional(),
+        includeRows: z.boolean().default(false),
+      }).optional(),
+    },
+    async ({ workspaceId, proposals, saveScenario, clearOtherWhatIfs, calculationOptions }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const baseline = await calculatePortfolio(workbook, resolvedConfig, {
+        ...(calculationOptions || {}),
+        whatIfActive: false,
+        workspaceId,
+      });
+      const scenarioWorkbook: WorkbookResponse = {
+        ...workbook,
+        tabs: { ...workbook.tabs, investments: [...toInvestmentRows(workbook.tabs.investments)] },
+        settings: { ...workbook.settings },
+      };
+      let investments = toInvestmentRows(scenarioWorkbook.tabs.investments);
+      const tickerMap = buildTickerMap(scenarioWorkbook);
+      const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
+      if (clearOtherWhatIfs) {
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+      }
+      for (const proposal of proposals || []) {
+        const target = findInvestmentByIdOrQuery(investments, proposal.id, proposal.query);
+        if (!target) throw new Error(`compare_portfolio_whatif could not find a unique row for proposal ${proposal.id ?? proposal.query ?? ""}.`);
+        const targetId = Number(target.id);
+        const symbol = proposal.newSymbol.trim();
+        const ticker = tickerMap[normalizeLookupKey(symbol)];
+        const newPercent = proposal.newPercent ?? normalizeRate(rowValue(ticker || {}, "percentReturn", "percent_return"));
+        investments = investments.map((row) => Number(row.id) === targetId
+          ? { ...row, newSymbol: symbol, newPercent, overrideProposal: proposal.active }
+          : row
+        );
+        updates.push({ id: targetId, previousSymbol: getInvestmentSymbol(target), newSymbol: symbol, active: proposal.active });
+      }
+      scenarioWorkbook.tabs.investments = investments;
+      const saveResult = saveScenario ? await saveWorkbook(resolvedConfig, scenarioWorkbook) : undefined;
+      const scenario = await calculatePortfolio(scenarioWorkbook, resolvedConfig, {
+        ...(calculationOptions || {}),
+        whatIfActive: true,
+        workspaceId,
+      });
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult?.updatedAt,
+        saved: saveScenario,
+        updates,
+        baseline,
+        scenario,
+        delta: {
+          annualBeforeTax: scenario.income.annualBeforeTax - baseline.income.annualBeforeTax,
+          annualAfterTax: scenario.income.annualAfterTax - baseline.income.annualAfterTax,
+          totalTax: scenario.taxes.totalTax - baseline.taxes.totalTax,
+          totalInvestment: scenario.portfolio.totalInvestment - baseline.portfolio.totalInvestment,
+          beforeTaxYield: scenario.portfolio.beforeTaxYield - baseline.portfolio.beforeTaxYield,
+          afterTaxYield: scenario.portfolio.afterTaxYield - baseline.portfolio.afterTaxYield,
+        },
+      });
+    }
+  );
+
   server.tool(
     "run_federal_tax_calculation",
     "Run the same combined federal tax calculation used by the spreadsheet and React app.",
     {
       ordinaryTaxable: z.number().nonnegative(),
       prefTaxable: z.number().nonnegative(),
-      filingStatus: z.enum(["single", "mfj"]),
+      filingStatus: filingStatusSchema,
       magi: z.number().nonnegative(),
       netInvestmentIncome: z.number().nonnegative(),
     },
