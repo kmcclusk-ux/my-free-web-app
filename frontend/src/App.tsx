@@ -4148,6 +4148,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const rowNavigationLabel = `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
   const openBlankSymbolFinder = () => {
     lastSymbolFinderSelectSubmitRef.current = "";
+    lastSymbolFinderTypedSubmitRef.current = "";
     setSymbolFinderQuery("");
     setSymbolFinderScope("current");
     setIsSymbolFinderOpen(true);
@@ -4189,6 +4190,21 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
     }, 0);
   };
   const lastSymbolFinderSelectSubmitRef = useRef("");
+  const lastSymbolFinderTypedSubmitRef = useRef("");
+  const symbolFinderHasExactOption = (value: string) => symbolFinderOptions.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(value));
+  const submitSymbolFinderTypedValue = (value: string) => {
+    const typedSymbol = value.trim();
+    setSymbolFinderQuery(typedSymbol);
+    if (!typedSymbol) {
+      lastSymbolFinderTypedSubmitRef.current = "";
+      return;
+    }
+    if (!symbolFinderHasExactOption(typedSymbol)) return;
+    const submitKey = `${typedSymbol}|${symbolFinderScope}`;
+    if (lastSymbolFinderTypedSubmitRef.current === submitKey) return;
+    lastSymbolFinderTypedSubmitRef.current = submitKey;
+    submitSymbolFinderQueryAfterEvent(typedSymbol);
+  };
   const submitSymbolFinderSelectValue = (value: string) => {
     const selectedSymbol = value.trim();
     setSymbolFinderQuery(selectedSymbol);
@@ -4632,17 +4648,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
                   type="text"
                   list="symbol-finder-options"
                   value={symbolFinderQuery}
-                  onChange={(event) => {
-                    const nextQuery = event.target.value;
-                    setSymbolFinderQuery(nextQuery);
-                    if (symbolFinderOptions.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(nextQuery))) {
-                      submitSymbolFinderQueryAfterEvent(nextQuery);
-                    }
-                  }}
+                  onInput={(event) => submitSymbolFinderTypedValue(event.currentTarget.value)}
+                  onChange={(event) => submitSymbolFinderTypedValue(event.currentTarget.value)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter") return;
                     event.preventDefault();
                     const query = event.currentTarget.value;
+                    lastSymbolFinderTypedSubmitRef.current = "";
                     submitSymbolFinderQueryAfterEvent(query);
                   }}
                   placeholder="Enter symbol"
