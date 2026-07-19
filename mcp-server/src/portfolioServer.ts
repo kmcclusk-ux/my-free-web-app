@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.11";
+export const SERVER_VERSION = "1.0.12";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -536,6 +536,34 @@ function normalizeRowId(value: unknown) {
 
 function uniqueNumericIds(values: unknown[]) {
   return [...new Set(values.map(normalizeRowId).filter((id): id is number => id !== null))];
+}
+
+function investmentRowsMatchingSelectors(
+  investments: InvestmentRow[],
+  selectors: {
+    rowNumbers?: Array<number | string>;
+    ids?: Array<number | string>;
+    symbols?: string[];
+    queries?: string[];
+    allRows?: boolean;
+  }
+) {
+  if (selectors.allRows) return investments;
+  const requestedRowNumbers = uniqueNumericIds(selectors.rowNumbers || []);
+  const requestedIds = uniqueNumericIds(selectors.ids || []);
+  const symbolSelectors = (selectors.symbols || []).map((symbol) => symbol.trim()).filter(Boolean);
+  const querySelectors = (selectors.queries || []).map((query) => query.trim()).filter(Boolean);
+
+  return investments.filter((row) => {
+    const internalId = normalizeRowId(row.id);
+    const visibleRowNumber = normalizeRowId(row.spreadsheetRowNumber);
+    return (
+      (internalId !== null && requestedIds.includes(internalId)) ||
+      (visibleRowNumber !== null && (requestedRowNumbers.includes(visibleRowNumber) || requestedIds.includes(visibleRowNumber))) ||
+      symbolSelectors.some((symbol) => investmentMatchesSelector(row, symbol, true)) ||
+      querySelectors.some((query) => investmentMatchesSelector(row, query, false))
+    );
+  });
 }
 
 function selectedInvestmentIdsFromSettings(settings: Record<string, unknown>) {
@@ -1957,7 +1985,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "set_investment_checkbox",
-    "Set one investment checkbox field by visible row number. Use overrideProposal for the WhatIf checkbox, select/includeIncome for the main row checkmark, and highlight only for visual row highlighting.",
+    "Set one investment checkbox field by visible row number. Use field='select' or field='includeIncome' for UI column ✓, field='overrideProposal' for UI column WhatIf. Use highlight tools only for visual row highlighting.",
     {
       workspaceId: z.string().optional(),
       id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
@@ -2001,6 +2029,84 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     }
   );
 
+  const investmentSelectionSchema = {
+    workspaceId: z.string().optional(),
+    rowNumbers: z.array(z.union([z.number(), z.string()])).optional().describe("Visible Row column numbers to check/uncheck in UI column ✓."),
+    ids: z.array(z.union([z.number(), z.string()])).optional().describe("Visible Row column numbers or internal row ids to check/uncheck in UI column ✓."),
+    symbols: z.array(z.string()).optional().describe("Asset symbols to match against the current Asset column only, then check/uncheck UI column ✓."),
+    queries: z.array(z.string()).optional().describe("Free-text row queries to match, then check/uncheck UI column ✓."),
+    allRows: z.boolean().default(false).describe("When true, check/uncheck UI column ✓ for every investment row."),
+    checked: z.boolean().default(true).describe("true selects/includes rows by checking UI column ✓; false deselects/excludes rows by unchecking UI column ✓."),
+    returnCalculation: z.boolean().default(false),
+  };
+  const selectInvestmentRows = async ({ workspaceId, rowNumbers, ids, symbols, queries, allRows, checked, returnCalculation }: {
+    workspaceId?: string;
+    rowNumbers?: Array<number | string>;
+    ids?: Array<number | string>;
+    symbols?: string[];
+    queries?: string[];
+    allRows: boolean;
+    checked: boolean;
+    returnCalculation: boolean;
+  }) => {
+    const workbook = await getWorkbook(resolvedConfig, workspaceId);
+    const investments = toInvestmentRows(workbook.tabs.investments);
+    const matchedRows = investmentRowsMatchingSelectors(investments, { rowNumbers, ids, symbols, queries, allRows });
+    const hasSelector = allRows || (rowNumbers?.length || 0) + (ids?.length || 0) + (symbols?.length || 0) + (queries?.length || 0) > 0;
+    if (!hasSelector) {
+      throw new Error("select_investment_rows requires allRows=true, rowNumbers, ids, symbols, or queries.");
+    }
+    if (matchedRows.length === 0) {
+      throw new Error("select_investment_rows found no matching investment rows for UI column ✓.");
+    }
+
+    const matchedIds = new Set(uniqueNumericIds(matchedRows.map((row) => row.id)));
+    workbook.tabs.investments = investments.map((row) =>
+      matchedIds.has(Number(row.id)) ? { ...row, includeIncome: checked } : row
+    );
+    const saveResult = await saveWorkbook(resolvedConfig, workbook);
+    const updatedRows = toInvestmentRows(workbook.tabs.investments).filter((row) => matchedIds.has(Number(row.id)));
+    const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+    return jsonToolResult({
+      ok: true,
+      workspaceId: workbook.workspaceId,
+      savedAt: saveResult.updatedAt,
+      checked,
+      selected: checked,
+      changedCount: updatedRows.length,
+      rows: updatedRows.map((row) => ({
+        id: normalizeRowId(row.id),
+        rowNumber: normalizeRowId(row.spreadsheetRowNumber),
+        uiColumns: investmentUiColumns(row),
+      })),
+      calculation,
+      note: "Only UI column ✓ was changed. Visual highlights and UI column WhatIf were not changed.",
+    });
+  };
+
+  server.tool(
+    "set_investment_selection_checkboxes",
+    "Bulk set UI column ✓ for investment rows. Use this when the user asks to select/deselect/include/exclude multiple rows or all rows. This does not visually highlight rows and does not change WhatIf.",
+    investmentSelectionSchema,
+    selectInvestmentRows
+  );
+
+  server.tool(
+    "select_all_investment_rows",
+    "Check UI column ✓ for every investment row. This is bulk selection for calculations, not visual highlighting.",
+    {
+      workspaceId: z.string().optional(),
+      checked: z.boolean().default(true).describe("true selects/includes all rows; false deselects/excludes all rows."),
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, checked, returnCalculation }) => selectInvestmentRows({
+      workspaceId,
+      allRows: true,
+      checked,
+      returnCalculation,
+    })
+  );
+
   const investmentRowHighlightSchema = {
     workspaceId: z.string().optional(),
     ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to visually highlight only. This does not set WhatIf or row selection checkboxes."),
@@ -2021,27 +2127,19 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const investments = toInvestmentRows(workbook.tabs.investments);
       const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
 
-      const requestedIds = uniqueNumericIds(ids || []);
       const symbolSelectors = (symbols || []).map((symbol) => symbol.trim()).filter(Boolean);
       const querySelectors = (queries || []).map((query) => query.trim()).filter(Boolean);
 
       const matchedRows = clear
         ? []
-        : investments.filter((row) => {
-          const rowId = normalizeRowId(row.id);
-          return (
-            (rowId !== null && requestedIds.includes(rowId)) ||
-            symbolSelectors.some((symbol) => investmentMatchesSelector(row, symbol, true)) ||
-            querySelectors.some((query) => investmentMatchesSelector(row, query, false))
-          );
-        });
+        : investmentRowsMatchingSelectors(investments, { ids, symbols: symbolSelectors, queries: querySelectors });
       const matchedIds = uniqueNumericIds(matchedRows.map((row) => row.id));
 
-      if (!clear && requestedIds.length + symbolSelectors.length + querySelectors.length === 0) {
-        throw new Error("select_investment_rows requires ids, symbols, queries, or clear=true.");
+      if (!clear && (ids?.length || 0) + symbolSelectors.length + querySelectors.length === 0) {
+        throw new Error("highlight_investment_rows requires ids, symbols, queries, or clear=true.");
       }
       if (!clear && matchedIds.length === 0) {
-        throw new Error("select_investment_rows found no matching investment rows.");
+        throw new Error("highlight_investment_rows found no matching investment rows.");
       }
 
       let selectedAssetIds: number[];
@@ -2077,9 +2175,9 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "select_investment_rows",
-    "VISUAL HIGHLIGHT ONLY: highlight investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. Do not use this for the WhatIf checkbox or the main selection checkbox.",
-    investmentRowHighlightSchema,
-    highlightInvestmentRows
+    "Bulk select/deselect investment rows for calculations by setting UI column ✓. Use this when the user says select rows, select all rows, include rows, or deselect rows. This does not visually highlight rows and does not change WhatIf.",
+    investmentSelectionSchema,
+    selectInvestmentRows
   );
 
   server.tool(
