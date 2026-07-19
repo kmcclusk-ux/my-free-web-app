@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.5";
+export const SERVER_VERSION = "1.0.6";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -574,6 +574,14 @@ function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
   ) as Partial<InvestmentRow>;
 }
 
+function investmentUpdateWithSelectAlias(values: Partial<InvestmentRow> & { select?: boolean; highlight?: boolean }) {
+  const update = safeInvestmentUpdate(values);
+  if (typeof values.select === "boolean" && update.includeIncome === undefined) {
+    update.includeIncome = values.select;
+  }
+  return update;
+}
+
 function normalizeLookupKey(value: unknown) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -1095,8 +1103,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     symbol: z.string().optional(),
     newSymbol: z.string().optional(),
     newPercent: z.number().nonnegative().optional(),
-    select: z.boolean().optional().describe("Highlight/select this row in the AfterTaxUS frontend without changing row fields."),
-    highlight: z.boolean().optional().describe("Alias for select."),
+    select: z.boolean().optional().describe("Set the investment row's checkmark/select checkbox. This maps to includeIncome in the frontend."),
+    highlight: z.boolean().optional().describe("Visually highlight/select this row in the AfterTaxUS frontend without changing row fields."),
   });
   const investmentReplacementRowSchema = z.object({
     id: z.union([z.number(), z.string()]).optional(),
@@ -1145,8 +1153,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         );
       }
       const targetId = Number(target.id);
-      const update = safeInvestmentUpdate(values);
-      const highlightValue = typeof values.select === "boolean" ? values.select : values.highlight;
+      const update = investmentUpdateWithSelectAlias(values);
+      const highlightValue = values.highlight;
       if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
         throw new Error("update_investment_row received no valid row fields to update.");
       }
@@ -1170,6 +1178,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
         investment: updatedRow,
+        selected: typeof values.select === "boolean" ? values.select : undefined,
         highlighted: typeof highlightValue === "boolean" ? highlightValue : undefined,
         calculation,
       });
@@ -1198,8 +1207,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
       for (const request of updates) {
         const target = findInvestmentByIdOrQuery(investments, request.id, request.query);
-        const update = safeInvestmentUpdate(request.values);
-        const highlightValue = typeof request.values.select === "boolean" ? request.values.select : request.values.highlight;
+        const update = investmentUpdateWithSelectAlias(request.values);
+        const highlightValue = request.values.highlight;
         if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
           throw new Error("bulk_update_investments received an update with no valid row fields.");
         }
@@ -1633,8 +1642,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         yearlyIncome: z.number().nonnegative().optional(),
         includeIncome: z.boolean().optional(),
         overrideProposal: z.boolean().optional(),
-        select: z.boolean().optional().describe("Highlight/select this investment row in the AfterTaxUS frontend without changing workbook row data."),
-        highlight: z.boolean().optional().describe("Alias for select. Highlights/selects this investment row in the AfterTaxUS frontend."),
+        select: z.boolean().optional().describe("Set the investment row's checkmark/select checkbox. This maps to includeIncome in the frontend."),
+        highlight: z.boolean().optional().describe("Visually highlight/select this investment row in the AfterTaxUS frontend without changing workbook row data."),
         symbol: z.string().optional(),
         newSymbol: z.string().optional(),
         newPercent: z.number().nonnegative().optional(),
@@ -1653,8 +1662,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         );
       }
 
-      const update = safeInvestmentUpdate(values);
-      const highlightValue = typeof values.select === "boolean" ? values.select : values.highlight;
+      const update = investmentUpdateWithSelectAlias(values);
+      const highlightValue = values.highlight;
       if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
         throw new Error("update_investment received no valid fields to update.");
       }
@@ -1680,6 +1689,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
         investment: updatedRow,
+        selected: typeof values.select === "boolean" ? values.select : undefined,
         highlighted: typeof highlightValue === "boolean" ? highlightValue : undefined,
       });
     }
@@ -1687,7 +1697,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "set_investment_checkbox",
-    "Set one investment checkbox field, such as includeIncome or overrideProposal, by investment row id.",
+    "Set one investment checkbox field by investment row id. Use select/includeIncome for the main row checkmark, overrideProposal for WhatIf active, and highlight for visual row highlighting.",
     {
       workspaceId: z.string().optional(),
       id: z.number(),
@@ -1701,7 +1711,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         throw new Error(`Investment row ${id} was not found.`);
       }
 
-      if (field === "select" || field === "highlight") {
+      if (field === "highlight") {
         const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
         workbook.settings = setSelectedInvestmentIdsInSettings(
           workbook.settings,
@@ -1710,8 +1720,9 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
             : existingSelection.filter((selectedId) => selectedId !== id)
         );
       } else {
+        const dataField = field === "select" ? "includeIncome" : field;
         workbook.tabs.investments = investments.map((row) =>
-          Number(row.id) === id ? { ...row, [field]: checked } : row
+          Number(row.id) === id ? { ...row, [dataField]: checked } : row
         );
       }
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
@@ -1722,7 +1733,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         id,
         field,
         checked,
-        highlighted: field === "select" || field === "highlight" ? checked : undefined,
+        selected: field === "select" || field === "includeIncome" ? checked : undefined,
+        highlighted: field === "highlight" ? checked : undefined,
       });
     }
   );
