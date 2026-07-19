@@ -116,7 +116,7 @@ type ModelDataSnapshot = {
 };
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean };
+type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string };
@@ -1822,12 +1822,16 @@ function parsePlannerSettingsSection(section: unknown): Partial<PlannerSettings>
 function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
   if (!section || typeof section !== "object") return {};
   const sectionObj = section as Record<string, unknown>;
+  const mcpRefresh = sectionObj.mcpRefresh && typeof sectionObj.mcpRefresh === "object"
+    ? sectionObj.mcpRefresh as UiSettings["mcpRefresh"]
+    : undefined;
   return {
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     selectedAssetIds: normalizeSelectedAssetIds(sectionObj.selectedAssetIds),
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
     incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
     darkMode: sectionObj.darkMode === true,
+    mcpRefresh,
   };
 }
 
@@ -1850,6 +1854,7 @@ function parseWorkbookSettings(settings: unknown) {
       modelVersions: ui.modelVersions || [],
       incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
       darkMode: ui.darkMode === true,
+      mcpRefresh: ui.mcpRefresh,
     },
   };
 }
@@ -1904,6 +1909,12 @@ async function saveWorkbook(workspaceId: string, payload: WorkbookResponse, idTo
   const json = (await response.json()) as { updatedAt?: string; error?: string };
   if (!response.ok) throw new Error(json.error || "Workbook save failed");
   return json;
+}
+
+function workbookRefreshMarker(response: WorkbookResponse) {
+  const ui = response.settings?.ui;
+  const mcpRefresh = ui && typeof ui === "object" ? (ui as UiSettings).mcpRefresh : undefined;
+  return mcpRefresh?.requestedAt || response.updatedAt || null;
 }
 
 async function postPortfolioChat(messages: Array<Pick<ChatMessage, "role" | "content">>, portfolioSnapshot: PortfolioSnapshot, idToken?: string) {
@@ -5030,6 +5041,7 @@ export default function App() {
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedStorage = useRef(false);
   const latestWorkbookUpdatedAt = useRef<string | null>(null);
+  const latestWorkbookRefreshMarker = useRef<string | null>(null);
   const suppressNextAutosave = useRef(false);
   const historyRef = useRef<{ past: string[]; present: string; future: string[] }>({ past: [], present: "", future: [] });
   const historyInitialized = useRef(false);
@@ -5590,6 +5602,7 @@ export default function App() {
       resetHistoryTracking();
     }
     latestWorkbookUpdatedAt.current = response.updatedAt || latestWorkbookUpdatedAt.current;
+    latestWorkbookRefreshMarker.current = workbookRefreshMarker(response) || latestWorkbookRefreshMarker.current;
     setInvestments(activeInvestments);
     if (options.resetWhatIf) setIsWhatIfActive(false);
     setTickers(
@@ -5624,6 +5637,7 @@ export default function App() {
       modelVersions: workbookSettings.ui?.modelVersions || [],
       incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
       darkMode: workbookSettings.ui?.darkMode === true,
+      mcpRefresh: workbookSettings.ui?.mcpRefresh,
     });
   }, [authEnabled, authState.status, resetHistoryTracking]);
 
@@ -5631,6 +5645,7 @@ export default function App() {
     if (authEnabled && authState.status !== "signedIn") {
       hasLoadedStorage.current = false;
       latestWorkbookUpdatedAt.current = null;
+      latestWorkbookRefreshMarker.current = null;
       resetHistoryTracking();
       setStorageState(authState.status === "loading" ? "loading" : "ready");
       return;
@@ -5661,13 +5676,18 @@ export default function App() {
       loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
         if (cancelled) return;
         const remoteUpdatedAt = response.updatedAt || null;
+        const remoteRefreshMarker = workbookRefreshMarker(response);
         const knownUpdatedAt = latestWorkbookUpdatedAt.current;
-        if (!remoteUpdatedAt) return;
-        if (!knownUpdatedAt) {
+        const knownRefreshMarker = latestWorkbookRefreshMarker.current;
+        if (!remoteUpdatedAt && !remoteRefreshMarker) return;
+        if (!knownUpdatedAt && !knownRefreshMarker) {
           latestWorkbookUpdatedAt.current = remoteUpdatedAt;
+          latestWorkbookRefreshMarker.current = remoteRefreshMarker;
           return;
         }
-        if (remoteUpdatedAt <= knownUpdatedAt) return;
+        const hasNewRefreshMarker = Boolean(remoteRefreshMarker && remoteRefreshMarker !== knownRefreshMarker);
+        const hasNewUpdatedAt = Boolean(remoteUpdatedAt && knownUpdatedAt && remoteUpdatedAt > knownUpdatedAt);
+        if (!hasNewRefreshMarker && !hasNewUpdatedAt) return;
         applyWorkbookResponse(response, { resetWhatIf: false, fromRemoteRefresh: true });
         hasLoadedStorage.current = true;
         setStorageState("ready");
@@ -5774,6 +5794,7 @@ export default function App() {
       saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds } } }, authToken).then((result) => {
         if (!cancelled) {
           latestWorkbookUpdatedAt.current = result.updatedAt || latestWorkbookUpdatedAt.current;
+          latestWorkbookRefreshMarker.current = result.updatedAt || latestWorkbookRefreshMarker.current;
           setStorageState("saved");
         }
       }).catch((error: Error) => {
