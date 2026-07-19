@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.9";
+export const SERVER_VERSION = "1.0.10";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -1232,8 +1232,45 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   );
 
   server.tool(
+    "set_whatif_checkbox",
+    "Set the WhatIf checkbox for one visible investment row. Use this exact tool when the user asks to check/uncheck WhatIf. This changes overrideProposal only; it does not visually highlight rows and does not change the main row selection checkbox.",
+    {
+      workspaceId: z.string().optional(),
+      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
+      checked: z.boolean().describe("true checks the row's WhatIf checkbox; false unchecks it."),
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, id, rowNumber, checked, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const investments = toInvestmentRows(workbook.tabs.investments);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
+      const targetId = Number(target.id);
+      workbook.tabs.investments = investments.map((row) =>
+        Number(row.id) === targetId ? { ...row, overrideProposal: checked } : row
+      );
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === targetId);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        id: targetId,
+        rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
+        whatIfActive: checked,
+        overrideProposal: checked,
+        investment: updatedRow,
+        calculation,
+        note: "Only the WhatIf checkbox/overrideProposal was changed. Visual row highlight and main selection were not changed.",
+      });
+    }
+  );
+
+  server.tool(
     "set_investment_whatif_checkbox",
-    "Set the WhatIf active checkbox for exactly one investment row. This changes overrideProposal; it is not the visible row selection/checkmark and not visual highlighting.",
+    "Set the WhatIf active checkbox for exactly one investment row. Use this for WhatIf checkbox changes. This changes overrideProposal only; it is not the visible row selection/checkmark and not visual highlighting.",
     {
       workspaceId: z.string().optional(),
       id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
@@ -1819,7 +1856,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "set_investment_checkbox",
-    "Set one investment checkbox field by visible row number. Use select/includeIncome for the main row checkmark, overrideProposal for WhatIf active, and highlight for visual row highlighting.",
+    "Set one investment checkbox field by visible row number. Use overrideProposal for the WhatIf checkbox, select/includeIncome for the main row checkmark, and highlight only for visual row highlighting.",
     {
       workspaceId: z.string().optional(),
       id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
@@ -1865,7 +1902,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   const investmentRowHighlightSchema = {
     workspaceId: z.string().optional(),
-    ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to highlight/select."),
+    ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to visually highlight only. This does not set WhatIf or row selection checkboxes."),
     symbols: z.array(z.string()).optional().describe("Symbols/tickers to highlight by exact current or WhatIf symbol match."),
     queries: z.array(z.string()).optional().describe("Free-text queries to match against exported investment row fields."),
     mode: z.enum(["replace", "add", "remove"]).default("replace").describe("replace overwrites current highlights; add appends; remove clears matching row highlights."),
@@ -1939,21 +1976,21 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "select_investment_rows",
-    "Select/highlight investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. This updates workbook UI settings so the app highlights those rows when loaded or refreshed.",
+    "VISUAL HIGHLIGHT ONLY: highlight investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. Do not use this for the WhatIf checkbox or the main selection checkbox.",
     investmentRowHighlightSchema,
     highlightInvestmentRows
   );
 
   server.tool(
     "highlight_investment_rows",
-    "Highlight specific investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. Use this when ChatGPT is asked to highlight rows in the app.",
+    "VISUAL HIGHLIGHT ONLY: highlight specific investment rows in the AfterTaxUS frontend by row ids, symbols, or free-text queries. This does not set WhatIf/overrideProposal.",
     investmentRowHighlightSchema,
     highlightInvestmentRows
   );
 
   server.tool(
     "set_row_highlight",
-    "Set visual row highlights in the AfterTaxUS React frontend for investment rows. Use ids to highlight exact row numbers, symbols to highlight ticker rows, queries to highlight matching text, or clear=true to remove all row highlights.",
+    "VISUAL HIGHLIGHT ONLY: set row highlights in the AfterTaxUS React frontend for investment rows. Do not use this for WhatIf checkboxes, overrideProposal, includeIncome, or row selection checkmarks.",
     investmentRowHighlightSchema,
     highlightInvestmentRows
   );
