@@ -116,7 +116,7 @@ type ModelDataSnapshot = {
 };
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
+type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string };
@@ -817,7 +817,7 @@ const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferred
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem(blankDeductionType)], deductionItems: [newDeductionItem(blankDeductionType)], mortgageInterest: 0, propertyTax: 0, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false };
+const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1831,6 +1831,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
     incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
     darkMode: sectionObj.darkMode === true,
+    investmentWhatIfOpen: sectionObj.investmentWhatIfOpen === true,
     mcpRefresh,
   };
 }
@@ -1854,6 +1855,7 @@ function parseWorkbookSettings(settings: unknown) {
       modelVersions: ui.modelVersions || [],
       incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
       darkMode: ui.darkMode === true,
+      investmentWhatIfOpen: ui.investmentWhatIfOpen === true,
       mcpRefresh: ui.mcpRefresh,
     },
   };
@@ -5090,6 +5092,7 @@ export default function App() {
       modelVersions: current.modelVersions,
       incomePrimaryPeriod: current.incomePrimaryPeriod,
       darkMode: current.darkMode,
+      investmentWhatIfOpen: current.investmentWhatIfOpen,
     }));
     setSelectedInvestmentIds(normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds));
     setIsWhatIfActive(snapshot.isWhatIfActive);
@@ -5604,7 +5607,11 @@ export default function App() {
     latestWorkbookUpdatedAt.current = response.updatedAt || latestWorkbookUpdatedAt.current;
     latestWorkbookRefreshMarker.current = workbookRefreshMarker(response) || latestWorkbookRefreshMarker.current;
     setInvestments(activeInvestments);
-    if (options.resetWhatIf) setIsWhatIfActive(false);
+    if (options.resetWhatIf) {
+      setIsWhatIfActive(workbookSettings.ui?.investmentWhatIfOpen === true);
+    } else if (workbookSettings.ui?.investmentWhatIfOpen === true) {
+      setIsWhatIfActive(true);
+    }
     setTickers(
       mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
     );
@@ -5637,6 +5644,7 @@ export default function App() {
       modelVersions: workbookSettings.ui?.modelVersions || [],
       incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
       darkMode: workbookSettings.ui?.darkMode === true,
+      investmentWhatIfOpen: workbookSettings.ui?.investmentWhatIfOpen === true,
       mcpRefresh: workbookSettings.ui?.mcpRefresh,
     });
   }, [authEnabled, authState.status, resetHistoryTracking]);
@@ -5791,7 +5799,7 @@ export default function App() {
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
       saveTimeout.current = null;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds } } }, authToken).then((result) => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds, investmentWhatIfOpen: isWhatIfActive } } }, authToken).then((result) => {
         if (!cancelled) {
           latestWorkbookUpdatedAt.current = result.updatedAt || latestWorkbookUpdatedAt.current;
           latestWorkbookRefreshMarker.current = result.updatedAt || latestWorkbookRefreshMarker.current;
@@ -5804,7 +5812,7 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, selectedInvestmentIds, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, selectedInvestmentIds, isWhatIfActive, hasRealData, authEnabled, authState.status, authToken]);
 
   const federalIncomeTaxTotal = federalResult?.tax || 0;
   const federalTaxWithPayroll = federalIncomeTaxTotal + w2PayrollTax.federal.total;
