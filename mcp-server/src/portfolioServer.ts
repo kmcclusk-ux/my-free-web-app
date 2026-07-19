@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.4";
+export const SERVER_VERSION = "1.0.5";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -1071,6 +1071,33 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     newPercent: z.number().nonnegative().optional(),
     active: z.boolean().default(true),
   });
+  const investmentUpdateValuesSchema = z.object({
+    description: z.string().optional(),
+    account: z.string().optional(),
+    category: z.string().optional(),
+    totalInvestment: z.number().nonnegative().optional(),
+    yearlyIncome: z.number().optional(),
+    includeIncome: z.boolean().optional(),
+    overrideProposal: z.boolean().optional(),
+    symbol: z.string().optional(),
+    newSymbol: z.string().optional(),
+    newPercent: z.number().nonnegative().optional(),
+    select: z.boolean().optional().describe("Highlight/select this row in the AfterTaxUS frontend without changing row fields."),
+    highlight: z.boolean().optional().describe("Alias for select."),
+  });
+  const investmentReplacementRowSchema = z.object({
+    id: z.union([z.number(), z.string()]).optional(),
+    description: z.string().default(""),
+    account: z.string().default(""),
+    category: z.string().default("core"),
+    totalInvestment: z.number().nonnegative().default(0),
+    yearlyIncome: z.number().default(0),
+    includeIncome: z.boolean().default(true),
+    overrideProposal: z.boolean().default(false),
+    symbol: z.string().default(""),
+    newSymbol: z.string().default(""),
+    newPercent: z.number().nonnegative().default(0),
+  });
 
   server.tool(
     "calculate_portfolio",
@@ -1079,6 +1106,192 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     async (options) => {
       const workbook = await getWorkbook(resolvedConfig, options.workspaceId);
       return jsonToolResult(await calculatePortfolio(workbook, resolvedConfig, options));
+    }
+  );
+
+  server.tool(
+    "update_investment_row",
+    "Latest AfterTaxUS row updater. Updates one investment row by exact row id or by a query that matches exactly one row. Use this for direct ChatGPT edits to investment data.",
+    {
+      workspaceId: z.string().optional(),
+      id: z.number().optional(),
+      query: z.string().optional(),
+      values: investmentUpdateValuesSchema,
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, id, query, values, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const investments = toInvestmentRows(workbook.tabs.investments);
+      const target = findInvestmentByIdOrQuery(investments, id, query);
+      if (!target) {
+        const matchingCount = query ? investments.filter((row) => matchQuery(row, query)).length : 0;
+        throw new Error(
+          query && matchingCount !== 1
+            ? `update_investment_row requires exactly one match. Query matched ${matchingCount} rows.`
+            : "update_investment_row requires a valid investment id or exactly matching query."
+        );
+      }
+      const targetId = Number(target.id);
+      const update = safeInvestmentUpdate(values);
+      const highlightValue = typeof values.select === "boolean" ? values.select : values.highlight;
+      if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
+        throw new Error("update_investment_row received no valid row fields to update.");
+      }
+      workbook.tabs.investments = Object.keys(update).length > 0
+        ? investments.map((row) => Number(row.id) === targetId ? { ...row, ...update } : row)
+        : investments;
+      if (typeof highlightValue === "boolean") {
+        const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
+        workbook.settings = setSelectedInvestmentIdsInSettings(
+          workbook.settings,
+          highlightValue
+            ? [...new Set([...existingSelection, targetId])]
+            : existingSelection.filter((selectedId) => selectedId !== targetId)
+        );
+      }
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === targetId);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        investment: updatedRow,
+        highlighted: typeof highlightValue === "boolean" ? highlightValue : undefined,
+        calculation,
+      });
+    }
+  );
+
+  server.tool(
+    "bulk_update_investments",
+    "Latest AfterTaxUS bulk row updater. Updates many investment rows in one save operation by id or exactly matching query, and can optionally add rows when no target is found.",
+    {
+      workspaceId: z.string().optional(),
+      updates: z.array(z.object({
+        id: z.number().optional(),
+        query: z.string().optional(),
+        values: investmentUpdateValuesSchema,
+        addIfMissing: z.boolean().default(false).describe("When true and no row matches, add a new investment row using values plus defaults."),
+      })).min(1),
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, updates, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      let investments = toInvestmentRows(workbook.tabs.investments);
+      const changedRows: InvestmentRow[] = [];
+      const highlightedIds = new Set(selectedInvestmentIdsFromSettings(workbook.settings));
+      let nextId = nextInvestmentId(investments);
+
+      for (const request of updates) {
+        const target = findInvestmentByIdOrQuery(investments, request.id, request.query);
+        const update = safeInvestmentUpdate(request.values);
+        const highlightValue = typeof request.values.select === "boolean" ? request.values.select : request.values.highlight;
+        if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
+          throw new Error("bulk_update_investments received an update with no valid row fields.");
+        }
+
+        if (!target) {
+          const matchingCount = request.query ? investments.filter((row) => matchQuery(row, request.query || "")).length : 0;
+          if (!request.addIfMissing) {
+            throw new Error(
+              request.query && matchingCount !== 1
+                ? `bulk_update_investments requires exactly one match for query '${request.query}'. Query matched ${matchingCount} rows.`
+                : `bulk_update_investments could not find investment row ${request.id ?? ""}.`
+            );
+          }
+          const newRow: InvestmentRow = {
+            id: nextId++,
+            description: String(update.description || "New Investment"),
+            account: String(update.account || ""),
+            category: String(update.category || "core"),
+            totalInvestment: normalizeNumberValue(update.totalInvestment),
+            yearlyIncome: normalizeNumberValue(update.yearlyIncome),
+            includeIncome: update.includeIncome ?? true,
+            overrideProposal: update.overrideProposal ?? false,
+            symbol: String(update.symbol || ""),
+            newSymbol: String(update.newSymbol || update.symbol || ""),
+            newPercent: normalizeNumberValue(update.newPercent),
+          };
+          investments = [...investments, newRow];
+          if (typeof highlightValue === "boolean") {
+            if (highlightValue) highlightedIds.add(Number(newRow.id));
+            else highlightedIds.delete(Number(newRow.id));
+          }
+          changedRows.push(newRow);
+          continue;
+        }
+
+        const targetId = Number(target.id);
+        investments = investments.map((row) => Number(row.id) === targetId ? { ...row, ...update } : row);
+        if (typeof highlightValue === "boolean") {
+          if (highlightValue) highlightedIds.add(targetId);
+          else highlightedIds.delete(targetId);
+        }
+        const changedRow = investments.find((row) => Number(row.id) === targetId);
+        if (changedRow) changedRows.push(changedRow);
+      }
+
+      workbook.tabs.investments = investments;
+      workbook.settings = setSelectedInvestmentIdsInSettings(workbook.settings, [...highlightedIds].sort((a, b) => a - b));
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        changedCount: changedRows.length,
+        changedRows,
+        selectedAssetIds: [...highlightedIds].sort((a, b) => a - b),
+        calculation,
+      });
+    }
+  );
+
+  server.tool(
+    "replace_investments_table",
+    "Latest AfterTaxUS table replacement. Replaces the entire Investments table in one operation for ChatGPT-driven scratch population or complete portfolio imports.",
+    {
+      workspaceId: z.string().optional(),
+      rows: z.array(investmentReplacementRowSchema).min(1),
+      clearHighlights: z.boolean().default(true),
+      returnCalculation: z.boolean().default(true),
+    },
+    async ({ workspaceId, rows, clearHighlights, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      let nextId = 1;
+      const replacedRows = rows.map((row) => {
+        const id = normalizeRowId(row.id) ?? nextId;
+        nextId = Math.max(nextId, id + 1);
+        const symbol = row.symbol || "";
+        return {
+          id,
+          description: row.description,
+          account: row.account,
+          category: row.category,
+          totalInvestment: row.totalInvestment,
+          yearlyIncome: row.yearlyIncome,
+          includeIncome: row.includeIncome,
+          overrideProposal: row.overrideProposal,
+          symbol,
+          newSymbol: row.newSymbol || symbol,
+          newPercent: row.newPercent,
+        };
+      });
+      workbook.tabs.investments = replacedRows;
+      if (clearHighlights) {
+        workbook.settings = setSelectedInvestmentIdsInSettings(workbook.settings, []);
+      }
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        rowCount: replacedRows.length,
+        rows: replacedRows,
+        calculation,
+      });
     }
   );
 
