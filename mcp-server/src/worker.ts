@@ -17,13 +17,34 @@ type WorkerEnv = {
 
 const DEFAULT_PORTFOLIO_API_BASE_URL = "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio";
 
+function noStoreHeaders(headers?: HeadersInit) {
+  return {
+    "cache-control": "no-store, no-cache, max-age=0, must-revalidate",
+    pragma: "no-cache",
+    expires: "0",
+    ...headers,
+  };
+}
+
+function noStoreResponse(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store, no-cache, max-age=0, must-revalidate");
+  headers.set("pragma", "no-cache");
+  headers.set("expires", "0");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
     ...init,
-    headers: {
+    headers: noStoreHeaders({
       "content-type": "application/json",
       ...init.headers,
-    },
+    }),
   });
 }
 
@@ -81,7 +102,7 @@ async function handleMcpRequest(request: Request, env: WorkerEnv, tokenConfig: {
 
   const server = createPortfolioServer(config);
   await server.connect(transport);
-  return transport.handleRequest(request);
+  return noStoreResponse(await transport.handleRequest(request));
 }
 
 function portfolioApiBaseUrl(env: WorkerEnv) {

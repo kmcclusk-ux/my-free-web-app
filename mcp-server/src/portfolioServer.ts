@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.6";
+export const SERVER_VERSION = "1.0.7";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -1180,6 +1180,108 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         investment: updatedRow,
         selected: typeof values.select === "boolean" ? values.select : undefined,
         highlighted: typeof highlightValue === "boolean" ? highlightValue : undefined,
+        calculation,
+      });
+    }
+  );
+
+  server.tool(
+    "set_investment_selection_checkbox",
+    "Set the visible checkmark/select checkbox in the Investments table for exactly one row. This changes includeIncome and affects calculations; it is not a visual highlight.",
+    {
+      workspaceId: z.string().optional(),
+      id: z.number().describe("Investment row id from the app's Row column."),
+      checked: z.boolean().describe("true checks/selects the row; false unchecks/deselects it."),
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, id, checked, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const investments = toInvestmentRows(workbook.tabs.investments);
+      const target = investments.find((row) => Number(row.id) === id);
+      if (!target) throw new Error(`Investment row ${id} was not found.`);
+      workbook.tabs.investments = investments.map((row) =>
+        Number(row.id) === id ? { ...row, includeIncome: checked } : row
+      );
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === id);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        id,
+        selected: checked,
+        includeIncome: checked,
+        investment: updatedRow,
+        calculation,
+      });
+    }
+  );
+
+  server.tool(
+    "set_investment_whatif_checkbox",
+    "Set the WhatIf active checkbox for exactly one investment row. This changes overrideProposal; it is not the visible row selection/checkmark and not visual highlighting.",
+    {
+      workspaceId: z.string().optional(),
+      id: z.number().describe("Investment row id from the app's Row column."),
+      checked: z.boolean().describe("true activates the row's WhatIf; false deactivates it."),
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, id, checked, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const investments = toInvestmentRows(workbook.tabs.investments);
+      const target = investments.find((row) => Number(row.id) === id);
+      if (!target) throw new Error(`Investment row ${id} was not found.`);
+      workbook.tabs.investments = investments.map((row) =>
+        Number(row.id) === id ? { ...row, overrideProposal: checked } : row
+      );
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === id);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        id,
+        whatIfActive: checked,
+        overrideProposal: checked,
+        investment: updatedRow,
+        calculation,
+      });
+    }
+  );
+
+  server.tool(
+    "set_investment_selection_and_whatif",
+    "Set both the visible row selection/checkmark and the WhatIf active checkbox for one investment row in a single save. Use this when the user asks to deselect/select a row and also disable/enable WhatIf.",
+    {
+      workspaceId: z.string().optional(),
+      id: z.number().describe("Investment row id from the app's Row column."),
+      selected: z.boolean().describe("Visible row checkmark/select checkbox; maps to includeIncome."),
+      whatIfActive: z.boolean().describe("WhatIf active checkbox; maps to overrideProposal."),
+      returnCalculation: z.boolean().default(false),
+    },
+    async ({ workspaceId, id, selected, whatIfActive, returnCalculation }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const investments = toInvestmentRows(workbook.tabs.investments);
+      const target = investments.find((row) => Number(row.id) === id);
+      if (!target) throw new Error(`Investment row ${id} was not found.`);
+      workbook.tabs.investments = investments.map((row) =>
+        Number(row.id) === id ? { ...row, includeIncome: selected, overrideProposal: whatIfActive } : row
+      );
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === id);
+      const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        savedAt: saveResult.updatedAt,
+        id,
+        selected,
+        includeIncome: selected,
+        whatIfActive,
+        overrideProposal: whatIfActive,
+        investment: updatedRow,
         calculation,
       });
     }
