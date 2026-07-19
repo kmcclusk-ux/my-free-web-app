@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.8";
+export const SERVER_VERSION = "1.0.9";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -1819,32 +1819,33 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
 
   server.tool(
     "set_investment_checkbox",
-    "Set one investment checkbox field by investment row id. Use select/includeIncome for the main row checkmark, overrideProposal for WhatIf active, and highlight for visual row highlighting.",
+    "Set one investment checkbox field by visible row number. Use select/includeIncome for the main row checkmark, overrideProposal for WhatIf active, and highlight for visual row highlighting.",
     {
       workspaceId: z.string().optional(),
-      id: z.number(),
+      id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+      rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       field: z.enum(["includeIncome", "overrideProposal", "select", "highlight"]),
       checked: z.boolean(),
     },
-    async ({ workspaceId, id, field, checked }) => {
+    async ({ workspaceId, id, rowNumber, field, checked }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      if (!investments.some((row) => Number(row.id) === id)) {
-        throw new Error(`Investment row ${id} was not found.`);
-      }
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
+      const targetId = Number(target.id);
 
       if (field === "highlight") {
         const existingSelection = selectedInvestmentIdsFromSettings(workbook.settings);
         workbook.settings = setSelectedInvestmentIdsInSettings(
           workbook.settings,
           checked
-            ? [...new Set([...existingSelection, id])]
-            : existingSelection.filter((selectedId) => selectedId !== id)
+            ? [...new Set([...existingSelection, targetId])]
+            : existingSelection.filter((selectedId) => selectedId !== targetId)
         );
       } else {
         const dataField = field === "select" ? "includeIncome" : field;
         workbook.tabs.investments = investments.map((row) =>
-          Number(row.id) === id ? { ...row, [dataField]: checked } : row
+          Number(row.id) === targetId ? { ...row, [dataField]: checked } : row
         );
       }
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
@@ -1852,7 +1853,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
-        id,
+        id: targetId,
+        rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         field,
         checked,
         selected: field === "select" || field === "includeIncome" ? checked : undefined,
