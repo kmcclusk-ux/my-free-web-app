@@ -1050,6 +1050,134 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     }
   );
 
+  const earlyFilingStatusSchema = z.enum(["single", "mfj", "mfs", "hoh"]);
+  const earlyCalculationOptionsSchema = {
+    workspaceId: z.string().optional(),
+    whatIfActive: z.boolean().default(false),
+    federalWhatIfOpen: z.boolean().default(false),
+    stateWhatIfOpen: z.boolean().default(false),
+    stateCode: z.string().optional(),
+    filingStatus: earlyFilingStatusSchema.optional(),
+    deductionMode: z.enum(["standard", "itemized"]).optional(),
+    extraOrdinaryIncome: z.number().optional(),
+    extraPreferredIncome: z.number().optional(),
+    extraStateIncome: z.number().optional(),
+    includeRows: z.boolean().default(false),
+  };
+  const earlyWhatIfProposalSchema = z.object({
+    id: z.number().optional(),
+    query: z.string().optional(),
+    newSymbol: z.string().min(1),
+    newPercent: z.number().nonnegative().optional(),
+    active: z.boolean().default(true),
+  });
+
+  server.tool(
+    "calculate_portfolio",
+    "Latest AfterTaxUS full portfolio calculator. Calculates annual/monthly after-tax income, total tax, federal/state taxes, W2 payroll taxes, taxable income, deductions, and portfolio yields from the saved workbook.",
+    earlyCalculationOptionsSchema,
+    async (options) => {
+      const workbook = await getWorkbook(resolvedConfig, options.workspaceId);
+      return jsonToolResult(await calculatePortfolio(workbook, resolvedConfig, options));
+    }
+  );
+
+  server.tool(
+    "apply_whatif_choices",
+    "Latest AfterTaxUS bulk WhatIf setter. Sets investment-row WhatIf symbols/choices, saves them, and returns the recalculated portfolio result with investment WhatIf mode active.",
+    {
+      workspaceId: z.string().optional(),
+      proposals: z.array(earlyWhatIfProposalSchema).min(1),
+      clearOtherWhatIfs: z.boolean().default(false),
+      includeRows: z.boolean().default(false),
+    },
+    async ({ workspaceId, proposals, clearOtherWhatIfs, includeRows }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      let investments = toInvestmentRows(workbook.tabs.investments);
+      const tickerMap = buildTickerMap(workbook);
+      const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
+      if (clearOtherWhatIfs) {
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+      }
+      for (const proposal of proposals) {
+        const target = findInvestmentByIdOrQuery(investments, proposal.id, proposal.query);
+        if (!target) throw new Error(`apply_whatif_choices could not find a unique investment row for ${proposal.id ?? proposal.query ?? ""}.`);
+        const targetId = Number(target.id);
+        const newSymbol = proposal.newSymbol.trim();
+        const ticker = tickerMap[normalizeLookupKey(newSymbol)];
+        const newPercent = proposal.newPercent ?? normalizeRate(rowValue(ticker || {}, "percentReturn", "percent_return"));
+        investments = investments.map((row) => Number(row.id) === targetId
+          ? { ...row, newSymbol, newPercent, overrideProposal: proposal.active }
+          : row
+        );
+        updates.push({ id: targetId, previousSymbol: getInvestmentSymbol(target), newSymbol, active: proposal.active });
+      }
+      workbook.tabs.investments = investments;
+      const saveResult = await saveWorkbook(resolvedConfig, workbook);
+      const calculation = await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true, includeRows });
+      return jsonToolResult({ ok: true, workspaceId: workbook.workspaceId, savedAt: saveResult.updatedAt, updates, calculation });
+    }
+  );
+
+  server.tool(
+    "compare_whatif_choices",
+    "Latest AfterTaxUS WhatIf comparison. Compares the saved portfolio against temporary investment WhatIf choices and returns baseline, scenario, and after-tax deltas.",
+    {
+      workspaceId: z.string().optional(),
+      proposals: z.array(earlyWhatIfProposalSchema).min(1),
+      clearOtherWhatIfs: z.boolean().default(false),
+      saveScenario: z.boolean().default(false),
+      includeRows: z.boolean().default(false),
+    },
+    async ({ workspaceId, proposals, clearOtherWhatIfs, saveScenario, includeRows }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const baseline = await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: false, includeRows });
+      const scenarioWorkbook: WorkbookResponse = {
+        ...workbook,
+        tabs: { ...workbook.tabs, investments: [...toInvestmentRows(workbook.tabs.investments)] },
+        settings: { ...workbook.settings },
+      };
+      let investments = toInvestmentRows(scenarioWorkbook.tabs.investments);
+      const tickerMap = buildTickerMap(scenarioWorkbook);
+      const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
+      if (clearOtherWhatIfs) {
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+      }
+      for (const proposal of proposals) {
+        const target = findInvestmentByIdOrQuery(investments, proposal.id, proposal.query);
+        if (!target) throw new Error(`compare_whatif_choices could not find a unique investment row for ${proposal.id ?? proposal.query ?? ""}.`);
+        const targetId = Number(target.id);
+        const newSymbol = proposal.newSymbol.trim();
+        const ticker = tickerMap[normalizeLookupKey(newSymbol)];
+        const newPercent = proposal.newPercent ?? normalizeRate(rowValue(ticker || {}, "percentReturn", "percent_return"));
+        investments = investments.map((row) => Number(row.id) === targetId
+          ? { ...row, newSymbol, newPercent, overrideProposal: proposal.active }
+          : row
+        );
+        updates.push({ id: targetId, previousSymbol: getInvestmentSymbol(target), newSymbol, active: proposal.active });
+      }
+      scenarioWorkbook.tabs.investments = investments;
+      const saveResult = saveScenario ? await saveWorkbook(resolvedConfig, scenarioWorkbook) : undefined;
+      const scenario = await calculatePortfolio(scenarioWorkbook, resolvedConfig, { workspaceId, whatIfActive: true, includeRows });
+      return jsonToolResult({
+        ok: true,
+        workspaceId: workbook.workspaceId,
+        saved: saveScenario,
+        savedAt: saveResult?.updatedAt,
+        updates,
+        baseline,
+        scenario,
+        delta: {
+          annualBeforeTax: scenario.income.annualBeforeTax - baseline.income.annualBeforeTax,
+          annualAfterTax: scenario.income.annualAfterTax - baseline.income.annualAfterTax,
+          totalTax: scenario.taxes.totalTax - baseline.taxes.totalTax,
+          beforeTaxYield: scenario.portfolio.beforeTaxYield - baseline.portfolio.beforeTaxYield,
+          afterTaxYield: scenario.portfolio.afterTaxYield - baseline.portfolio.afterTaxYield,
+        },
+      });
+    }
+  );
+
   server.tool(
     "list_investments",
     "List investments from the workbook, optionally filtering by query text, account, or category.",
