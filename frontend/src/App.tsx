@@ -256,6 +256,7 @@ const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
 const CURRENT_MCP_CONNECTOR_PATH = "/mcp-v5";
+const WORKBOOK_REMOTE_REFRESH_INTERVAL_MS = 5000;
 
 function normalizeMcpConnectorBaseUrl(rawBaseUrl?: string) {
   const fallbackUrl = `https://www.aftertaxus.com${CURRENT_MCP_CONNECTOR_PATH}`;
@@ -5028,6 +5029,8 @@ export default function App() {
   const saveTimeout = useRef<number | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedStorage = useRef(false);
+  const latestWorkbookUpdatedAt = useRef<string | null>(null);
+  const suppressNextAutosave = useRef(false);
   const historyRef = useRef<{ past: string[]; present: string; future: string[] }>({ past: [], present: "", future: [] });
   const historyInitialized = useRef(false);
   const isApplyingHistory = useRef(false);
@@ -5573,9 +5576,61 @@ export default function App() {
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
     [investments]
   );
+  const applyWorkbookResponse = useCallback((response: WorkbookResponse, options: { resetWhatIf: boolean; fromRemoteRefresh?: boolean }) => {
+    const workbookSettings = parseWorkbookSettings(response.settings);
+    const authenticatedWorkbook = authEnabled && authState.status === "signedIn";
+    const loadedInvestments = mapWorkbookRows(
+      authenticatedWorkbook ? [] : initialInvestments,
+      response.tabs?.investments,
+      workbookToInvestmentRow
+    );
+    const activeInvestments = authenticatedWorkbook && isStarterInvestmentSet(loadedInvestments) ? [] : loadedInvestments;
+    if (options.fromRemoteRefresh) {
+      suppressNextAutosave.current = true;
+      resetHistoryTracking();
+    }
+    latestWorkbookUpdatedAt.current = response.updatedAt || latestWorkbookUpdatedAt.current;
+    setInvestments(activeInvestments);
+    if (options.resetWhatIf) setIsWhatIfActive(false);
+    setTickers(
+      mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
+    );
+    setCategories(
+      mapWorkbookRows(initialCategories, response.tabs?.categories || response.tabs?.category, workbookToCategoryRow)
+    );
+    setTaxTreatments(
+      mapWorkbookRows(initialTaxTreatments, response.tabs?.taxTreatment, workbookToTaxTreatmentRow)
+    );
+    setAccounts(
+      mapWorkbookRows(initialAccounts, response.tabs?.accounts, workbookToAccountRow)
+    );
+    setAccountTaxTypes(
+      mapWorkbookRows(initialAccountTaxTypes, response.tabs?.accountTaxType, workbookToAccountTaxTypeRow)
+    );
+    setAccountTypes(
+      mergeDefaultAccountTypes(mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow))
+    );
+    setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
+    setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
+    setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
+    setSelectedInvestmentIds(
+      normalizeSelectedAssetIds(workbookSettings.ui?.selectedAssetIds).filter((id) =>
+        activeInvestments.some((row) => row.id === id)
+      )
+    );
+    setUiSettings({
+      investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
+      selectedAssetIds: workbookSettings.ui?.selectedAssetIds || [],
+      modelVersions: workbookSettings.ui?.modelVersions || [],
+      incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
+      darkMode: workbookSettings.ui?.darkMode === true,
+    });
+  }, [authEnabled, authState.status, resetHistoryTracking]);
+
   useEffect(() => {
     if (authEnabled && authState.status !== "signedIn") {
       hasLoadedStorage.current = false;
+      latestWorkbookUpdatedAt.current = null;
       resetHistoryTracking();
       setStorageState(authState.status === "loading" ? "loading" : "ready");
       return;
@@ -5587,49 +5642,7 @@ export default function App() {
     setStorageState("loading");
     loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
       if (cancelled) return;
-      const workbookSettings = parseWorkbookSettings(response.settings);
-      const authenticatedWorkbook = authEnabled && authState.status === "signedIn";
-      const loadedInvestments = mapWorkbookRows(
-        authenticatedWorkbook ? [] : initialInvestments,
-        response.tabs?.investments,
-        workbookToInvestmentRow
-      );
-      const activeInvestments = authenticatedWorkbook && isStarterInvestmentSet(loadedInvestments) ? [] : loadedInvestments;
-      setInvestments(activeInvestments);
-      setIsWhatIfActive(false);
-      setTickers(
-        mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
-      );
-      setCategories(
-        mapWorkbookRows(initialCategories, response.tabs?.categories || response.tabs?.category, workbookToCategoryRow)
-      );
-      setTaxTreatments(
-        mapWorkbookRows(initialTaxTreatments, response.tabs?.taxTreatment, workbookToTaxTreatmentRow)
-      );
-      setAccounts(
-        mapWorkbookRows(initialAccounts, response.tabs?.accounts, workbookToAccountRow)
-      );
-      setAccountTaxTypes(
-        mapWorkbookRows(initialAccountTaxTypes, response.tabs?.accountTaxType, workbookToAccountTaxTypeRow)
-      );
-      setAccountTypes(
-        mergeDefaultAccountTypes(mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow))
-      );
-      setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
-      setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
-      setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
-      setSelectedInvestmentIds(
-        normalizeSelectedAssetIds(workbookSettings.ui?.selectedAssetIds).filter((id) =>
-          activeInvestments.some((row) => row.id === id)
-        )
-      );
-      setUiSettings({
-        investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
-        selectedAssetIds: workbookSettings.ui?.selectedAssetIds || [],
-        modelVersions: workbookSettings.ui?.modelVersions || [],
-        incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
-        darkMode: workbookSettings.ui?.darkMode === true,
-      });
+      applyWorkbookResponse(response, { resetWhatIf: true });
       hasLoadedStorage.current = true;
       setStorageState("ready");
     }).catch((error: Error) => {
@@ -5638,7 +5651,36 @@ export default function App() {
       hasLoadedStorage.current = true;
     });
     return () => { cancelled = true; };
-  }, [authEnabled, authState.status, authToken, resetHistoryTracking]);
+  }, [authEnabled, authState.status, authToken, applyWorkbookResponse, resetHistoryTracking]);
+
+  useEffect(() => {
+    if (authEnabled && authState.status !== "signedIn") return;
+    let cancelled = false;
+    const pollForRemoteWorkbookChanges = () => {
+      if (cancelled || !hasLoadedStorage.current || storageState === "saving") return;
+      loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
+        if (cancelled) return;
+        const remoteUpdatedAt = response.updatedAt || null;
+        const knownUpdatedAt = latestWorkbookUpdatedAt.current;
+        if (!remoteUpdatedAt) return;
+        if (!knownUpdatedAt) {
+          latestWorkbookUpdatedAt.current = remoteUpdatedAt;
+          return;
+        }
+        if (remoteUpdatedAt <= knownUpdatedAt) return;
+        applyWorkbookResponse(response, { resetWhatIf: false, fromRemoteRefresh: true });
+        hasLoadedStorage.current = true;
+        setStorageState("ready");
+      }).catch((error: Error) => {
+        if (!cancelled) console.warn("Workbook refresh poll failed", error);
+      });
+    };
+    const intervalId = window.setInterval(pollForRemoteWorkbookChanges, WORKBOOK_REMOTE_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [authEnabled, authState.status, authToken, applyWorkbookResponse, storageState]);
 
   useEffect(() => {
     if (!hasLoadedStorage.current) return;
@@ -5716,6 +5758,11 @@ export default function App() {
   useEffect(() => {
     if (authEnabled && authState.status !== "signedIn") return;
     if (!hasLoadedStorage.current) return;
+    if (suppressNextAutosave.current) {
+      suppressNextAutosave.current = false;
+      setStorageState("ready");
+      return;
+    }
     if (!hasRealData && investments.length > 0) {
       return;
     }
@@ -5723,8 +5770,12 @@ export default function App() {
     setStorageState("saving");
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds } } }, authToken).then(() => {
-        if (!cancelled) { setStorageState("saved"); }
+      saveTimeout.current = null;
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds } } }, authToken).then((result) => {
+        if (!cancelled) {
+          latestWorkbookUpdatedAt.current = result.updatedAt || latestWorkbookUpdatedAt.current;
+          setStorageState("saved");
+        }
       }).catch((error: Error) => {
         console.error(error);
         if (!cancelled) { setStorageState("error"); }

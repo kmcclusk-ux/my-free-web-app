@@ -161,11 +161,24 @@ async function getWorkbook(config: ResolvedPortfolioServerConfig, workspaceId?: 
 }
 
 async function saveWorkbook(config: ResolvedPortfolioServerConfig, workbook: WorkbookResponse) {
+  const settings = workbook.settings && typeof workbook.settings === "object" ? workbook.settings : {};
+  const ui = settings.ui && typeof settings.ui === "object" ? settings.ui as Record<string, unknown> : {};
+  const mcpRefresh = {
+    requestedAt: new Date().toISOString(),
+    source: "aftertaxus-mcp",
+    serverVersion: SERVER_VERSION,
+  };
   return postPortfolioApi<WorkbookSaveResponse>(config, {
     calc: "WORKBOOK_SAVE",
     workspaceId: workbook.workspaceId || config.defaultWorkspaceId,
     tabs: workbook.tabs,
-    settings: workbook.settings,
+    settings: {
+      ...settings,
+      ui: {
+        ...ui,
+        mcpRefresh,
+      },
+    },
   });
 }
 
