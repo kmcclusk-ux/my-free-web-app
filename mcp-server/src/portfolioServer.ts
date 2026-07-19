@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.7";
+export const SERVER_VERSION = "1.0.8";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -518,6 +518,15 @@ function findInvestmentByIdOrQuery(investments: InvestmentRow[], id?: number, qu
   if (!query) return null;
   const matches = investments.filter((row) => matchQuery(row, query));
   return matches.length === 1 ? matches[0] : null;
+}
+
+function findInvestmentByVisibleRowOrId(investments: InvestmentRow[], rowNumber?: number, id?: number, query?: string) {
+  const visibleRowNumber = Number(rowNumber ?? id);
+  if (Number.isFinite(visibleRowNumber)) {
+    const visibleRowMatch = investments.find((row) => Number(row.spreadsheetRowNumber) === visibleRowNumber);
+    if (visibleRowMatch) return visibleRowMatch;
+  }
+  return findInvestmentByIdOrQuery(investments, id, query);
 }
 
 function normalizeRowId(value: unknown) {
@@ -1135,15 +1144,16 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Latest AfterTaxUS row updater. Updates one investment row by exact row id or by a query that matches exactly one row. Use this for direct ChatGPT edits to investment data.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional(),
+      id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+      rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       query: z.string().optional(),
       values: investmentUpdateValuesSchema,
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, query, values, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, query, values, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByIdOrQuery(investments, id, query);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, query);
       if (!target) {
         const matchingCount = query ? investments.filter((row) => matchQuery(row, query)).length : 0;
         throw new Error(
@@ -1190,26 +1200,29 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set the visible checkmark/select checkbox in the Investments table for exactly one row. This changes includeIncome and affects calculations; it is not a visual highlight.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().describe("Investment row id from the app's Row column."),
+      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       checked: z.boolean().describe("true checks/selects the row; false unchecks/deselects it."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, checked, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, checked, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = investments.find((row) => Number(row.id) === id);
-      if (!target) throw new Error(`Investment row ${id} was not found.`);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
+      const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
-        Number(row.id) === id ? { ...row, includeIncome: checked } : row
+        Number(row.id) === targetId ? { ...row, includeIncome: checked } : row
       );
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
-      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === id);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === targetId);
       const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
       return jsonToolResult({
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
-        id,
+        id: targetId,
+        rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         selected: checked,
         includeIncome: checked,
         investment: updatedRow,
@@ -1223,26 +1236,29 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set the WhatIf active checkbox for exactly one investment row. This changes overrideProposal; it is not the visible row selection/checkmark and not visual highlighting.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().describe("Investment row id from the app's Row column."),
+      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       checked: z.boolean().describe("true activates the row's WhatIf; false deactivates it."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, checked, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, checked, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = investments.find((row) => Number(row.id) === id);
-      if (!target) throw new Error(`Investment row ${id} was not found.`);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
+      const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
-        Number(row.id) === id ? { ...row, overrideProposal: checked } : row
+        Number(row.id) === targetId ? { ...row, overrideProposal: checked } : row
       );
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
-      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === id);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === targetId);
       const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
       return jsonToolResult({
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
-        id,
+        id: targetId,
+        rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         whatIfActive: checked,
         overrideProposal: checked,
         investment: updatedRow,
@@ -1256,27 +1272,30 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set both the visible row selection/checkmark and the WhatIf active checkbox for one investment row in a single save. Use this when the user asks to deselect/select a row and also disable/enable WhatIf.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().describe("Investment row id from the app's Row column."),
+      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       selected: z.boolean().describe("Visible row checkmark/select checkbox; maps to includeIncome."),
       whatIfActive: z.boolean().describe("WhatIf active checkbox; maps to overrideProposal."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, selected, whatIfActive, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, selected, whatIfActive, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = investments.find((row) => Number(row.id) === id);
-      if (!target) throw new Error(`Investment row ${id} was not found.`);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
+      const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
-        Number(row.id) === id ? { ...row, includeIncome: selected, overrideProposal: whatIfActive } : row
+        Number(row.id) === targetId ? { ...row, includeIncome: selected, overrideProposal: whatIfActive } : row
       );
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
-      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === id);
+      const updatedRow = toInvestmentRows(workbook.tabs.investments).find((row) => Number(row.id) === targetId);
       const calculation = returnCalculation ? await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true }) : undefined;
       return jsonToolResult({
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
-        id,
+        id: targetId,
+        rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         selected,
         includeIncome: selected,
         whatIfActive,
@@ -1293,7 +1312,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     {
       workspaceId: z.string().optional(),
       updates: z.array(z.object({
-        id: z.number().optional(),
+        id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+        rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
         query: z.string().optional(),
         values: investmentUpdateValuesSchema,
         addIfMissing: z.boolean().default(false).describe("When true and no row matches, add a new investment row using values plus defaults."),
@@ -1308,7 +1328,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       let nextId = nextInvestmentId(investments);
 
       for (const request of updates) {
-        const target = findInvestmentByIdOrQuery(investments, request.id, request.query);
+        const target = findInvestmentByVisibleRowOrId(investments, request.rowNumber, request.id, request.query);
         const update = investmentUpdateWithSelectAlias(request.values);
         const highlightValue = request.values.highlight;
         if (Object.keys(update).length === 0 && typeof highlightValue !== "boolean") {
