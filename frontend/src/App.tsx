@@ -7,6 +7,7 @@ type TabKey =
   | "investments"
   | "federal"
   | "state"
+  | "local"
   | "tickers"
   | "categories"
   | "taxTreatment"
@@ -97,6 +98,11 @@ type AboveLineDeductionItem = { id: number; amount: number; deductionType: strin
 type FederalDeductionMode = "standard" | "itemized";
 type FederalSettings = { filingStatus: FilingStatus; deductionMode: FederalDeductionMode; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; aboveLineDeductionItems: AboveLineDeductionItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
 type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
+type LocalTaxBaseKey = "wages" | "selfEmployment" | "interest" | "dividends" | "capitalGains" | "rentalIncome" | "businessIncome" | "retirementIncome" | "socialSecurity";
+type LocalTaxBaseSelection = Record<LocalTaxBaseKey, boolean>;
+type LocalTaxBracket = { threshold: number; rate: number };
+type LocalTaxProfile = { id: string; locality: string; state: string; kind: "none" | "flat" | "progressive"; residentRate: number; nonresidentRate?: number; brackets?: LocalTaxBracket[]; base: LocalTaxBaseSelection; note: string };
+type LocalTaxSettings = { enabled: boolean; localityId: string; localityName: string; residency: "resident" | "nonresident"; rate: number; nonresidentRate: number; taxableBase: LocalTaxBaseSelection };
 type PlannerSettings = { federalWithholding: number; stateWithholding: number };
 type InvestmentFavorite = { name: string; investmentKeys: string[]; createdAt: string };
 type ModelUiSnapshot = { investmentFavorites: InvestmentFavorite[]; selectedAssetIds: number[] };
@@ -110,6 +116,7 @@ type ModelDataSnapshot = {
   accountTypes: AccountTypeRow[];
   federalSettings: FederalSettings;
   stateSettings: StateSettings;
+  localTaxSettings: LocalTaxSettings;
   plannerSettings: PlannerSettings;
   uiSettings: ModelUiSnapshot;
   isWhatIfActive: boolean;
@@ -240,7 +247,7 @@ type WorkbookResponse = {
     accountTaxType: AccountTaxTypeRow[];
     accountType: AccountTypeRow[];
   }>;
-  settings?: Partial<{ federal: FederalSettings; state: StateSettings; planner: PlannerSettings; ui: UiSettings }>;
+  settings?: Partial<{ federal: FederalSettings; state: StateSettings; local: LocalTaxSettings; planner: PlannerSettings; ui: UiSettings }>;
   updatedAt?: string | null;
 };
 
@@ -516,6 +523,7 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "tickers", label: "Assets", meta: "asset lookups" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "state worksheet" },
+  { key: "local", label: "Local Tax", meta: "city / county" },
   { key: "accountTaxType", label: "Account Tax Category", meta: "status list" },
   { key: "accountType", label: "Account Type", meta: "account kinds" },
   { key: "categories", label: "Asset Classes", meta: "asset classes" },
@@ -809,6 +817,72 @@ const federalAboveLineDeductionLimitNotes: Record<string, string> = {
   "Self-employed health insurance": "Self-employed health insurance deductions are limited by business profit and eligibility for other coverage.",
   "Educator expenses": "Educator expense deductions are capped annually and require qualifying educator expenses.",
 };
+const localTaxBaseLabels: Record<LocalTaxBaseKey, string> = {
+  wages: "Wages / salary",
+  selfEmployment: "Self-employment",
+  interest: "Interest / ordinary investment income",
+  dividends: "Dividends",
+  capitalGains: "Capital gains",
+  rentalIncome: "Rental income",
+  businessIncome: "Business income",
+  retirementIncome: "Retirement income",
+  socialSecurity: "Social Security",
+};
+const localTaxBaseKeys = Object.keys(localTaxBaseLabels) as LocalTaxBaseKey[];
+const noLocalTaxBase = (): LocalTaxBaseSelection => ({
+  wages: false,
+  selfEmployment: false,
+  interest: false,
+  dividends: false,
+  capitalGains: false,
+  rentalIncome: false,
+  businessIncome: false,
+  retirementIncome: false,
+  socialSecurity: false,
+});
+const earningsLocalTaxBase = (): LocalTaxBaseSelection => ({
+  ...noLocalTaxBase(),
+  wages: true,
+  selfEmployment: true,
+});
+const broadLocalTaxBase = (): LocalTaxBaseSelection => ({
+  wages: true,
+  selfEmployment: true,
+  interest: true,
+  dividends: true,
+  capitalGains: true,
+  rentalIncome: true,
+  businessIncome: true,
+  retirementIncome: false,
+  socialSecurity: false,
+});
+const localTaxProfiles: LocalTaxProfile[] = [
+  { id: "none", locality: "No local income tax", state: "", kind: "none", residentRate: 0, nonresidentRate: 0, base: noLocalTaxBase(), note: "No city, county, or district income tax is applied." },
+  { id: "custom", locality: "Custom / manual local tax", state: "", kind: "flat", residentRate: 0, nonresidentRate: 0, base: earningsLocalTaxBase(), note: "Enter a local rate and choose which income categories are taxed." },
+  { id: "ny-nyc", locality: "New York City", state: "NY", kind: "progressive", residentRate: 0.03876, base: broadLocalTaxBase(), brackets: [{ threshold: 0, rate: 0.03078 }, { threshold: 12000, rate: 0.03762 }, { threshold: 25000, rate: 0.03819 }, { threshold: 50000, rate: 0.03876 }], note: "Broad personal income tax; generally follows New York taxable income categories and excludes Social Security." },
+  { id: "ny-yonkers", locality: "Yonkers", state: "NY", kind: "flat", residentRate: 0.016, base: broadLocalTaxBase(), note: "Approximate resident local income-tax effect; Yonkers rules can include surcharges." },
+  { id: "oh-columbus", locality: "Columbus", state: "OH", kind: "flat", residentRate: 0.025, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to wages and self-employment, not investment income." },
+  { id: "oh-cleveland", locality: "Cleveland", state: "OH", kind: "flat", residentRate: 0.025, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to earned income." },
+  { id: "oh-cincinnati", locality: "Cincinnati", state: "OH", kind: "flat", residentRate: 0.018, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to earned income." },
+  { id: "oh-toledo", locality: "Toledo", state: "OH", kind: "flat", residentRate: 0.0225, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to earned income." },
+  { id: "oh-akron", locality: "Akron", state: "OH", kind: "flat", residentRate: 0.025, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to earned income." },
+  { id: "oh-dayton", locality: "Dayton", state: "OH", kind: "flat", residentRate: 0.025, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to earned income." },
+  { id: "pa-philadelphia", locality: "Philadelphia", state: "PA", kind: "flat", residentRate: 0.0375, nonresidentRate: 0.0344, base: earningsLocalTaxBase(), note: "Wage/earnings tax; investment income, retirement income, and Social Security are generally outside this wage-tax base." },
+  { id: "pa-pittsburgh", locality: "Pittsburgh", state: "PA", kind: "flat", residentRate: 0.03, base: earningsLocalTaxBase(), note: "Local earned-income tax; investment income is generally not taxed by this local tax." },
+  { id: "mi-detroit", locality: "Detroit", state: "MI", kind: "flat", residentRate: 0.024, nonresidentRate: 0.012, base: earningsLocalTaxBase(), note: "City income tax on earned income; resident/nonresident rates differ." },
+  { id: "mi-grand-rapids", locality: "Grand Rapids", state: "MI", kind: "flat", residentRate: 0.015, nonresidentRate: 0.0075, base: earningsLocalTaxBase(), note: "Michigan city tax on earned income; resident/nonresident rates differ." },
+  { id: "mi-lansing", locality: "Lansing", state: "MI", kind: "flat", residentRate: 0.01, nonresidentRate: 0.005, base: earningsLocalTaxBase(), note: "Michigan city tax on earned income; resident/nonresident rates differ." },
+  { id: "mi-flint", locality: "Flint", state: "MI", kind: "flat", residentRate: 0.01, nonresidentRate: 0.005, base: earningsLocalTaxBase(), note: "Michigan city tax on earned income; resident/nonresident rates differ." },
+  { id: "md-county", locality: "Maryland county / Baltimore City", state: "MD", kind: "flat", residentRate: 0.032, base: broadLocalTaxBase(), note: "Maryland local income tax generally follows the Maryland income-tax base; choose the county-specific rate." },
+  { id: "in-county", locality: "Indiana county", state: "IN", kind: "flat", residentRate: 0.02, base: broadLocalTaxBase(), note: "Indiana county income-tax rates vary by county; enter your county rate." },
+  { id: "ky-louisville", locality: "Louisville / Jefferson County", state: "KY", kind: "flat", residentRate: 0.022, base: earningsLocalTaxBase(), note: "Occupational/license tax usually applies to wages and net profits, not investment income." },
+  { id: "ky-lexington", locality: "Lexington-Fayette", state: "KY", kind: "flat", residentRate: 0.0225, base: earningsLocalTaxBase(), note: "Occupational license tax usually applies to wages and net profits." },
+  { id: "mo-kansas-city", locality: "Kansas City", state: "MO", kind: "flat", residentRate: 0.01, base: earningsLocalTaxBase(), note: "Earnings tax on wages and self-employment earnings." },
+  { id: "mo-st-louis", locality: "St. Louis", state: "MO", kind: "flat", residentRate: 0.01, base: earningsLocalTaxBase(), note: "Earnings tax on wages and self-employment earnings." },
+  { id: "de-wilmington", locality: "Wilmington", state: "DE", kind: "flat", residentRate: 0.0125, base: earningsLocalTaxBase(), note: "City wage tax generally applies to wages and net profits." },
+  { id: "al-birmingham", locality: "Birmingham", state: "AL", kind: "flat", residentRate: 0.01, base: earningsLocalTaxBase(), note: "Occupational tax on compensation earned from work." },
+  { id: "al-gadsden", locality: "Gadsden", state: "AL", kind: "flat", residentRate: 0.02, base: earningsLocalTaxBase(), note: "Occupational tax rules vary; verify the current local rate." },
+];
 const newTaxWhatIfItem = (incomeType: string): TaxWhatIfItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount: 0, incomeType });
 const newAboveLineDeductionItem = (deductionType: string, amount = 0): AboveLineDeductionItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount, deductionType });
 const newDeductionItem = (deductionType: string, amount = 0): DeductionItem => ({ id: Date.now() + Math.floor(Math.random() * 100000), amount, deductionType });
@@ -816,6 +890,7 @@ const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWh
 const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem(blankDeductionType)], deductionItems: [newDeductionItem(blankDeductionType)], mortgageInterest: 0, propertyTax: 0, standardDeduction: 31500, saltCap: 40400 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
+const initialLocalTaxSettings: LocalTaxSettings = { enabled: false, localityId: "none", localityName: "", residency: "resident", rate: 0, nonresidentRate: 0, taxableBase: noLocalTaxBase() };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
@@ -1496,6 +1571,7 @@ function normalizeModelVersions(raw: unknown): ModelVersion[] {
         accountTypes: mergeDefaultAccountTypes(Array.isArray(snapshot.accountTypes) ? snapshot.accountTypes as AccountTypeRow[] : initialAccountTypes),
         federalSettings: normalizeFederalSettings(snapshot.federalSettings),
         stateSettings: mergeSettings(initialStateSettings, snapshot.stateSettings),
+        localTaxSettings: normalizeLocalTaxSettings(snapshot.localTaxSettings),
         plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
         uiSettings: {
           investmentFavorites: normalizeInvestmentFavorites((snapshot.uiSettings as Record<string, unknown> | undefined)?.investmentFavorites),
@@ -1720,6 +1796,57 @@ function summarizeFederalDeductions(items: DeductionItem[], stateTax: number, sa
   };
 }
 
+function getLocalTaxProfile(localityId: string) {
+  return localTaxProfiles.find((profile) => profile.id === localityId) || localTaxProfiles[0];
+}
+
+function normalizeLocalTaxBaseSelection(raw: unknown, fallback = noLocalTaxBase()): LocalTaxBaseSelection {
+  const rawObj = raw && typeof raw === "object" ? raw as Partial<Record<LocalTaxBaseKey, unknown>> : {};
+  return localTaxBaseKeys.reduce((base, key) => {
+    base[key] = rawObj[key] === undefined ? fallback[key] : normalizeBoolean(rawObj[key]);
+    return base;
+  }, {} as LocalTaxBaseSelection);
+}
+
+function normalizeLocalTaxSettings(raw: unknown): LocalTaxSettings {
+  const merged = mergeSettings(initialLocalTaxSettings, raw) as LocalTaxSettings;
+  const selectedProfile = getLocalTaxProfile(merged.localityId);
+  const profileRate = merged.residency === "nonresident" ? selectedProfile.nonresidentRate ?? selectedProfile.residentRate : selectedProfile.residentRate;
+  const isProfileDriven = selectedProfile.id !== "custom";
+  const fallbackBase = isProfileDriven ? selectedProfile.base : initialLocalTaxSettings.taxableBase;
+  return {
+    enabled: merged.enabled === true && selectedProfile.kind !== "none",
+    localityId: selectedProfile.id,
+    localityName: String(merged.localityName || (selectedProfile.id === "custom" ? "" : selectedProfile.locality)),
+    residency: merged.residency === "nonresident" ? "nonresident" : "resident",
+    rate: isProfileDriven ? profileRate : normalizeRate(merged.rate),
+    nonresidentRate: isProfileDriven ? selectedProfile.nonresidentRate ?? profileRate : normalizeRate(merged.nonresidentRate),
+    taxableBase: normalizeLocalTaxBaseSelection(merged.taxableBase, fallbackBase),
+  };
+}
+
+function calculateProgressiveTax(taxableIncome: number, brackets: LocalTaxBracket[]) {
+  const sorted = [...brackets].sort((left, right) => left.threshold - right.threshold);
+  return sorted.reduce((tax, bracket, index) => {
+    const nextThreshold = sorted[index + 1]?.threshold ?? Number.POSITIVE_INFINITY;
+    const taxableAtRate = Math.max(Math.min(taxableIncome, nextThreshold) - bracket.threshold, 0);
+    return tax + taxableAtRate * bracket.rate;
+  }, 0);
+}
+
+function calculateLocalTax(settings: LocalTaxSettings, taxableIncome: number) {
+  const profile = getLocalTaxProfile(settings.localityId);
+  if (!settings.enabled || taxableIncome <= 0 || profile.kind === "none") return { tax: 0, effectiveRate: 0, marginalRate: 0, profile };
+  if (profile.kind === "progressive" && profile.brackets?.length) {
+    const tax = calculateProgressiveTax(taxableIncome, profile.brackets);
+    const reachedBracket = [...profile.brackets].sort((left, right) => left.threshold - right.threshold).filter((bracket) => taxableIncome >= bracket.threshold).at(-1);
+    return { tax, effectiveRate: taxableIncome > 0 ? tax / taxableIncome : 0, marginalRate: reachedBracket?.rate || 0, profile };
+  }
+  const rate = settings.residency === "nonresident" ? settings.nonresidentRate || settings.rate : settings.rate;
+  const tax = taxableIncome * rate;
+  return { tax, effectiveRate: taxableIncome > 0 ? tax / taxableIncome : 0, marginalRate: rate, profile };
+}
+
 function normalizeFederalSettings(raw: unknown): FederalSettings {
   const merged = mergeSettings(initialFederalSettings, raw) as FederalSettings;
   const extraOrdinaryItems = normalizeTaxWhatIfItems(merged.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
@@ -1801,6 +1928,12 @@ function parseStateSettingsSection(section: unknown): Partial<StateSettings> {
   return result;
 }
 
+function parseLocalTaxSettingsSection(section: unknown): Partial<LocalTaxSettings> {
+  if (!section || typeof section !== "object") return {};
+  const sectionObj = section as SettingsSection;
+  return normalizeLocalTaxSettings(sectionObj);
+}
+
 function parsePlannerSettingsSection(section: unknown): Partial<PlannerSettings> {
   const sectionObj = section && typeof section === "object" ? (section as SettingsSection) : undefined;
   const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
@@ -1846,6 +1979,7 @@ function parseWorkbookSettings(settings: unknown) {
   return {
     federal: parseFederalSettingsSection(settingsObj.federal),
     state: parseStateSettingsSection(settingsObj.state),
+    local: parseLocalTaxSettingsSection(settingsObj.local),
     planner,
     ui: {
       investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
@@ -5018,6 +5152,7 @@ export default function App() {
   const [accountTypes, setAccountTypes] = useState(initialAccountTypes);
   const [federalSettings, setFederalSettings] = useState(initialFederalSettings);
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
+  const [localTaxSettings, setLocalTaxSettings] = useState(initialLocalTaxSettings);
   const [plannerSettings, setPlannerSettings] = useState(initialPlannerSettings);
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
@@ -5061,10 +5196,11 @@ export default function App() {
     accountTypes,
     federalSettings,
     stateSettings,
+    localTaxSettings,
     plannerSettings,
     uiSettings: { investmentFavorites: uiSettings.investmentFavorites, selectedAssetIds: selectedInvestmentIds },
     isWhatIfActive,
-  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings.investmentFavorites, selectedInvestmentIds, isWhatIfActive]);
+  }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, localTaxSettings, plannerSettings, uiSettings.investmentFavorites, selectedInvestmentIds, isWhatIfActive]);
   const currentHistorySerialized = useMemo(() => JSON.stringify(currentHistorySnapshot), [currentHistorySnapshot]);
 
   const resetHistoryTracking = useCallback(() => {
@@ -5085,6 +5221,7 @@ export default function App() {
     setAccountTypes(mergeDefaultAccountTypes(snapshot.accountTypes));
     setFederalSettings(normalizeFederalSettings(snapshot.federalSettings));
     setStateSettings(snapshot.stateSettings);
+    setLocalTaxSettings(normalizeLocalTaxSettings(snapshot.localTaxSettings));
     setPlannerSettings(snapshot.plannerSettings);
     setUiSettings((current) => ({
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
@@ -5560,6 +5697,29 @@ export default function App() {
     Math.abs(stateResult.taxableIncome - stateTaxableAfterDeductions) < 0.01 &&
     !(stateResult.tax === 0 && localStateResult.tax > 0);
   const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
+  const localTaxBaseAmounts = derivedRows.reduce((base, row) => {
+    if (!row.includeIncome || row.filteredIncome <= 0) return base;
+    const amount = row.filteredIncome;
+    const treatment = normalizeLookupKey(row.taxTreatment);
+    const type = normalizeLookupKey(row.investmentType);
+    const status = normalizeLookupKey(row.taxStatus);
+    const accountName = normalizeLookupKey(row.account);
+    if (row.w2Income > 0) base.wages += row.w2Income;
+    else if (type.includes("social-security") || type.includes("social security")) base.socialSecurity += amount;
+    else if (status.includes("deferred") || accountName.includes("ira") || accountName.includes("401k") || accountName.includes("pension")) base.retirementIncome += amount;
+    else if (type.includes("real estate") || type.includes("rental")) base.rentalIncome += amount;
+    else if (treatment.includes("qualified-div") || treatment.includes("non-qualified-div")) base.dividends += amount;
+    else if (treatment.includes("gain")) base.capitalGains += amount;
+    else if (row.nonInvestmentIncome > 0) base.businessIncome += amount;
+    else base.interest += amount;
+    return base;
+  }, localTaxBaseKeys.reduce((base, key) => ({ ...base, [key]: 0 }), {} as Record<LocalTaxBaseKey, number>));
+  localTaxBaseAmounts.wages += isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0;
+  localTaxBaseAmounts.businessIncome += Math.max(effectiveExtraOrdinaryIncome - (isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0), 0);
+  localTaxBaseAmounts.dividends += effectiveExtraPreferredIncome;
+  const localTaxableIncome = localTaxBaseKeys.reduce((total, key) => total + (localTaxSettings.taxableBase[key] ? localTaxBaseAmounts[key] : 0), 0);
+  const localTaxResult = calculateLocalTax(localTaxSettings, localTaxableIncome);
+  const localTaxTotal = localTaxResult.tax;
   const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, displayedStateResult.tax, federalSettings.saltCap);
   const federalAboveLineDeductionSummary = summarizeAboveLineDeductions(federalSettings.aboveLineDeductionItems);
   const itemizedFederalDeduction = federalDeductionSummary.itemizedDeduction;
@@ -5632,6 +5792,7 @@ export default function App() {
     );
     setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
     setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
+    setLocalTaxSettings(normalizeLocalTaxSettings(workbookSettings.local));
     setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
     setSelectedInvestmentIds(
       normalizeSelectedAssetIds(workbookSettings.ui?.selectedAssetIds).filter((id) =>
@@ -5799,7 +5960,7 @@ export default function App() {
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
       saveTimeout.current = null;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds, investmentWhatIfOpen: isWhatIfActive } } }, authToken).then((result) => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, local: localTaxSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds, investmentWhatIfOpen: isWhatIfActive } } }, authToken).then((result) => {
         if (!cancelled) {
           latestWorkbookUpdatedAt.current = result.updatedAt || latestWorkbookUpdatedAt.current;
           latestWorkbookRefreshMarker.current = result.updatedAt || latestWorkbookRefreshMarker.current;
@@ -5812,12 +5973,12 @@ export default function App() {
       return () => { cancelled = true; };
     }, 700);
     return () => { if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, plannerSettings, uiSettings, selectedInvestmentIds, isWhatIfActive, hasRealData, authEnabled, authState.status, authToken]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, localTaxSettings, plannerSettings, uiSettings, selectedInvestmentIds, isWhatIfActive, hasRealData, authEnabled, authState.status, authToken]);
 
   const federalIncomeTaxTotal = federalResult?.tax || 0;
   const federalTaxWithPayroll = federalIncomeTaxTotal + w2PayrollTax.federal.total;
   const stateTaxWithPayroll = displayedStateResult.tax + w2PayrollTax.state.total;
-  const calculatedTotalTax = federalTaxWithPayroll + stateTaxWithPayroll;
+  const calculatedTotalTax = federalTaxWithPayroll + stateTaxWithPayroll + localTaxTotal;
   const totalIncome = flows.totalIncome;
   const totalTax = calculatedTotalTax;
   const spendableTaxBurden = Math.max(totalTax, 0);
@@ -5843,7 +6004,9 @@ export default function App() {
   const stateGrossWithoutInvestments = Math.max(stateGross - flows.investmentStateTaxable, 0);
   const stateTaxableAfterDeductionsWithoutInvestments = Math.max(stateGrossWithoutInvestments - stateDeduction, 0);
   const stateTaxWithoutInvestments = localStateTax2025(stateTaxableAfterDeductionsWithoutInvestments, selectedStateCode, federalSettings.filingStatus).tax;
-  const investmentTaxBurden = Math.max((federalIncomeTaxTotal - federalTaxWithoutInvestments) + (displayedStateResult.tax - stateTaxWithoutInvestments), 0);
+  const localTaxableWithoutInvestments = Math.max(localTaxableIncome - flows.investmentIncome, 0);
+  const localTaxWithoutInvestments = calculateLocalTax(localTaxSettings, localTaxableWithoutInvestments).tax;
+  const investmentTaxBurden = Math.max((federalIncomeTaxTotal - federalTaxWithoutInvestments) + (displayedStateResult.tax - stateTaxWithoutInvestments) + (localTaxTotal - localTaxWithoutInvestments), 0);
   const investmentAfterTaxIncome = flows.investmentIncome - investmentTaxBurden;
   const portfolioBeforeTaxYield = flows.totalInvestmentAmount > 0 ? flows.investmentIncome / flows.totalInvestmentAmount : 0;
   const portfolioAfterTaxYield = flows.totalInvestmentAmount > 0 ? investmentAfterTaxIncome / flows.totalInvestmentAmount : 0;
@@ -5853,6 +6016,28 @@ export default function App() {
   const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
+  const selectedLocalTaxProfile = getLocalTaxProfile(localTaxSettings.localityId);
+  const updateLocalTaxProfile = (localityId: string) => {
+    const profile = getLocalTaxProfile(localityId);
+    setLocalTaxSettings((current) => normalizeLocalTaxSettings({
+      ...current,
+      enabled: profile.kind !== "none",
+      localityId: profile.id,
+      localityName: profile.id === "custom" ? current.localityName : profile.locality,
+      rate: profile.id === "custom" ? current.rate : current.residency === "nonresident" ? profile.nonresidentRate ?? profile.residentRate : profile.residentRate,
+      nonresidentRate: profile.id === "custom" ? current.nonresidentRate : profile.nonresidentRate ?? profile.residentRate,
+      taxableBase: profile.base,
+    }));
+  };
+  const updateLocalTaxBase = (key: LocalTaxBaseKey, checked: boolean) => {
+    setLocalTaxSettings((current) => ({
+      ...current,
+      taxableBase: {
+        ...current.taxableBase,
+        [key]: checked,
+      },
+    }));
+  };
   const hasExcludedAfterTaxIncome = hiddenFromAfterTaxIncome > 0.005;
   const excludedIncomeBadge = hasExcludedAfterTaxIncome ? (
     <span className="kpi-pill__inline-badge">
@@ -5909,6 +6094,14 @@ export default function App() {
         <div className="tax-breakdown-popover__total"><span>{selectedStateCode} taxable after deductions</span><strong>{formatCurrencyDetailed(stateTaxableAfterDeductions)}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
+        <h4>Local taxable income</h4>
+        <div><span>Locality</span><strong>{localTaxSettings.enabled ? localTaxSettings.localityName || localTaxResult.profile.locality : "No local tax"}</strong></div>
+        {localTaxBaseKeys.map((key) => (
+          <div key={key}><span>{localTaxBaseLabels[key]} {localTaxSettings.taxableBase[key] ? "included" : "excluded"}</span><strong>{formatCurrencyDetailed(localTaxBaseAmounts[key])}</strong></div>
+        ))}
+        <div className="tax-breakdown-popover__total"><span>Local taxable base</span><strong>{formatCurrencyDetailed(localTaxableIncome)}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
         <h4>Taxes removed</h4>
         <div><span>Federal ordinary tax</span><strong>{formatCurrencyDetailed(federalOrdinaryTax)}</strong></div>
         <div><span>Federal preferred tax</span><strong>{formatCurrencyDetailed(federalPreferredTax)}</strong></div>
@@ -5922,6 +6115,7 @@ export default function App() {
           <div key={component.label}><span>{component.label}</span><strong>{formatCurrencyDetailed(component.tax)}</strong></div>
         ))}
         <div><span>{selectedStateCode} W2 payroll withholding</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
+        <div><span>Local income tax</span><strong>{formatCurrencyDetailed(localTaxTotal)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Total tax removed</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
       </div>
     </div>
@@ -7155,6 +7349,7 @@ export default function App() {
                   <span>{navItems.find((item) => item.key === activeTab)?.label}</span>
                   {activeTab === "federal" && <TumblingCurrency className="content-topbar__tax-total" value={federalTaxWithPayroll} />}
                   {activeTab === "state" && <TumblingCurrency className="content-topbar__tax-total" value={stateTaxWithPayroll} />}
+                  {activeTab === "local" && <TumblingCurrency className="content-topbar__tax-total" value={localTaxTotal} />}
                 </span>
               </h2>
             </div>
@@ -7409,6 +7604,87 @@ export default function App() {
                 <CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} />
               </label>
               <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
+            </div>
+          </Section>
+        )}
+        {activeTab === "local" && (
+          <Section title="Local Tax" subtitle="Optional city, county, school-district, or occupational income tax layered on top of federal and state taxes." className="state-tax-panel local-tax-panel">
+            <details className="tax-output-disclosure" open>
+              <summary>Tax outputs</summary>
+              <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
+                <MetricCard label="Local tax" value={formatCurrencyDetailed(localTaxTotal)} />
+                <MetricCard label="Taxable local base" value={formatCurrencyDetailed(localTaxableIncome)} />
+                <MetricCard label="Effective rate" value={formatPercent(localTaxResult.effectiveRate)} />
+                <MetricCard label="Marginal rate" value={formatPercent(localTaxResult.marginalRate)} />
+              </div>
+              <div className="metric-grid state-tax-panel__tiles">
+                {localTaxBaseKeys.map((key) => (
+                  <MetricCard key={key} label={localTaxBaseLabels[key]} value={formatCurrency(localTaxBaseAmounts[key])} tone={localTaxSettings.taxableBase[key] ? "accent" : "default"} />
+                ))}
+              </div>
+            </details>
+            <div className="form-grid form-grid--compact-wide">
+              <label>
+                <span>Local tax on/off</span>
+                <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, enabled: event.target.value === "on" && getLocalTaxProfile(current.localityId).kind !== "none" }))}>
+                  <option value="off">Off</option>
+                  <option value="on">On</option>
+                </select>
+              </label>
+              <label>
+                <span>City / locality preset</span>
+                <select value={localTaxSettings.localityId} onChange={(event) => updateLocalTaxProfile(event.target.value)}>
+                  {localTaxProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.state ? `${profile.state} - ${profile.locality}` : profile.locality}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Type city/locality</span>
+                <input type="text" value={localTaxSettings.localityName} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, localityName: event.target.value }))} placeholder="City, county, or district" />
+              </label>
+              <label>
+                <span>Residency</span>
+                <select value={localTaxSettings.residency} onChange={(event) => {
+                  const residency = event.target.value === "nonresident" ? "nonresident" : "resident";
+                  const profile = getLocalTaxProfile(localTaxSettings.localityId);
+                  setLocalTaxSettings((current) => ({ ...current, residency, rate: residency === "nonresident" ? current.nonresidentRate || profile.nonresidentRate || current.rate : profile.id === "custom" ? current.rate : profile.residentRate }));
+                }}>
+                  <option value="resident">Resident</option>
+                  <option value="nonresident">Nonresident / worked there</option>
+                </select>
+              </label>
+              <label>
+                <span>Resident/current rate</span>
+                <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.rate * 100)} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, rate: toNumber(event.target.value) / 100, enabled: toNumber(event.target.value) > 0 }))} />
+              </label>
+              <label>
+                <span>Nonresident rate</span>
+                <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.nonresidentRate * 100)} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, nonresidentRate: toNumber(event.target.value) / 100 }))} />
+              </label>
+            </div>
+            <div className="lookup-card local-tax-base-card">
+              <div className="lookup-card__header">
+                <div>
+                  <p className="eyebrow">Tax Base</p>
+                  <h3>Income categories taxed locally</h3>
+                </div>
+                <strong>{formatCurrencyDetailed(localTaxableIncome)}</strong>
+              </div>
+              <div className="form-grid form-grid--compact-wide">
+                {localTaxBaseKeys.map((key) => (
+                  <label key={key} className="checkbox-row">
+                    <input type="checkbox" checked={localTaxSettings.taxableBase[key]} onChange={(event) => updateLocalTaxBase(key, event.target.checked)} />
+                    <span>{localTaxBaseLabels[key]} <small>{formatCurrencyDetailed(localTaxBaseAmounts[key])}</small></span>
+                  </label>
+                ))}
+              </div>
+              <div className="status-card status-card--note">
+                {selectedLocalTaxProfile.note} Local rules change often; verify the current city/county rate and whether the tax applies to residents, nonresidents, or earned income only.
+              </div>
+              {selectedLocalTaxProfile.kind === "progressive" && selectedLocalTaxProfile.brackets && (
+                <div className="metric-grid state-tax-panel__tiles">
+                  {selectedLocalTaxProfile.brackets.map((bracket) => <MetricCard key={bracket.threshold} label={`Over ${formatCurrency(bracket.threshold)}`} value={formatPercent(bracket.rate)} />)}
+                </div>
+              )}
             </div>
           </Section>
         )}
