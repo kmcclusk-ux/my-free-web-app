@@ -829,6 +829,7 @@ const localTaxBaseLabels: Record<LocalTaxBaseKey, string> = {
   socialSecurity: "Social Security",
 };
 const localTaxBaseKeys = Object.keys(localTaxBaseLabels) as LocalTaxBaseKey[];
+const createEmptyLocalTaxBaseAmounts = () => localTaxBaseKeys.reduce((base, key) => ({ ...base, [key]: 0 }), {} as Record<LocalTaxBaseKey, number>);
 const noLocalTaxBase = (): LocalTaxBaseSelection => ({
   wages: false,
   selfEmployment: false,
@@ -840,6 +841,44 @@ const noLocalTaxBase = (): LocalTaxBaseSelection => ({
   retirementIncome: false,
   socialSecurity: false,
 });
+function addLocalTaxBaseAmount(base: Record<LocalTaxBaseKey, number>, key: LocalTaxBaseKey, amount: number) {
+  base[key] += Math.max(toNumber(amount), 0);
+}
+function classifyLocalInvestmentIncome(row: Pick<DerivedInvestmentRow, "account" | "effectiveSymbol" | "filteredIncome" | "investmentType" | "nonInvestmentIncome" | "taxStatus" | "taxTreatment" | "w2Income">): LocalTaxBaseKey {
+  const treatment = normalizeLookupKey(row.taxTreatment);
+  const type = normalizeLookupKey(row.investmentType);
+  const status = normalizeLookupKey(row.taxStatus);
+  const accountName = normalizeLookupKey(row.account);
+  const symbol = normalizeLookupKey(row.effectiveSymbol);
+  if (row.w2Income > 0) return "wages";
+  if (type.includes("social-security") || type.includes("social security") || symbol === "ss" || symbol.includes("aux-ss")) return "socialSecurity";
+  if (status.includes("deferred") || accountName.includes("ira") || accountName.includes("401k") || accountName.includes("pension") || accountName.includes("deferred")) return "retirementIncome";
+  if (type.includes("real estate") || type.includes("rental") || treatment.includes("real estate")) return "rentalIncome";
+  if (treatment.includes("qualified-div") || treatment.includes("non-qualified-div") || type.includes("dividend")) return "dividends";
+  if (treatment.includes("gain") || treatment.includes("index-60-40")) return "capitalGains";
+  if (row.nonInvestmentIncome > 0 || type.includes("business")) return "businessIncome";
+  return "interest";
+}
+function classifyLocalWhatIfIncomeType(incomeType: string, preferred: boolean): LocalTaxBaseKey {
+  const key = normalizeLookupKey(incomeType);
+  if (isW2IncomeType(incomeType) || key.includes("wage") || key.includes("salary")) return "wages";
+  if (key.includes("self")) return "selfEmployment";
+  if (key.includes("rental")) return "rentalIncome";
+  if (key.includes("business")) return "businessIncome";
+  if (key.includes("qualified dividend") || key.includes("ordinary dividend") || key.includes("dividend")) return "dividends";
+  if (key.includes("capital gain") || key.includes("gain") || key.includes("collectible") || key.includes("section 1250")) return "capitalGains";
+  if (key.includes("interest")) return "interest";
+  return preferred ? "capitalGains" : "businessIncome";
+}
+function addLocalTaxWhatIfItems(base: Record<LocalTaxBaseKey, number>, items: TaxWhatIfItem[] | undefined, preferred: boolean, legacyAmount = 0) {
+  const activeItems = (Array.isArray(items) ? items : []).filter((item) => toNumber(item.amount) > 0);
+  if (activeItems.length === 0) {
+    const amount = toNumber(legacyAmount);
+    if (amount > 0) addLocalTaxBaseAmount(base, preferred ? "capitalGains" : "businessIncome", amount);
+    return;
+  }
+  activeItems.forEach((item) => addLocalTaxBaseAmount(base, classifyLocalWhatIfIncomeType(item.incomeType, preferred), item.amount));
+}
 const earningsLocalTaxBase = (): LocalTaxBaseSelection => ({
   ...noLocalTaxBase(),
   wages: true,
@@ -5699,24 +5738,13 @@ export default function App() {
   const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
   const localTaxBaseAmounts = derivedRows.reduce((base, row) => {
     if (!row.includeIncome || row.filteredIncome <= 0) return base;
-    const amount = row.filteredIncome;
-    const treatment = normalizeLookupKey(row.taxTreatment);
-    const type = normalizeLookupKey(row.investmentType);
-    const status = normalizeLookupKey(row.taxStatus);
-    const accountName = normalizeLookupKey(row.account);
-    if (row.w2Income > 0) base.wages += row.w2Income;
-    else if (type.includes("social-security") || type.includes("social security")) base.socialSecurity += amount;
-    else if (status.includes("deferred") || accountName.includes("ira") || accountName.includes("401k") || accountName.includes("pension")) base.retirementIncome += amount;
-    else if (type.includes("real estate") || type.includes("rental")) base.rentalIncome += amount;
-    else if (treatment.includes("qualified-div") || treatment.includes("non-qualified-div")) base.dividends += amount;
-    else if (treatment.includes("gain")) base.capitalGains += amount;
-    else if (row.nonInvestmentIncome > 0) base.businessIncome += amount;
-    else base.interest += amount;
+    addLocalTaxBaseAmount(base, classifyLocalInvestmentIncome(row), row.filteredIncome);
     return base;
-  }, localTaxBaseKeys.reduce((base, key) => ({ ...base, [key]: 0 }), {} as Record<LocalTaxBaseKey, number>));
-  localTaxBaseAmounts.wages += isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0;
-  localTaxBaseAmounts.businessIncome += Math.max(effectiveExtraOrdinaryIncome - (isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0), 0);
-  localTaxBaseAmounts.dividends += effectiveExtraPreferredIncome;
+  }, createEmptyLocalTaxBaseAmounts());
+  if (isFederalTaxWhatIfOpen) {
+    addLocalTaxWhatIfItems(localTaxBaseAmounts, federalSettings.extraOrdinaryItems, false, federalSettings.extraOrdinaryIncome);
+    addLocalTaxWhatIfItems(localTaxBaseAmounts, federalSettings.extraPreferredItems, true, federalSettings.extraPreferredIncome);
+  }
   const localTaxableIncome = localTaxBaseKeys.reduce((total, key) => total + (localTaxSettings.taxableBase[key] ? localTaxBaseAmounts[key] : 0), 0);
   const localTaxResult = calculateLocalTax(localTaxSettings, localTaxableIncome);
   const localTaxTotal = localTaxResult.tax;
@@ -6017,6 +6045,7 @@ export default function App() {
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
   const selectedLocalTaxProfile = getLocalTaxProfile(localTaxSettings.localityId);
+  const showLocalTaxBasePanel = localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none";
   const updateLocalTaxProfile = (localityId: string) => {
     const profile = getLocalTaxProfile(localityId);
     setLocalTaxSettings((current) => normalizeLocalTaxSettings({
@@ -7626,7 +7655,15 @@ export default function App() {
             <div className="form-grid form-grid--compact-wide">
               <label>
                 <span>Local tax on/off</span>
-                <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, enabled: event.target.value === "on" && getLocalTaxProfile(current.localityId).kind !== "none" }))}>
+                <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => setLocalTaxSettings((current) => {
+                  const profile = getLocalTaxProfile(current.localityId);
+                  const enabled = event.target.value === "on" && profile.kind !== "none";
+                  return {
+                    ...current,
+                    enabled,
+                    taxableBase: enabled ? profile.base : current.taxableBase,
+                  };
+                })}>
                   <option value="off">Off</option>
                   <option value="on">On</option>
                 </select>
@@ -7661,31 +7698,33 @@ export default function App() {
                 <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.nonresidentRate * 100)} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, nonresidentRate: toNumber(event.target.value) / 100 }))} />
               </label>
             </div>
-            <div className="lookup-card local-tax-base-card">
-              <div className="lookup-card__header">
-                <div>
-                  <p className="eyebrow">Tax Base</p>
-                  <h3>Income categories taxed locally</h3>
+            {showLocalTaxBasePanel && (
+              <div className="lookup-card local-tax-base-card">
+                <div className="lookup-card__header">
+                  <div>
+                    <p className="eyebrow">Tax Base</p>
+                    <h3>Income categories taxed locally</h3>
+                  </div>
+                  <strong>{formatCurrencyDetailed(localTaxableIncome)}</strong>
                 </div>
-                <strong>{formatCurrencyDetailed(localTaxableIncome)}</strong>
-              </div>
-              <div className="form-grid form-grid--compact-wide">
-                {localTaxBaseKeys.map((key) => (
-                  <label key={key} className="checkbox-row">
-                    <input type="checkbox" checked={localTaxSettings.taxableBase[key]} onChange={(event) => updateLocalTaxBase(key, event.target.checked)} />
-                    <span>{localTaxBaseLabels[key]} <small>{formatCurrencyDetailed(localTaxBaseAmounts[key])}</small></span>
-                  </label>
-                ))}
-              </div>
-              <div className="status-card status-card--note">
-                {selectedLocalTaxProfile.note} Local rules change often; verify the current city/county rate and whether the tax applies to residents, nonresidents, or earned income only.
-              </div>
-              {selectedLocalTaxProfile.kind === "progressive" && selectedLocalTaxProfile.brackets && (
-                <div className="metric-grid state-tax-panel__tiles">
-                  {selectedLocalTaxProfile.brackets.map((bracket) => <MetricCard key={bracket.threshold} label={`Over ${formatCurrency(bracket.threshold)}`} value={formatPercent(bracket.rate)} />)}
+                <div className="form-grid form-grid--compact-wide">
+                  {localTaxBaseKeys.map((key) => (
+                    <label key={key} className="checkbox-row">
+                      <input type="checkbox" checked={localTaxSettings.taxableBase[key]} onChange={(event) => updateLocalTaxBase(key, event.target.checked)} />
+                      <span>{localTaxBaseLabels[key]} <small>{formatCurrencyDetailed(localTaxBaseAmounts[key])}</small></span>
+                    </label>
+                  ))}
                 </div>
-              )}
-            </div>
+                <div className="status-card status-card--note">
+                  {selectedLocalTaxProfile.note} Local rules change often; verify the current city/county rate and whether the tax applies to residents, nonresidents, or earned income only.
+                </div>
+                {selectedLocalTaxProfile.kind === "progressive" && selectedLocalTaxProfile.brackets && (
+                  <div className="metric-grid state-tax-panel__tiles">
+                    {selectedLocalTaxProfile.brackets.map((bracket) => <MetricCard key={bracket.threshold} label={`Over ${formatCurrency(bracket.threshold)}`} value={formatPercent(bracket.rate)} />)}
+                  </div>
+                )}
+              </div>
+            )}
           </Section>
         )}
           </>
