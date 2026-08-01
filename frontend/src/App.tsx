@@ -777,7 +777,7 @@ const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ 
 function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "label"> {
   const key = normalizeLookupKey(label);
   const base = { ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest", description: "Ordinary taxable investment income" };
-  if (["taxfree", "hold"].includes(key)) return { ...base, ordinaryShare: 0, stateRule: "exempt", niitIncluded: false, description: "Excluded from current federal and state taxable income" };
+  if (["taxfree", "hold"].includes(key)) return { ...base, ordinaryShare: 0, stateRule: "exempt", niitIncluded: false, localCategory: "", description: "Excluded from current federal, state, local, and NIIT taxable income" };
   if (key === "fedtaxfree") return { ...base, ordinaryShare: 0, stateRule: "taxable", description: "Federally exempt but state taxable" };
   if (key === "statetaxfree") return { ...base, stateRule: "treasury-exempt", description: "Federally taxable U.S. Treasury interest; exempt from state and local income tax" };
   if (key === "index6040") return { ...base, ordinaryShare: 0.4, preferredShare: 0.6, localCategory: "capitalGains", description: "Section 1256-style 40% short-term / 60% long-term gain" };
@@ -788,7 +788,7 @@ function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "l
   if (["shorttermgain"].includes(key)) return { ...base, localCategory: "capitalGains", description: "Short-term capital gain taxed as ordinary income" };
   return base;
 }
-const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label) }));
+const initialTaxTreatments: TaxTreatmentRow[] = ["tax-free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label) }));
 const assetTypeOptions = ["ETF", "Stock", "Income"];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
 const initialAccountTypes: AccountTypeRow[] = [
@@ -2268,7 +2268,7 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number): Ticke
   const symbol = workbookField(row, "symbol", "ticker") ?? base.symbol;
   const category = workbookField(row, "category") ?? base.category;
   const importedTaxTreatment = workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment;
-  const taxTreatment = normalizeLookupKey(symbol).includes("auxss") ? "tax free" : importedTaxTreatment;
+  const taxTreatment = normalizeLookupKey(importedTaxTreatment) === "taxfree" ? "tax-free" : importedTaxTreatment;
   const incomeItemValue = workbookField(row, "incomeItem", "income_item", "is_income_item", "income_ticker", "income");
   const inferredIncomeItem = isDefaultIncomeTicker({ category, taxTreatment }) || normalizeLookupKey(symbol) === "noninvestmentincome";
   const legacyIncomeItem = inferredIncomeItem || (incomeItemValue !== undefined ? normalizeBoolean(incomeItemValue) : false);
@@ -2309,7 +2309,8 @@ function workbookToAccountRow(row: Record<string, unknown>, index: number): Acco
   };
 }
 function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number): TaxTreatmentRow {
-  const label = workbookField(row, "label", "tax_treatment", "taxTreatment") ?? "";
+  const importedLabel = workbookField(row, "label", "tax_treatment", "taxTreatment") ?? "";
+  const label = normalizeLookupKey(importedLabel) === "taxfree" ? "tax-free" : importedLabel;
   const defaults = defaultTaxTreatmentRule(label);
   const ordinaryShare = workbookField(row, "ordinaryShare", "ordinary_share", "ordinary_percent", "federal_ordinary_share");
   const preferredShare = workbookField(row, "preferredShare", "preferred_share", "preferred_percent", "federal_preferred_share");
@@ -5848,6 +5849,7 @@ export default function App() {
   const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
   const localTaxBaseAmounts = derivedRows.reduce((base, row) => {
     if (!row.includeIncome || row.filteredIncome <= 0) return base;
+    if (["taxfree", "hold"].includes(normalizeLookupKey(row.taxTreatment))) return base;
     addLocalTaxBaseAmount(base, classifyLocalInvestmentIncome(row), row.filteredIncome);
     return base;
   }, createEmptyLocalTaxBaseAmounts());

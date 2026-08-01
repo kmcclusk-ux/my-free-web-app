@@ -785,9 +785,7 @@ function normalizeTickerExportRecord_(record) {
   var divPayout = firstExportValue_(record, hasIncomeItemColumn ? ['divPayout', 'div_payout', 'payout', 'col_9', 'col_8'] : ['divPayout', 'div_payout', 'payout', 'col_8', 'col_9']);
   var normalizedSymbol = String(symbol || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   var normalizedCategory = String(category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (normalizedSymbol.indexOf('auxss') >= 0) {
-    taxTreatment = 'tax free';
-  }
+  if (String(taxTreatment || '').toLowerCase().replace(/[^a-z0-9]/g, '') === 'taxfree') taxTreatment = 'tax-free';
   if (normalizedSymbol === 'noninvestmentincome' || normalizedCategory === 'noninvestmentincome' || normalizedCategory === 'socialsecurity') {
     incomeItem = true;
   }
@@ -833,6 +831,7 @@ function normalizeCategoryExportRecord_(record) {
 
 function normalizeTaxTreatmentExportRecord_(record) {
   var label = firstExportValue_(record, ['label', 'tax_treatment', 'taxtreatment', 'tax_status', 'status', 'col_1']);
+  if (String(label || '').toLowerCase().replace(/[^a-z0-9]/g, '') === 'taxfree') label = 'tax-free';
   var ordinaryShare = exportRate_(firstExportValue_(record, ['ordinaryShare', 'ordinary_share', 'ordinary_percent', 'federal_ordinary_share', 'col_2']));
   var preferredShare = exportRate_(firstExportValue_(record, ['preferredShare', 'preferred_share', 'preferred_percent', 'federal_preferred_share', 'col_3']));
   var stateRule = firstExportValue_(record, ['stateRule', 'state_rule', 'state_treatment', 'col_4']);
