@@ -3069,7 +3069,7 @@ function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   );
 }
 
-function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | "lookup" | "previous" | "next" | "split" }) {
+function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
   if (name === "add") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3106,6 +3106,14 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | 
         <path d="m14.25 14.25 5 5" />
       </svg>
     );
+  }
+
+  if (name === "copy") {
+    return <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 9h9v9H9z" /><path d="M6 15H4V4h11v2" /></svg>;
+  }
+
+  if (name === "paste") {
+    return <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 6h8v13H6V6h2" /><path d="M9 4h4a2 2 0 0 1 2 2v1H7V6a2 2 0 0 1 2-2Z" /></svg>;
   }
 
   if (name === "lookup") {
@@ -3915,7 +3923,7 @@ function lookupColumnDefaultWidth<T>(column: LookupColumn<T>, rows: T[]) {
   return Math.min(LOOKUP_TABLE_MAX_COLUMN_WIDTH, contentWidth);
 }
 
-function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, highlightedRowId = null, onChange, onAdd, onRemove, onRemoveAll, onReorder, onLookupRow, showLookupRow = () => true, lookupRowLabel = "Look up row", showMoveHeaderLabel = true, rowDeleteNextToMove = false }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; highlightedRowId?: number | null; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onRemoveAll?: () => void; onReorder: (sourceId: number, targetId: number) => void; onLookupRow?: (row: T) => void; showLookupRow?: (row: T) => boolean; lookupRowLabel?: string; showMoveHeaderLabel?: boolean; rowDeleteNextToMove?: boolean; }) {
+function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns, highlightedRowId = null, onChange, onAdd, onRemove, onRemoveAll, onReorder, onSplitRow, onPasteRow, onLookupRow, showLookupRow = () => true, lookupRowLabel = "Look up row", showMoveHeaderLabel = true, rowDeleteNextToMove = false }: { title: string; subtitle: string; rows: T[]; columns: Array<LookupColumn<T>>; highlightedRowId?: number | null; onChange: (id: number, field: keyof T, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onRemoveAll?: () => void; onReorder: (sourceId: number, targetId: number) => void; onSplitRow?: (id: number) => void; onPasteRow?: (id: number, values: Partial<T>) => void; onLookupRow?: (row: T) => void; showLookupRow?: (row: T) => boolean; lookupRowLabel?: string; showMoveHeaderLabel?: boolean; rowDeleteNextToMove?: boolean; }) {
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const [isRemoveAllConfirmOpen, setIsRemoveAllConfirmOpen] = useState(false);
@@ -3923,8 +3931,9 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const dropHandledRef = useRef(false);
+  const copiedRowRef = useRef<Partial<T> | null>(null);
   const lookupColumnWidths = useMemo(() => columns.map((column) => lookupColumnDefaultWidth(column, rows)), [columns, rows]);
-  const inlineActionCount = (rowDeleteNextToMove ? 1 : 0) + (rowDeleteNextToMove && onLookupRow ? 1 : 0);
+  const inlineActionCount = (rowDeleteNextToMove ? 1 : 0) + (rowDeleteNextToMove && onLookupRow ? 1 : 0) + (onSplitRow ? 1 : 0) + (onPasteRow ? 2 : 0);
   const lookupActionColumnWidth = rowDeleteNextToMove ? 0 : LOOKUP_TABLE_ACTION_COLUMN_WIDTH;
   const lookupMoveColumnWidth = rowDeleteNextToMove ? LOOKUP_TABLE_DRAG_COLUMN_WIDTH + (LOOKUP_TABLE_ACTION_COLUMN_WIDTH * inlineActionCount) : LOOKUP_TABLE_DRAG_COLUMN_WIDTH;
   const lookupTableWidth = lookupMoveColumnWidth + lookupColumnWidths.reduce((sum, width) => sum + width, 0) + lookupActionColumnWidth;
@@ -4032,6 +4041,25 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     onRemoveAll?.();
     setIsRemoveAllConfirmOpen(false);
   };
+  const copyRow = async (row: T) => {
+    const values = Object.fromEntries(columns.map((column) => [column.key, row[column.key]])) as Partial<T>;
+    copiedRowRef.current = values;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({ source: "aftertaxum-row", table: title, values }));
+    } catch {
+      // Keep the in-app copy available if clipboard permission is unavailable.
+    }
+  };
+  const pasteRow = async (rowId: number) => {
+    let values = copiedRowRef.current;
+    try {
+      const parsed = JSON.parse(await navigator.clipboard.readText()) as { source?: string; table?: string; values?: Partial<T> };
+      if (parsed.source === "aftertaxum-row" && parsed.table === title && parsed.values) values = parsed.values;
+    } catch {
+      // Fall back to the last row copied in this grid.
+    }
+    if (values) onPasteRow?.(rowId, values);
+  };
   const renderCell = (row: T, column: LookupColumn<T>) => {
     if (column.type === "checkbox" || column.type === "yesNoCheckbox" || column.type === "invertedYesNoCheckbox") {
       const normalizedYesNo = normalizeYesNo(row[column.key]);
@@ -4113,6 +4141,9 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
                 <td className={`drag-handle-cell lookup-drag-cell ${rowDeleteNextToMove ? "lookup-drag-cell--with-delete" : ""}`.trim()} style={lookupMoveCellStyle}>
                   <button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button>
                   {rowDeleteNextToMove && <button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger lookup-inline-delete-button" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button>}
+                  {onSplitRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => onSplitRow(row.id)} aria-label={`Split ${title} row`} title="Split row"><RowActionIcon name="split" /></button>}
+                  {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => void copyRow(row)} aria-label={`Copy ${title} row`} title="Copy row"><RowActionIcon name="copy" /></button>}
+                  {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => void pasteRow(row.id)} aria-label={`Paste into ${title} row`} title="Paste row"><RowActionIcon name="paste" /></button>}
                   {rowDeleteNextToMove && onLookupRow && showLookupRow(row) && <button className="ghost-button ghost-button--compact icon-button action-icon-button lookup-inline-lookup-button" type="button" onClick={() => onLookupRow(row)} aria-label={`${lookupRowLabel} ${String((row as Record<string, unknown>).symbol || "")}`.trim()} title={`${lookupRowLabel}${(row as Record<string, unknown>).symbol ? ` ${(row as Record<string, unknown>).symbol}` : ""}`}><RowActionIcon name="lookup" /></button>}
                 </td>
                 {columns.map((column) => <td key={String(column.key)}>{renderCell(row, column)}</td>)}
@@ -7497,7 +7528,7 @@ export default function App() {
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />
         )}
-        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onSplitRow={(id) => setTickers((current) => { const index = current.findIndex((row) => row.id === id); if (index < 0) return current; const nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1)); return [...current.slice(0, index + 1), { ...current[index], id: nextId }, ...current.slice(index + 1)]; })} onPasteRow={(id, values) => setTickers((current) => current.map((row) => row.id === id ? { ...row, ...values, id } : row))} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Account type drives the investment tax status; cashflow inclusion comes directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "accountType", label: "Account type", type: "select", options: accountTypeOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} highlightedRowId={highlightedAccountRowId} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Category" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
