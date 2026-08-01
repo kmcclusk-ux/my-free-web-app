@@ -785,6 +785,9 @@ function normalizeTickerExportRecord_(record) {
   var divPayout = firstExportValue_(record, hasIncomeItemColumn ? ['divPayout', 'div_payout', 'payout', 'col_9', 'col_8'] : ['divPayout', 'div_payout', 'payout', 'col_8', 'col_9']);
   var normalizedSymbol = String(symbol || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   var normalizedCategory = String(category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalizedSymbol.indexOf('auxss') >= 0) {
+    taxTreatment = 'tax free';
+  }
   if (normalizedSymbol === 'noninvestmentincome' || normalizedCategory === 'noninvestmentincome' || normalizedCategory === 'socialsecurity') {
     incomeItem = true;
   }

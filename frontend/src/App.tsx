@@ -2267,7 +2267,8 @@ function workbookToTickerRow(row: Record<string, unknown>, index: number): Ticke
   const extraDataValue = workbookField(row, "extra_data", "extraData");
   const symbol = workbookField(row, "symbol", "ticker") ?? base.symbol;
   const category = workbookField(row, "category") ?? base.category;
-  const taxTreatment = workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment;
+  const importedTaxTreatment = workbookField(row, "tax_treatment", "taxTreatment", "tax_status") ?? base.taxTreatment;
+  const taxTreatment = normalizeLookupKey(symbol).includes("auxss") ? "tax free" : importedTaxTreatment;
   const incomeItemValue = workbookField(row, "incomeItem", "income_item", "is_income_item", "income_ticker", "income");
   const inferredIncomeItem = isDefaultIncomeTicker({ category, taxTreatment }) || normalizeLookupKey(symbol) === "noninvestmentincome";
   const legacyIncomeItem = inferredIncomeItem || (incomeItemValue !== undefined ? normalizeBoolean(incomeItemValue) : false);
