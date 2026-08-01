@@ -830,10 +830,22 @@ function normalizeCategoryExportRecord_(record) {
 
 function normalizeTaxTreatmentExportRecord_(record) {
   var label = firstExportValue_(record, ['label', 'tax_treatment', 'taxtreatment', 'tax_status', 'status', 'col_1']);
+  var ordinaryShare = exportRate_(firstExportValue_(record, ['ordinaryShare', 'ordinary_share', 'ordinary_percent', 'federal_ordinary_share', 'col_2']));
+  var preferredShare = exportRate_(firstExportValue_(record, ['preferredShare', 'preferred_share', 'preferred_percent', 'federal_preferred_share', 'col_3']));
+  var stateRule = firstExportValue_(record, ['stateRule', 'state_rule', 'state_treatment', 'col_4']);
+  var niitIncluded = firstExportValue_(record, ['niitIncluded', 'niit_included', 'include_in_niit', 'col_5']);
+  var localCategory = firstExportValue_(record, ['localCategory', 'local_category', 'local_income_category', 'col_6']);
+  var description = firstExportValue_(record, ['description', 'desc', 'explanation', 'col_7']);
   if (!exportValueIsBlank_(label)) {
     record.label = label;
     record.tax_treatment = label;
   }
+  if (ordinaryShare !== undefined) { record.ordinaryShare = ordinaryShare; record.ordinary_share = ordinaryShare; }
+  if (preferredShare !== undefined) { record.preferredShare = preferredShare; record.preferred_share = preferredShare; }
+  if (!exportValueIsBlank_(stateRule)) { record.stateRule = stateRule; record.state_rule = stateRule; }
+  if (!exportValueIsBlank_(niitIncluded)) { record.niitIncluded = exportBoolean_(niitIncluded); record.niit_included = exportBoolean_(niitIncluded); }
+  if (!exportValueIsBlank_(localCategory)) { record.localCategory = localCategory; record.local_category = localCategory; }
+  if (!exportValueIsBlank_(description)) record.description = description;
 }
 
 function normalizeAccountTaxTypeExportRecord_(record) {

@@ -54,12 +54,14 @@ type DerivedInvestmentRow = InvestmentRow & {
   investmentOrdinaryMonthly: number;
   investmentPreferredMonthly: number;
   investmentStateMonthly: number;
+  niitIncome: number;
   displayYearlyIncome: number;
   displayMonthlyIncome: number;
   displayFilteredIncome: number;
   includedTotal: number;
   taxStatus: string;
   taxTreatment: string;
+  localTaxCategory: string;
   currentAssetTaxTone: AssetTaxTone;
   proposedAssetTaxTone: AssetTaxTone;
   investmentType: string;
@@ -87,7 +89,7 @@ type DerivedInvestmentRow = InvestmentRow & {
 
 type TickerRow = { id: number; symbol: string; percentReturn: number; assetType: string; category: string; taxTreatment: string; incomeItem: boolean; extraData: number; description: string; exDividend: string; divPayout: string };
 type CategoryRow = { id: number; name: string };
-type TaxTreatmentRow = { id: number; label: string };
+type TaxTreatmentRow = { id: number; label: string; ordinaryShare: number; preferredShare: number; stateRule: string; niitIncluded: boolean; localCategory: string; description: string };
 type AccountRow = { id: number; account: string; accountType: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
 type AccountTaxTypeRow = { id: number; taxStatus: string };
 type AccountTypeRow = { id: number; name: string; taxStatus: string };
@@ -524,6 +526,7 @@ const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
   { key: "federal", label: "Federal Tax", meta: "live backend" },
   { key: "state", label: "State Tax", meta: "state worksheet" },
   { key: "local", label: "Local Tax", meta: "city / county" },
+  { key: "taxTreatment", label: "Tax Treatments", meta: "income rules" },
   { key: "accountTaxType", label: "Account Tax Category", meta: "status list" },
   { key: "accountType", label: "Account Type", meta: "account kinds" },
   { key: "categories", label: "Asset Classes", meta: "asset classes" },
@@ -771,7 +774,21 @@ const initialTickers: TickerRow[] = ([
 ] as Array<Omit<TickerRow, "incomeItem">>).map((row) => ({ ...row, incomeItem: isIncomeAssetType(row.assetType) || isDefaultIncomeTicker(row) }));
 
 const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name }));
-const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label }));
+function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "label"> {
+  const key = normalizeLookupKey(label);
+  const base = { ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest", description: "Ordinary taxable investment income" };
+  if (["taxfree", "hold"].includes(key)) return { ...base, ordinaryShare: 0, stateRule: "exempt", niitIncluded: false, description: "Excluded from current federal and state taxable income" };
+  if (key === "fedtaxfree") return { ...base, ordinaryShare: 0, stateRule: "taxable", description: "Federally exempt but state taxable" };
+  if (key === "statetaxfree") return { ...base, stateRule: "treasury-exempt", description: "Federally taxable U.S. Treasury interest; exempt from state and local income tax" };
+  if (key === "index6040") return { ...base, ordinaryShare: 0.4, preferredShare: 0.6, localCategory: "capitalGains", description: "Section 1256-style 40% short-term / 60% long-term gain" };
+  if (["qualifieddiv", "longtermgain"].includes(key)) return { ...base, ordinaryShare: 0, preferredShare: 1, localCategory: key === "qualifieddiv" ? "dividends" : "capitalGains", description: key === "qualifieddiv" ? "Qualified dividend income" : "Long-term capital gain" };
+  if (key === "ss85fed") return { ...base, ordinaryShare: 0.85, stateRule: "exempt", niitIncluded: false, localCategory: "socialSecurity", description: "Legacy Social Security estimate; federal taxable share is capped at 85%" };
+  if (key === "realestate") return { ...base, localCategory: "rentalIncome", description: "Ordinary real-estate income before property-specific deductions" };
+  if (key === "nonqualifieddiv") return { ...base, localCategory: "dividends", description: "Nonqualified dividend taxed as ordinary income" };
+  if (["shorttermgain"].includes(key)) return { ...base, localCategory: "capitalGains", description: "Short-term capital gain taxed as ordinary income" };
+  return base;
+}
+const initialTaxTreatments: TaxTreatmentRow[] = ["tax free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label) }));
 const assetTypeOptions = ["ETF", "Stock", "Income"];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
 const initialAccountTypes: AccountTypeRow[] = [
@@ -844,7 +861,7 @@ const noLocalTaxBase = (): LocalTaxBaseSelection => ({
 function addLocalTaxBaseAmount(base: Record<LocalTaxBaseKey, number>, key: LocalTaxBaseKey, amount: number) {
   base[key] += Math.max(toNumber(amount), 0);
 }
-function classifyLocalInvestmentIncome(row: Pick<DerivedInvestmentRow, "account" | "effectiveSymbol" | "filteredIncome" | "investmentType" | "nonInvestmentIncome" | "taxStatus" | "taxTreatment" | "w2Income">): LocalTaxBaseKey {
+function classifyLocalInvestmentIncome(row: Pick<DerivedInvestmentRow, "account" | "effectiveSymbol" | "filteredIncome" | "investmentType" | "localTaxCategory" | "nonInvestmentIncome" | "taxStatus" | "taxTreatment" | "w2Income">): LocalTaxBaseKey {
   const treatment = normalizeLookupKey(row.taxTreatment);
   const type = normalizeLookupKey(row.investmentType);
   const status = normalizeLookupKey(row.taxStatus);
@@ -853,6 +870,7 @@ function classifyLocalInvestmentIncome(row: Pick<DerivedInvestmentRow, "account"
   if (row.w2Income > 0) return "wages";
   if (type.includes("social-security") || type.includes("social security") || symbol === "ss" || symbol.includes("aux-ss")) return "socialSecurity";
   if (status.includes("deferred") || accountName.includes("ira") || accountName.includes("401k") || accountName.includes("pension") || accountName.includes("deferred")) return "retirementIncome";
+  if (localTaxBaseKeys.includes(row.localTaxCategory as LocalTaxBaseKey)) return row.localTaxCategory as LocalTaxBaseKey;
   if (type.includes("real estate") || type.includes("rental") || treatment.includes("real estate")) return "rentalIncome";
   if (treatment.includes("qualified-div") || treatment.includes("non-qualified-div") || type.includes("dividend")) return "dividends";
   if (treatment.includes("gain") || treatment.includes("index-60-40")) return "capitalGains";
@@ -1374,13 +1392,16 @@ function assetTaxToneLabel(tone: AssetTaxTone) {
   return "Federal and state taxable";
 }
 
-function AssetSelect({ value, options, accountTaxStatus, tickerMap, stateCode, disabled = false, resetToValue, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; stateCode: string; disabled?: boolean; resetToValue?: string; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
+function AssetSelect({ value, options, accountTaxStatus, tickerMap, taxTreatmentMap = {}, stateCode, disabled = false, resetToValue, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; taxTreatmentMap?: Record<string, TaxTreatmentRow>; stateCode: string; disabled?: boolean; resetToValue?: string; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const taxToneForOption = (option: string) => getAssetTaxTone(accountTaxStatus, tickerMap[normalizeLookupKey(option)]?.taxTreatment || "income", stateCode);
+  const taxToneForOption = (option: string) => {
+    const treatment = tickerMap[normalizeLookupKey(option)]?.taxTreatment || "income";
+    return getAssetTaxTone(accountTaxStatus, treatment, stateCode, taxTreatmentMap[normalizeLookupKey(treatment)]);
+  };
   const selectedTone = taxToneForOption(value);
   const selectedAssetName = value.trim();
   const displayedValue = selectedAssetName || "No asset selected";
@@ -2048,14 +2069,26 @@ function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
-function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean) { switch (String(taxTreatment || "").toLowerCase().trim()) { case "hold": case "tax free": case "fed tax free": return 0; case "state tax free": return pref ? 0 : amount; case "index-60-40": return pref ? amount * 0.6 : amount * 0.4; case "income": case "non-qualified-div": case "short term gain": case "real estate": return pref ? 0 : amount; case "ss-85-fed": return pref ? 0 : amount * 0.85; case "qualified-div": case "long term gain": return pref ? amount : 0; default: return pref ? 0 : amount; } }
-function stateTaxAdjust(amount: number, taxTreatment: string, stateCode = "CA") { const treatment = String(taxTreatment || "").toLowerCase().trim(); if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0; if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0; return amount; }
-function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: string): AssetTaxTone {
+function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean, rule?: TaxTreatmentRow) {
+  if (rule) {
+    const ordinary = Math.max(0, Math.min(1, toNumber(rule.ordinaryShare)));
+    const preferred = Math.max(0, Math.min(1, toNumber(rule.preferredShare)));
+    const scale = ordinary + preferred > 1 ? 1 / (ordinary + preferred) : 1;
+    return amount * (pref ? preferred : ordinary) * scale;
+  }
+  const fallback = defaultTaxTreatmentRule(taxTreatment);
+  return amount * (pref ? fallback.preferredShare : fallback.ordinaryShare);
+}
+function stateTaxAdjust(amount: number, taxTreatment: string, _stateCode = "CA", rule?: TaxTreatmentRow) {
+  const stateRule = normalizeLookupKey(rule?.stateRule || defaultTaxTreatmentRule(taxTreatment).stateRule);
+  return ["exempt", "treasuryexempt"].includes(stateRule) ? 0 : amount;
+}
+function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: string, rule?: TaxTreatmentRow): AssetTaxTone {
   const normalizedStatus = String(taxStatus || "").trim().toLowerCase();
-  const isTaxableAccount = normalizedStatus === "taxable" || normalizedStatus.includes("taxable");
+  const isTaxableAccount = ["taxable", "partially taxable"].includes(normalizedStatus);
   if (!isTaxableAccount) return "tax-free";
-  const federalTaxable = fedTaxAdjust(1, taxTreatment, false) + fedTaxAdjust(1, taxTreatment, true) > 0;
-  const stateTaxable = stateTaxAdjust(1, taxTreatment, stateCode) > 0;
+  const federalTaxable = fedTaxAdjust(1, taxTreatment, false, rule) + fedTaxAdjust(1, taxTreatment, true, rule) > 0;
+  const stateTaxable = stateTaxAdjust(1, taxTreatment, stateCode, rule) > 0;
   if (federalTaxable && stateTaxable) return "fully-taxable";
   if (federalTaxable) return "federal-taxable-state-free";
   if (stateTaxable) return "federal-free-state-taxable";
@@ -2275,10 +2308,20 @@ function workbookToAccountRow(row: Record<string, unknown>, index: number): Acco
   };
 }
 function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number): TaxTreatmentRow {
-  const base: TaxTreatmentRow = { id: index + 1, label: "" };
+  const label = workbookField(row, "label", "tax_treatment", "taxTreatment") ?? "";
+  const defaults = defaultTaxTreatmentRule(label);
+  const ordinaryShare = workbookField(row, "ordinaryShare", "ordinary_share", "ordinary_percent", "federal_ordinary_share");
+  const preferredShare = workbookField(row, "preferredShare", "preferred_share", "preferred_percent", "federal_preferred_share");
+  const niitIncluded = workbookField(row, "niitIncluded", "niit_included", "include_in_niit");
   return {
     id: Number(workbookField(row, "id")) || index + 1,
-    label: workbookField(row, "label", "tax_treatment") ?? base.label,
+    label,
+    ordinaryShare: ordinaryShare !== undefined ? normalizeRate(ordinaryShare) : defaults.ordinaryShare,
+    preferredShare: preferredShare !== undefined ? normalizeRate(preferredShare) : defaults.preferredShare,
+    stateRule: workbookField(row, "stateRule", "state_rule", "state_treatment") ?? defaults.stateRule,
+    niitIncluded: niitIncluded !== undefined ? normalizeBoolean(niitIncluded) : defaults.niitIncluded,
+    localCategory: workbookField(row, "localCategory", "local_category", "local_income_category") ?? defaults.localCategory,
+    description: workbookField(row, "description", "desc", "explanation") ?? defaults.description,
   };
 }
 function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number): AccountTaxTypeRow {
@@ -5301,7 +5344,7 @@ export default function App() {
     setInvestments(snapshot.investments);
     setTickers(snapshot.tickers);
     setCategories(snapshot.categories);
-    setTaxTreatments(snapshot.taxTreatments);
+    setTaxTreatments(snapshot.taxTreatments.map((row, index) => workbookToTaxTreatmentRow(row as unknown as Record<string, unknown>, index)));
     setAccounts(snapshot.accounts);
     setAccountTaxTypes(snapshot.accountTaxTypes);
     setAccountTypes(mergeDefaultAccountTypes(snapshot.accountTypes));
@@ -5496,6 +5539,20 @@ export default function App() {
       .filter(Boolean);
     return ["", ...new Set([...values, ...fromTickers])];
   }, [taxTreatments, tickers]);
+  const taxTreatmentMap = useMemo(() => Object.fromEntries(taxTreatments
+    .map((row) => [normalizeLookupKey(row.label), row] as const)
+    .filter(([label]) => Boolean(label))), [taxTreatments]);
+  const taxTreatmentIssues = useMemo(() => taxTreatments.flatMap((row) => {
+    const total = toNumber(row.ordinaryShare) + toNumber(row.preferredShare);
+    const issues: string[] = [];
+    if (!String(row.label || "").trim()) issues.push(`Row ${row.id}: treatment ID is required.`);
+    if (total > 1.000001) issues.push(`${row.label || `Row ${row.id}`}: federal ordinary and preferred shares exceed 100%.`);
+    if (toNumber(row.ordinaryShare) < 0 || toNumber(row.preferredShare) < 0) issues.push(`${row.label || `Row ${row.id}`}: federal shares cannot be negative.`);
+    return issues;
+  }), [taxTreatments]);
+  const assetsWithUnmappedTaxTreatment = useMemo(() => tickers
+    .filter((row) => String(row.symbol || "").trim() && !taxTreatmentMap[normalizeLookupKey(row.taxTreatment)])
+    .map((row) => row.symbol), [tickers, taxTreatmentMap]);
   const categoryOptions = useMemo(() => {
     const values = categories
       .map((row) => String(row.name || "").trim())
@@ -5642,26 +5699,28 @@ export default function App() {
     const displayMonthlyIncome = displayYearlyIncome / 12;
     const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
     const taxStatus = String(accountTaxStatusByName[accountKey] || account?.taxStatus || "taxable").toLowerCase();
-    const isPartiallyTaxableStatus = taxStatus.includes("partially taxable");
-    const isTaxableStatus = taxStatus === "taxable" || taxStatus.includes("taxable");
+    const normalizedTaxStatus = normalizeLookupKey(taxStatus);
+    const isPartiallyTaxableStatus = normalizedTaxStatus === "partiallytaxable";
+    const isTaxableStatus = normalizedTaxStatus === "taxable";
     const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
     const currentTaxTreatment = String(currentTicker?.taxTreatment || "income").toLowerCase();
     const proposedTaxTreatment = String(proposedTicker?.taxTreatment || "income").toLowerCase();
     const taxTreatment = isW2IncomeAccount ? "income" : String(effectiveTicker?.taxTreatment || "income").toLowerCase();
+    const taxTreatmentRule = taxTreatmentMap[normalizeLookupKey(taxTreatment)];
     const investmentType = String(effectiveTicker?.category || "").toLowerCase();
     const extraData = toNumber(effectiveTicker?.extraData || 0);
     const taxableMonthlyBase = isTaxableAccount && row.includeIncome ? filteredIncome / 12 : 0;
     const displayTaxableMonthlyBase = isTaxableAccount && row.includeIncome && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
-    const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false);
-    const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true);
-    const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode);
+    const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false, taxTreatmentRule);
+    const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true, taxTreatmentRule);
+    const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode, taxTreatmentRule);
     const investmentIncome = !incomeItem ? filteredIncome : 0;
     const investmentOrdinaryMonthly = !incomeItem ? ordinaryMonthly : 0;
     const investmentPreferredMonthly = !incomeItem ? preferredMonthly : 0;
     const investmentStateMonthly = !incomeItem ? stateMonthly : 0;
-    const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false);
-    const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true);
-    const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode);
+    const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false, taxTreatmentRule);
+    const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true, taxTreatmentRule);
+    const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode, taxTreatmentRule);
     const w2Income = isW2IncomeAccount ? filteredIncome : 0;
     const nonInvestmentIncome = isW2IncomeAccount || ["social-security", "non investment income"].includes(investmentType) ? filteredIncome : 0;
     const displayNonInvestmentIncome = includeInAfterTaxIncome ? nonInvestmentIncome : 0;
@@ -5680,12 +5739,14 @@ export default function App() {
       investmentOrdinaryMonthly,
       investmentPreferredMonthly,
       investmentStateMonthly,
+      niitIncome: taxTreatmentRule?.niitIncluded === false || incomeItem ? 0 : filteredIncome,
       displayYearlyIncome,
       displayMonthlyIncome,
       displayFilteredIncome,
       includedTotal,
       taxStatus,
       taxTreatment,
+      localTaxCategory: taxTreatmentRule?.localCategory || "",
       currentAssetTaxTone: getAssetTaxTone(taxStatus, currentTaxTreatment, selectedStateCode),
       proposedAssetTaxTone: getAssetTaxTone(taxStatus, proposedTaxTreatment, selectedStateCode),
       investmentType,
@@ -5710,7 +5771,7 @@ export default function App() {
       realEstate: investmentType === "real estate" ? includedTotal : 0,
       bitcoin: investmentType === "bitcoin" ? includedTotal : 0,
     };
-  }), [investments, tickerMap, accountMap, accountTaxStatusByName, isWhatIfActive, selectedStateCode]);
+  }), [investments, tickerMap, accountMap, accountTaxStatusByName, taxTreatmentMap, isWhatIfActive, selectedStateCode]);
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
@@ -5719,6 +5780,7 @@ export default function App() {
     acc.investmentFederalOrdinary += row.investmentOrdinaryMonthly * 12;
     acc.investmentFederalPreferred += row.investmentPreferredMonthly * 12;
     acc.investmentStateTaxable += row.investmentStateMonthly * 12;
+    acc.niitIncome += row.niitIncome;
     acc.displayIncome += row.displayFilteredIncome;
     acc.federalOrdinary += row.ordinaryMonthly * 12;
     acc.federalPreferred += row.preferredMonthly * 12;
@@ -5741,7 +5803,7 @@ export default function App() {
     acc.realEstate += row.realEstate;
     acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0, investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
+  }, { totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0, investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0, niitIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
       const derived = derivedRows.find((derivedRow) => derivedRow.id === row.id);
@@ -5804,7 +5866,7 @@ export default function App() {
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
   const ordinaryTaxable = Math.max(federalTaxableAfterDeductions - prefTaxable, 0);
   const magi = grossFederalTaxable;
-  const netInvestmentIncome = Math.max(ordinaryBeforeDeductions + preferredBeforeDeductions - flows.nonInvestmentIncome - effectiveW2Income, 0);
+  const netInvestmentIncome = Math.max(flows.niitIncome + effectiveExtraOrdinaryIncome + effectiveExtraPreferredIncome - extraW2WhatIfTotal, 0);
   const niitThreshold = niitThresholdForStatus(federalSettings.filingStatus);
   const niitBase = Math.max(Math.min(netInvestmentIncome, Math.max(magi - niitThreshold, 0)), 0);
   const displayedFederalTaxableBeforeDeductions = flows.displayFederalOrdinary + flows.displayFederalPreferred;
@@ -6948,10 +7010,10 @@ export default function App() {
           tab: "taxTreatment",
           rows: asEditable(taxTreatments),
           setRows: wrapSetter(setTaxTreatments),
-          allowedFields: ["label"],
-          numericFields: [],
-          booleanFields: [],
-          defaultRow: (id) => ({ id, label: "" }),
+          allowedFields: ["label", "ordinaryShare", "preferredShare", "stateRule", "niitIncluded", "localCategory", "description"],
+          numericFields: ["ordinaryShare", "preferredShare"],
+          booleanFields: ["niitIncluded"],
+          defaultRow: (id) => ({ id, label: "", ...defaultTaxTreatmentRule("income") }),
         };
       case "accountTaxType":
         return {
@@ -7449,6 +7511,7 @@ export default function App() {
             />
           </div>
         </div>
+        {activeTab === "tickers" && assetsWithUnmappedTaxTreatment.length > 0 && <div className="status-card status-card--error" role="alert"><strong>Unmapped tax treatment:</strong> {assetsWithUnmappedTaxTreatment.join(", ")}. Add or correct the treatment before relying on tax results.</div>}
         {isAssistantOpen && (
           <AssistantPanel
             portfolioSnapshot={portfolioSnapshot}
@@ -7546,6 +7609,8 @@ export default function App() {
         )}
         {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} duplicateKey="symbol" columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onSplitRow={(id) => setTickers((current) => { const index = current.findIndex((row) => row.id === id); if (index < 0) return current; const nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1)); return [...current.slice(0, index + 1), { ...current[index], id: nextId }, ...current.slice(index + 1)]; })} onPasteRow={(id, values) => setTickers((current) => current.map((row) => row.id === id ? { ...row, ...values, id } : row))} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and downstream investment rollups." rows={categories} columns={[{ key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "" })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "taxTreatment" && taxTreatmentIssues.length > 0 && <div className="status-card status-card--error" role="alert"><strong>Tax treatment rules need attention.</strong> {taxTreatmentIssues.join(" ")}</div>}
+        {activeTab === "taxTreatment" && <LookupTable title="Tax Treatments" subtitle="Structured rules used to divide investment income between federal ordinary and preferred income and determine state and local treatment. Ordinary plus preferred shares below 100% are federally exempt." rows={taxTreatments} duplicateKey="label" columns={[{ key: "label", label: "Treatment ID" }, { key: "ordinaryShare", label: "Federal ordinary", type: "percent" }, { key: "preferredShare", label: "Federal preferred", type: "percent" }, { key: "stateRule", label: "State rule", type: "select", options: ["taxable", "exempt", "treasury-exempt"] }, { key: "niitIncluded", label: "Include in NIIT", type: "checkbox" }, { key: "localCategory", label: "Local category", type: "select", options: localTaxBaseKeys }, { key: "description", label: "Explanation" }]} onChange={updateCollection(setTaxTreatments, ["ordinaryShare", "preferredShare"])} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "", ...defaultTaxTreatmentRule("income") })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Account type drives the investment tax status; cashflow inclusion comes directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "accountType", label: "Account type", type: "select", options: accountTypeOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} highlightedRowId={highlightedAccountRowId} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Category" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountType" && <LookupTable title="Account Type" subtitle="Reference list for account kinds and the tax status each account type contributes to investments." rows={accountTypes} columns={[{ key: "name", label: "Account type" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }]} onChange={updateCollection(setAccountTypes)} onAdd={() => addRow(setAccountTypes, { id: Date.now(), name: "", taxStatus: "" })} onRemove={removeRow(setAccountTypes)} onReorder={reorderCollection(setAccountTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
