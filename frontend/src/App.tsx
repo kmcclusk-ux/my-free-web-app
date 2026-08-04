@@ -2615,10 +2615,10 @@ function StateDeductionMiniTable({ stateCode, rows, federalRows, onChange }: { s
               <option value="">Select deduction...</option>
               {stateDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
-            <div style={{ display: "grid", gap: 4 }}>
+            <div className="state-deduction-amount">
               <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
               {hasFederalMatch && (
-                <select value="" aria-label={`Amount source for ${row.deductionType}`} onChange={(event) => {
+                <select className="state-deduction-amount__source" value="" title={`Copy amount from Federal ${row.deductionType}`} aria-label={`Amount source for ${row.deductionType}`} onChange={(event) => {
                   if (event.target.value === "federal") updateRow(row.id, { amount: federalAmount });
                 }}>
                   <option value="">Manual entry</option>
