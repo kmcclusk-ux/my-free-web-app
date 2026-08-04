@@ -2535,8 +2535,8 @@ function FederalDeductionMiniTable({ rows, summary, onChange }: { rows: Deductio
         <span>{formatCurrencyDetailed(summary.itemizedDeduction)}</span>
       </div>
       <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
-        <span>Amount</span>
         <span>Deduction</span>
+        <span>Amount</span>
         <span aria-hidden="true" />
       </div>
       {safeRows.map((row) => {
@@ -2544,11 +2544,11 @@ function FederalDeductionMiniTable({ rows, summary, onChange }: { rows: Deductio
         return (
           <div className="tax-what-if-table__row" key={row.id}>
             <div className="tax-what-if-table__grid">
-              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
               <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
                 <option value="">Select deduction...</option>
                 {federalDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
+              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
               <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove deduction row">×</button>
             </div>
             {limitationNote && <p className="tax-what-if-table__limitation">{limitationNote}</p>}
@@ -2581,8 +2581,8 @@ function FederalAboveLineDeductionTable({ rows, summary, onChange }: { rows: Abo
         <span>{formatCurrencyDetailed(summary.total)}</span>
       </div>
       <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
-        <span>Amount</span>
         <span>Deduction</span>
+        <span>Amount</span>
         <span aria-hidden="true" />
       </div>
       {safeRows.map((row) => {
@@ -2590,11 +2590,11 @@ function FederalAboveLineDeductionTable({ rows, summary, onChange }: { rows: Abo
         return (
           <div className="tax-what-if-table__row" key={row.id}>
             <div className="tax-what-if-table__grid">
-              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
               <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
                 <option value="">Select deduction...</option>
                 {federalAboveLineDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
+              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
               <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove standard-compatible deduction row">×</button>
             </div>
             {limitationNote && <p className="tax-what-if-table__limitation">{limitationNote}</p>}
