@@ -6281,7 +6281,7 @@ export default function App() {
       <div className="tax-breakdown-popover__section">
         <h4>Monthly income</h4>
         <div><span>Total monthly income</span><strong>{formatCurrencyDetailed(monthlyIncome)}</strong></div>
-        <div><span>Non-excluded monthly income</span><strong>{formatCurrencyDetailed(flows.displayIncome / 12)}</strong></div>
+        {hasAnyExcludedAfterTaxIncome && <div><span>Non-excluded monthly income</span><strong>{formatCurrencyDetailed(flows.displayIncome / 12)}</strong></div>}
         <div><span>Monthly after-tax income</span><strong>{formatCurrencyDetailed(afterTaxMonthlyIncome)}</strong></div>
         <div><span>Monthly tax burden</span><strong>{formatCurrencyDetailed(totalTax / 12)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Displayed period</span><strong>{isMonthlyIncomePrimary ? "Monthly" : "Annual"}</strong></div>
