@@ -99,7 +99,7 @@ type DeductionItem = { id: number; amount: number; deductionType: string };
 type AboveLineDeductionItem = { id: number; amount: number; deductionType: string };
 type FederalDeductionMode = "standard" | "itemized";
 type FederalSettings = { filingStatus: FilingStatus; deductionMode: FederalDeductionMode; extraOrdinaryIncome: number; extraPreferredIncome: number; extraOrdinaryItems: TaxWhatIfItem[]; extraPreferredItems: TaxWhatIfItem[]; aboveLineDeductionItems: AboveLineDeductionItem[]; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number; saltCap: number };
-type StateSettings = { stateCode: string; extraStateIncome: number; mortgageInterest: number; propertyTax: number; standardDeduction: number };
+type StateSettings = { stateCode: string; extraStateIncome: number; deductionItems: DeductionItem[]; mortgageInterest: number; propertyTax: number; standardDeduction: number };
 type LocalTaxBaseKey = "wages" | "selfEmployment" | "interest" | "dividends" | "capitalGains" | "rentalIncome" | "businessIncome" | "retirementIncome" | "socialSecurity";
 type LocalTaxBaseSelection = Record<LocalTaxBaseKey, boolean>;
 type LocalTaxBracket = { threshold: number; rate: number };
@@ -817,6 +817,7 @@ const initialAccounts: AccountRow[] = [
 const ordinaryWhatIfTypes = ["W2 wages", "Ordinary dividends", "Interest income", "Business income", "Rental income", "Other ordinary income"];
 const preferredWhatIfTypes = ["Long-term capital gains", "Qualified dividends", "Section 1250 gain", "Collectibles gain", "Other preferred income"];
 const federalDeductionTypes = ["Mortgage interest", "Property tax", "Investment loss (Long Term)", "Investment loss (Short Term)", "Charitable contributions", "Medical expenses", "Other itemized deduction"];
+const stateDeductionTypes = ["Mortgage interest", "Property tax", "Investment loss (Long Term)", "Investment loss (Short Term)", "Charitable contributions", "Medical expenses", "State-specific deduction", "Other itemized deduction"];
 const blankDeductionType = "";
 const federalDeductionLimitNotes: Record<string, string> = {
   "Mortgage interest": "Mortgage interest has IRS limits based on loan date, debt amount, and qualified residence rules.",
@@ -946,7 +947,7 @@ const newDeductionItem = (deductionType: string, amount = 0): DeductionItem => (
 const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWhatIfTypes[0]);
 const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem(blankDeductionType)], deductionItems: [newDeductionItem(blankDeductionType)], mortgageInterest: 0, propertyTax: 0, standardDeduction: 31500, saltCap: 40400 };
-const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
+const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, deductionItems: [newDeductionItem("Mortgage interest", 26500), newDeductionItem("Property tax", 19000)], mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialLocalTaxSettings: LocalTaxSettings = { enabled: false, localityId: "none", localityName: "", residency: "resident", rate: 0, nonresidentRate: 0, taxableBase: noLocalTaxBase() };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
 const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
@@ -1630,7 +1631,7 @@ function normalizeModelVersions(raw: unknown): ModelVersion[] {
         accountTaxTypes: snapshot.accountTaxTypes as AccountTaxTypeRow[],
         accountTypes: mergeDefaultAccountTypes(Array.isArray(snapshot.accountTypes) ? snapshot.accountTypes as AccountTypeRow[] : initialAccountTypes),
         federalSettings: normalizeFederalSettings(snapshot.federalSettings),
-        stateSettings: mergeSettings(initialStateSettings, snapshot.stateSettings),
+        stateSettings: normalizeStateSettings(snapshot.stateSettings),
         localTaxSettings: normalizeLocalTaxSettings(snapshot.localTaxSettings),
         plannerSettings: mergeSettings(initialPlannerSettings, snapshot.plannerSettings),
         uiSettings: {
@@ -1927,6 +1928,18 @@ function normalizeFederalSettings(raw: unknown): FederalSettings {
   };
 }
 
+function normalizeStateSettings(raw: unknown): StateSettings {
+  const merged = mergeSettings(initialStateSettings, raw) as StateSettings;
+  const rawSettings = raw && typeof raw === "object" ? raw as Partial<StateSettings> : {};
+  const deductionItems = normalizeDeductionItems(rawSettings.deductionItems, merged.mortgageInterest, merged.propertyTax);
+  return {
+    ...merged,
+    deductionItems,
+    mortgageInterest: deductionTotalByType(deductionItems, "Mortgage interest"),
+    propertyTax: deductionTotalByType(deductionItems, "Property tax"),
+  };
+}
+
 function parseFederalSettingsSection(section: unknown): Partial<FederalSettings> {
   const sectionObj = section && typeof section === "object" ? (section as SettingsSection) : undefined;
   const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
@@ -1969,7 +1982,7 @@ function parseStateSettingsSection(section: unknown): Partial<StateSettings> {
   const rows = sectionObj ? normalizeSheetRows(sectionObj.rows) : undefined;
   const result: Partial<StateSettings> = {};
 
-  const setNumberField = (field: Exclude<keyof StateSettings, "stateCode">, label: string) => {
+  const setNumberField = (field: Exclude<keyof StateSettings, "stateCode" | "deductionItems">, label: string) => {
     const value = parseNumberFromSection(sectionObj, rows, field, label);
     if (value !== undefined) {
       result[field] = value as StateSettings[typeof field];
@@ -1979,6 +1992,7 @@ function parseStateSettingsSection(section: unknown): Partial<StateSettings> {
   setNumberField("mortgageInterest", "mortgage interest");
   setNumberField("propertyTax", "property tax");
   setNumberField("standardDeduction", "Standard deduction");
+  result.deductionItems = normalizeDeductionItems(sectionObj?.deductionItems, result.mortgageInterest || 0, result.propertyTax || 0);
 
   const extraStateIncome = parseNumberFromSection(sectionObj, rows, "extraStateIncome", "Extra state income");
   if (extraStateIncome !== undefined) {
@@ -2559,6 +2573,62 @@ function FederalDeductionMiniTable({ rows, summary, onChange }: { rows: Deductio
         <span>SALT used: <strong>{formatCurrencyDetailed(summary.saltDeduction)}</strong></span>
         <span>Capital-loss deduction used: <strong>{formatCurrencyDetailed(summary.capitalLossDeduction)}</strong></span>
       </div>
+      <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newDeductionItem(blankDeductionType)])}>+ Add deduction</button>
+    </div>
+  );
+}
+
+function StateDeductionMiniTable({ stateCode, rows, federalMortgageInterest, federalPropertyTax, onChange }: { stateCode: string; rows: DeductionItem[]; federalMortgageInterest: number; federalPropertyTax: number; onChange: (rows: DeductionItem[]) => void }) {
+  const safeRows = rows.length ? rows : [newDeductionItem(blankDeductionType)];
+  const total = safeRows.reduce((sum, row) => row.deductionType ? sum + Math.max(toNumber(row.amount), 0) : sum, 0);
+  const updateRow = (id: number, values: Partial<DeductionItem>) => {
+    onChange(safeRows.map((row) => row.id === id ? { ...row, ...values } : row));
+  };
+  const removeRow = (id: number) => {
+    const nextRows = safeRows.filter((row) => row.id !== id);
+    onChange(nextRows.length ? nextRows : [newDeductionItem(blankDeductionType)]);
+  };
+  const copyFederalDeduction = (deductionType: string, amount: number) => {
+    const firstMatchIndex = safeRows.findIndex((row) => row.deductionType === deductionType);
+    if (firstMatchIndex < 0) {
+      const blankIndex = safeRows.findIndex((row) => !row.deductionType && toNumber(row.amount) === 0);
+      if (blankIndex >= 0) {
+        onChange(safeRows.map((row, index) => index === blankIndex ? { ...row, deductionType, amount } : row));
+      } else {
+        onChange([...safeRows, newDeductionItem(deductionType, amount)]);
+      }
+      return;
+    }
+    onChange(safeRows
+      .filter((row, index) => row.deductionType !== deductionType || index === firstMatchIndex)
+      .map((row, index) => index === firstMatchIndex ? { ...row, amount } : row));
+  };
+
+  return (
+    <div className="tax-what-if-table tax-what-if-table--deductions">
+      <div className="tax-what-if-table__heading">
+        <strong>{stateCode} itemized deductions</strong>
+        <span>{formatCurrencyDetailed(total)}</span>
+      </div>
+      <div className="tax-what-if-table__summary">
+        <button className="ghost-button ghost-button--compact" type="button" onClick={() => copyFederalDeduction("Mortgage interest", federalMortgageInterest)}>Copy Federal mortgage interest ({formatCurrencyDetailed(federalMortgageInterest)})</button>
+        <button className="ghost-button ghost-button--compact" type="button" onClick={() => copyFederalDeduction("Property tax", federalPropertyTax)}>Copy Federal property tax ({formatCurrencyDetailed(federalPropertyTax)})</button>
+      </div>
+      <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
+        <span>Deduction</span>
+        <span>Amount</span>
+        <span aria-hidden="true" />
+      </div>
+      {safeRows.map((row) => (
+        <div className="tax-what-if-table__grid" key={row.id}>
+          <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
+            <option value="">Select deduction...</option>
+            {stateDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+          <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
+          <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove state deduction row">×</button>
+        </div>
+      ))}
       <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newDeductionItem(blankDeductionType)])}>+ Add deduction</button>
     </div>
   );
@@ -5288,6 +5358,8 @@ export default function App() {
   const [uiSettings, setUiSettings] = useState(initialUiSettings);
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
   const selectedStateName = stateNameByCode[selectedStateCode] || selectedStateCode;
+  const selectedStateTaxProfile = getLocalStateTaxProfile(selectedStateCode);
+  const selectedStateHasIncomeTax = selectedStateTaxProfile.single.length > 0 || selectedStateTaxProfile.mfj.length > 0;
   const [isSheetPanelOpen, setIsSheetPanelOpen] = useState(false);
   const [federalResult, setFederalResult] = useState<TaxResult | null>(null);
   const [stateResult, setStateResult] = useState<TaxResult | null>(null);
@@ -5351,7 +5423,7 @@ export default function App() {
     setAccountTaxTypes(snapshot.accountTaxTypes);
     setAccountTypes(mergeDefaultAccountTypes(snapshot.accountTypes));
     setFederalSettings(normalizeFederalSettings(snapshot.federalSettings));
-    setStateSettings(snapshot.stateSettings);
+    setStateSettings(normalizeStateSettings(snapshot.stateSettings));
     setLocalTaxSettings(normalizeLocalTaxSettings(snapshot.localTaxSettings));
     setPlannerSettings(snapshot.plannerSettings);
     setUiSettings((current) => ({
@@ -5837,7 +5909,7 @@ export default function App() {
   const stateInvestmentAdjustment = flows.stateTaxable - federalTaxableInvestmentIncome;
   const federalWhatIfIncome = effectiveExtraOrdinaryIncome + effectiveExtraPreferredIncome;
   const stateGross = federalTaxableInvestmentIncome + stateInvestmentAdjustment + federalWhatIfIncome + effectiveExtraStateIncome;
-  const stateItemized = stateSettings.mortgageInterest + stateSettings.propertyTax;
+  const stateItemized = stateSettings.deductionItems.reduce((total, row) => row.deductionType ? total + Math.max(toNumber(row.amount), 0) : total, 0);
   const stateDeduction = Math.max(stateSettings.standardDeduction, stateItemized);
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
   const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
@@ -5931,7 +6003,7 @@ export default function App() {
       mergeDefaultAccountTypes(mapWorkbookRows(initialAccountTypes, response.tabs?.accountType, workbookToAccountTypeRow))
     );
     setFederalSettings(normalizeFederalSettings(workbookSettings.federal));
-    setStateSettings(mergeSettings(initialStateSettings, workbookSettings.state));
+    setStateSettings(normalizeStateSettings(workbookSettings.state));
     setLocalTaxSettings(normalizeLocalTaxSettings(workbookSettings.local));
     setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
     setSelectedInvestmentIds(
@@ -7734,24 +7806,24 @@ export default function App() {
             </details>
             <div className="form-grid form-grid--compact-wide">
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
-              <label>
-                <span className="tax-field-label">
-                  <span>Mortgage interest</span>
-                  <small>Federal {formatCurrencyDetailed(federalSettings.mortgageInterest)}</small>
-                  <button type="button" onClick={() => setStateSettings((current) => ({ ...current, mortgageInterest: federalSettings.mortgageInterest }))}>Copy</button>
-                </span>
-                <CurrencyInput value={stateSettings.mortgageInterest} onChange={(value) => setStateSettings((current) => ({ ...current, mortgageInterest: value }))} />
-              </label>
-              <label>
-                <span className="tax-field-label">
-                  <span>Property tax</span>
-                  <small>Federal {formatCurrencyDetailed(federalSettings.propertyTax)}</small>
-                  <button type="button" onClick={() => setStateSettings((current) => ({ ...current, propertyTax: federalSettings.propertyTax }))}>Copy</button>
-                </span>
-                <CurrencyInput value={stateSettings.propertyTax} onChange={(value) => setStateSettings((current) => ({ ...current, propertyTax: value }))} />
-              </label>
-              <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>
+              {selectedStateHasIncomeTax && <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>}
             </div>
+            {selectedStateHasIncomeTax ? (
+              <StateDeductionMiniTable
+                stateCode={selectedStateCode}
+                rows={stateSettings.deductionItems}
+                federalMortgageInterest={federalSettings.mortgageInterest}
+                federalPropertyTax={federalSettings.propertyTax}
+                onChange={(rows) => setStateSettings((current) => ({
+                  ...current,
+                  deductionItems: rows,
+                  mortgageInterest: deductionTotalByType(rows, "Mortgage interest"),
+                  propertyTax: deductionTotalByType(rows, "Property tax"),
+                }))}
+              />
+            ) : (
+              <div className="status-card">{selectedStateName} has no modeled broad-based individual income tax, so state deductions are not applied.</div>
+            )}
           </Section>
         )}
         {activeTab === "local" && (
