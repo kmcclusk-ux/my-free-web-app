@@ -2578,7 +2578,7 @@ function FederalDeductionMiniTable({ rows, summary, onChange }: { rows: Deductio
   );
 }
 
-function StateDeductionMiniTable({ stateCode, rows, federalMortgageInterest, federalPropertyTax, onChange }: { stateCode: string; rows: DeductionItem[]; federalMortgageInterest: number; federalPropertyTax: number; onChange: (rows: DeductionItem[]) => void }) {
+function StateDeductionMiniTable({ stateCode, rows, federalRows, onChange }: { stateCode: string; rows: DeductionItem[]; federalRows: DeductionItem[]; onChange: (rows: DeductionItem[]) => void }) {
   const safeRows = rows.length ? rows : [newDeductionItem(blankDeductionType)];
   const total = safeRows.reduce((sum, row) => row.deductionType ? sum + Math.max(toNumber(row.amount), 0) : sum, 0);
   const updateRow = (id: number, values: Partial<DeductionItem>) => {
@@ -2588,47 +2588,41 @@ function StateDeductionMiniTable({ stateCode, rows, federalMortgageInterest, fed
     const nextRows = safeRows.filter((row) => row.id !== id);
     onChange(nextRows.length ? nextRows : [newDeductionItem(blankDeductionType)]);
   };
-  const copyFederalDeduction = (deductionType: string, amount: number) => {
-    const firstMatchIndex = safeRows.findIndex((row) => row.deductionType === deductionType);
-    if (firstMatchIndex < 0) {
-      const blankIndex = safeRows.findIndex((row) => !row.deductionType && toNumber(row.amount) === 0);
-      if (blankIndex >= 0) {
-        onChange(safeRows.map((row, index) => index === blankIndex ? { ...row, deductionType, amount } : row));
-      } else {
-        onChange([...safeRows, newDeductionItem(deductionType, amount)]);
-      }
-      return;
-    }
-    onChange(safeRows
-      .filter((row, index) => row.deductionType !== deductionType || index === firstMatchIndex)
-      .map((row, index) => index === firstMatchIndex ? { ...row, amount } : row));
-  };
-
   return (
     <div className="tax-what-if-table tax-what-if-table--deductions">
       <div className="tax-what-if-table__heading">
         <strong>{stateCode} itemized deductions</strong>
         <span>{formatCurrencyDetailed(total)}</span>
       </div>
-      <div className="tax-what-if-table__summary">
-        <button className="ghost-button ghost-button--compact" type="button" onClick={() => copyFederalDeduction("Mortgage interest", federalMortgageInterest)}>Copy Federal mortgage interest ({formatCurrencyDetailed(federalMortgageInterest)})</button>
-        <button className="ghost-button ghost-button--compact" type="button" onClick={() => copyFederalDeduction("Property tax", federalPropertyTax)}>Copy Federal property tax ({formatCurrencyDetailed(federalPropertyTax)})</button>
-      </div>
       <div className="tax-what-if-table__grid tax-what-if-table__grid--header">
         <span>Deduction</span>
         <span>Amount</span>
         <span aria-hidden="true" />
       </div>
-      {safeRows.map((row) => (
-        <div className="tax-what-if-table__grid" key={row.id}>
-          <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
-            <option value="">Select deduction...</option>
-            {stateDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
-          </select>
-          <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
-          <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove state deduction row">×</button>
-        </div>
-      ))}
+      {safeRows.map((row) => {
+        const hasFederalMatch = federalDeductionTypes.includes(row.deductionType);
+        const federalAmount = hasFederalMatch ? deductionTotalByType(federalRows, row.deductionType) : 0;
+        return (
+          <div className="tax-what-if-table__grid" key={row.id}>
+            <select value={row.deductionType} onChange={(event) => updateRow(row.id, { deductionType: event.target.value })}>
+              <option value="">Select deduction...</option>
+              {stateDeductionTypes.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            <div style={{ display: "grid", gap: 4 }}>
+              <CurrencyInput value={row.amount} onChange={(amount) => updateRow(row.id, { amount })} />
+              {hasFederalMatch && (
+                <select value="" aria-label={`Amount source for ${row.deductionType}`} onChange={(event) => {
+                  if (event.target.value === "federal") updateRow(row.id, { amount: federalAmount });
+                }}>
+                  <option value="">Manual entry</option>
+                  <option value="federal">Copy Federal ({formatCurrencyDetailed(federalAmount)})</option>
+                </select>
+              )}
+            </div>
+            <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => removeRow(row.id)} aria-label="Remove state deduction row">×</button>
+          </div>
+        );
+      })}
       <button className="ghost-button ghost-button--compact" type="button" onClick={() => onChange([...safeRows, newDeductionItem(blankDeductionType)])}>+ Add deduction</button>
     </div>
   );
@@ -7812,8 +7806,7 @@ export default function App() {
               <StateDeductionMiniTable
                 stateCode={selectedStateCode}
                 rows={stateSettings.deductionItems}
-                federalMortgageInterest={federalSettings.mortgageInterest}
-                federalPropertyTax={federalSettings.propertyTax}
+                federalRows={federalSettings.deductionItems}
                 onChange={(rows) => setStateSettings((current) => ({
                   ...current,
                   deductionItems: rows,
