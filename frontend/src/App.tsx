@@ -6152,6 +6152,7 @@ export default function App() {
   const portfolioAfterTaxYield = flows.totalInvestmentAmount > 0 ? investmentAfterTaxIncome / flows.totalInvestmentAmount : 0;
   const portfolioYield = portfolioAfterTaxYield;
   const hiddenFromAfterTaxIncome = flows.totalIncome - flows.displayIncome;
+  const hasAnyExcludedAfterTaxIncome = Math.abs(hiddenFromAfterTaxIncome) > 0.005;
   const federalTaxTotal = federalTaxWithPayroll;
   const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
   const federalPreferredTax = federalResult?.prefTax || 0;
@@ -6270,6 +6271,7 @@ export default function App() {
       <div className="tax-breakdown-popover__section">
         <h4>Annual income</h4>
         <div><span>Total included income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        {hasAnyExcludedAfterTaxIncome && <div><span>Total non-excluded income</span><strong>{formatCurrencyDetailed(flows.displayIncome)}</strong></div>}
         <div><span>Investment dividends and interest</span><strong>{formatCurrencyDetailed(flows.investmentIncome)}</strong></div>
         <div><span>Non-investment income</span><strong>{formatCurrencyDetailed(flows.nonInvestmentIncome)}</strong></div>
         <div><span>Tax-free income</span><strong>{formatCurrencyDetailed(flows.nonTaxableIncome)}</strong></div>
@@ -6279,6 +6281,7 @@ export default function App() {
       <div className="tax-breakdown-popover__section">
         <h4>Monthly income</h4>
         <div><span>Total monthly income</span><strong>{formatCurrencyDetailed(monthlyIncome)}</strong></div>
+        <div><span>Non-excluded monthly income</span><strong>{formatCurrencyDetailed(flows.displayIncome / 12)}</strong></div>
         <div><span>Monthly after-tax income</span><strong>{formatCurrencyDetailed(afterTaxMonthlyIncome)}</strong></div>
         <div><span>Monthly tax burden</span><strong>{formatCurrencyDetailed(totalTax / 12)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Displayed period</span><strong>{isMonthlyIncomePrimary ? "Monthly" : "Annual"}</strong></div>
