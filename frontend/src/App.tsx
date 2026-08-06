@@ -3536,7 +3536,7 @@ function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateM
     });
 }
 
-type TaxThermometerMode = "combined" | "federal" | "state" | "allocation" | "accountTax";
+type TaxThermometerMode = "combined" | "federal" | "state" | "local" | "allocation" | "accountTax";
 
 function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mode: TaxThermometerMode; onChange: (mode: TaxThermometerMode) => void; stateCode: string; stateName: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -3547,6 +3547,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
     { mode: "combined", label: `Fed + ${stateName}`, icons: <><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /><span>+</span><StateFlagImage stateCode={stateCode} stateName={stateName} /></> },
     { mode: "federal", label: "Federal", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
     { mode: "state", label: stateName, icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
+    { mode: "local", label: "Local tax", icons: <span aria-hidden="true">L</span> },
   ];
   const selected = options.find((option) => option.mode === mode) || options[0];
 
@@ -3597,13 +3598,15 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   );
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }> }) {
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, localTaxable, localTax, localName, localEffectiveRate, localMarginalRate, localBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; localTaxable: number; localTax: number; localName: string; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }> }) {
   const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>("allocation");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const totalTax = federalTax + stateTax;
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
   const stateMarkers = getStateTaxRateMarkers(stateCode, filingStatus);
   const stateBaseRateLabel = getStateTaxBaseRateLabel(stateCode, filingStatus);
+  const localMarkers: ThermometerMarker[] = localBrackets.filter((bracket) => bracket.threshold > 0).map((bracket) => ({ amount: bracket.threshold, label: formatPercent(bracket.rate), detail: `${localName} local tax bracket starts`, tone: "tax" }));
+  const localBaseRateLabel = formatPercent(localBrackets[0]?.rate ?? localMarginalRate);
   const hasNoStateIncomeTax = stateMarkers.length === 0 && stateTax === 0;
   const federalEffectiveRate = federalTaxable > 0 ? federalTax / federalTaxable : 0;
   const stateEffectiveRate = stateTaxable > 0 ? stateTax / stateTaxable : 0;
@@ -3641,6 +3644,9 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
       content: <span className="tax-thermometer__value-line"><StateFlagImage stateCode={stateCode} stateName={stateName} />{formatCurrencyDetailed(stateTaxable)}</span>,
     },
   ];
+  const localValues: ThermometerValue[] = [
+    { amount: localTaxable, label: "Local taxable income", value: formatCurrencyDetailed(localTaxable), tone: "tax" },
+  ];
   const combinedValues: ThermometerValue[] = [
     {
       amount: combinedTaxable,
@@ -3665,6 +3671,11 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
     { label: `${stateCode} tax`, value: formatCurrencyDetailed(stateTax), tone: "tax" },
     { label: "Effective", value: formatPercent(stateEffectiveRate), tone: "taxable" },
     { label: "Top bracket", value: stateMarkers.length ? getReachedTaxRateLabel(stateMarkers, stateTaxable, "1%") : "state schedule", tone: "income" },
+  ];
+  const localStats: ThermometerStat[] = [
+    { label: "Local tax", value: formatCurrencyDetailed(localTax), tone: "tax" },
+    { label: "Effective", value: formatPercent(localEffectiveRate), tone: "taxable" },
+    { label: "Marginal", value: formatPercent(localMarginalRate), tone: "income" },
   ];
   const selectedThermometer =
     thermometerMode === "federal"
@@ -3697,6 +3708,21 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
           total: stateTax,
           noTaxStamp: hasNoStateIncomeTax ? "NO STATE INCOME TAX" : undefined,
         }
+        : thermometerMode === "local"
+          ? {
+            titleLabel: `${localName} Local Tax`,
+            subtitle: localMarkers.length ? "Local bracket thresholds" : "Local taxable-income scale",
+            taxableIncome: localTaxable,
+            values: localValues,
+            markers: localMarkers,
+            stats: localStats,
+            footerLabel: "Local taxable income",
+            footerValue: formatCurrencyDetailed(localTaxable),
+            baseRateLabel: localBaseRateLabel,
+            currentRateLabel: formatPercent(localMarginalRate),
+            total: localTax,
+            noTaxStamp: localTax === 0 && localMarginalRate === 0 ? "NO LOCAL INCOME TAX" : undefined,
+          }
         : {
           titleLabel: "Federal + State",
           subtitle: "Combined federal + state thresholds",
@@ -7996,6 +8022,12 @@ export default function App() {
                 stateTaxable={stateTaxableAfterDeductions}
                 federalTax={federalTaxWithPayroll}
                 stateTax={stateTaxWithPayroll}
+                localTaxable={localTaxableIncome}
+                localTax={localTaxTotal}
+                localName={localTaxSettings.localityName || selectedLocalTaxProfile.locality || "Local"}
+                localEffectiveRate={localTaxResult.effectiveRate}
+                localMarginalRate={localTaxResult.marginalRate}
+                localBrackets={selectedLocalTaxProfile.brackets || []}
                 filingStatus={federalSettings.filingStatus}
                 stateCode={selectedStateCode}
                 stateName={selectedStateName}
