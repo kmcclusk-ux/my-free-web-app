@@ -1,5 +1,5 @@
 #root { width: 100%; }
-:root { --app-top-nav-height: 54px; }
+:root { --app-top-nav-height: 68px; }
 .app-shell { min-height: 100vh; }
 .app-top-nav {
   position: sticky;
@@ -29,13 +29,14 @@
 }
 .app-top-nav .kpi-header__metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(118px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
   min-width: 0;
 }
 .app-top-nav .kpi-pill {
   min-height: 38px;
-  padding: 5px 8px;
+  min-width: 0;
+  padding: 5px 7px;
   border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 10px;
   background: rgba(255, 255, 255, .08);
@@ -49,14 +50,30 @@
 }
 .app-top-nav .kpi-pill span {
   color: rgba(255, 255, 255, .56);
-  font-size: .48rem;
+  font-size: .46rem;
   font-weight: 820;
-  letter-spacing: .11em;
+  letter-spacing: .095em;
 }
 .app-top-nav .kpi-pill strong {
   color: #fff;
-  font-size: .78rem;
+  font-size: .76rem;
   line-height: 1.05;
+}
+.app-top-nav .kpi-pill__main-line {
+  gap: 5px;
+}
+.app-top-nav .kpi-pill__value-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: rgba(255, 255, 255, .68);
+  font-size: .48rem;
+  font-weight: 780;
+  letter-spacing: .02em;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 .app-top-nav .kpi-pill--primary strong {
   font-size: 1.08rem;
@@ -66,8 +83,11 @@
 .app-top-nav .kpi-pill small,
 .app-top-nav .kpi-pill em {
   color: rgba(255, 255, 255, .62);
-  font-size: .54rem;
+  font-size: .52rem;
   line-height: 1;
+}
+.app-top-nav .kpi-pill__delta {
+  display: none;
 }
 .app-top-nav .kpi-pill--accent {
   border-color: rgba(64, 198, 168, .26);
@@ -88,26 +108,30 @@
   align-items: center;
   min-width: 0;
 }
+.income-period-toggle { flex: 0 0 auto; }
 .income-snapshot {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 42px;
-  padding: 4px 7px;
+  gap: 3px;
+  height: 28px;
+  min-height: 28px;
+  padding: 1px 3px;
   border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 12px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, .075);
   color: rgba(255, 255, 255, .9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  box-shadow: none;
 }
 .income-snapshot__button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 30px;
-  width: 32px;
-  padding: 5px 7px;
+  width: 26px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
   border: 1px solid rgba(82, 214, 169, .28);
   border-radius: 9px;
   background: linear-gradient(135deg, rgba(41, 199, 163, .22), rgba(35, 97, 201, .18));
@@ -122,7 +146,7 @@
 }
 .income-snapshot__button:hover,
 .income-snapshot__button:focus-visible {
-  width: 104px;
+  width: 100px;
   border-color: rgba(82, 214, 169, .48);
   background: linear-gradient(135deg, rgba(41, 199, 163, .32), rgba(35, 97, 201, .26));
 }
@@ -130,11 +154,17 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
+  margin: auto;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+.income-snapshot__flash-window {
+  fill: #fff;
+  stroke: rgba(255, 255, 255, .92);
+  stroke-width: .35;
 }
 .income-snapshot__button span {
   max-width: 0;
@@ -145,13 +175,22 @@
 }
 .income-snapshot__button:hover span,
 .income-snapshot__button:focus-visible span {
-  max-width: 68px;
+  max-width: 74px;
   opacity: 1;
 }
 .income-snapshot__body {
   display: flex;
   align-items: center;
   min-width: 220px;
+}
+.income-snapshot--empty .income-snapshot__body {
+  min-width: 0;
+}
+.income-snapshot--empty .income-snapshot__single-line {
+  gap: 0;
+}
+.income-snapshot--empty .income-snapshot__captured {
+  display: none;
 }
 .income-snapshot__single-line {
   display: flex;
@@ -266,25 +305,98 @@
 .income-snapshot__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: 1px;
+  padding: 1px;
   border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, .06);
 }
 .income-snapshot__toggle-button {
-  min-height: 24px;
-  padding: 3px 8px;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 5px;
   background: transparent;
   color: rgba(255, 255, 255, .62);
   cursor: pointer;
-  font-size: .58rem;
-  font-weight: 850;
-  letter-spacing: .06em;
-  text-transform: uppercase;
   transition: background 140ms ease, color 140ms ease;
+}
+.income-snapshot__tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 4px;
+  z-index: 1000;
+  width: max-content;
+  max-width: 210px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #172033;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .24);
+  pointer-events: none;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-align: center;
+  text-transform: none;
+  white-space: nowrap;
+  animation: snapshot-tooltip-in 120ms ease-out;
+}
+.income-snapshot__tooltip::before {
+  content: "";
+  position: absolute;
+  right: 18px;
+  bottom: 100%;
+  border: 5px solid transparent;
+  border-bottom-color: #172033;
+}
+@keyframes snapshot-tooltip-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.income-snapshot__toggle-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.income-snapshot__toggle-button .snapshot-coin-stack {
+  width: 16px;
+  height: 16px;
+}
+.income-snapshot__toggle-button .snapshot-coin {
+  stroke-width: .75;
+}
+.income-snapshot__toggle-button .snapshot-coin--gold {
+  fill: #f4c542;
+  stroke: #9a6812;
+}
+.income-snapshot__toggle-button .snapshot-calendar-front {
+  fill: #fff;
+  stroke: currentColor;
+}
+.income-snapshot__toggle-button .snapshot-calendar-back {
+  fill: #dbe4eb;
+  stroke: currentColor;
+  opacity: .82;
+}
+.income-snapshot__toggle-button .snapshot-calendar-back--rear {
+  fill: #cbd7e1;
+  opacity: .68;
+}
+.income-snapshot__toggle-button--active .snapshot-calendar-front {
+  fill: #29434c;
+}
+.income-snapshot__toggle-button--active .snapshot-calendar-back {
+  fill: #49616a;
 }
 .income-snapshot__toggle-button:hover,
 .income-snapshot__toggle-button:focus-visible {
@@ -296,8 +408,13 @@
   background: rgba(82, 214, 169, .22);
   color: #fff;
 }
+.income-snapshot__toggle-button--active:hover,
+.income-snapshot__toggle-button--active:focus-visible {
+  background: rgba(82, 214, 169, .22);
+  color: #fff;
+}
 .income-snapshot__toggle--basis .income-snapshot__toggle-button {
-  padding-inline: 7px;
+  padding: 0;
 }
 .income-snapshot--inline {
   order: 99;
@@ -342,6 +459,11 @@
   background: #17313a;
   color: #fff;
 }
+.income-snapshot--inline .income-snapshot__toggle-button--active:hover,
+.income-snapshot--inline .income-snapshot__toggle-button--active:focus-visible {
+  background: #17313a;
+  color: #fff;
+}
 .income-snapshot--inline .income-snapshot__delta--up {
   color: var(--pm-positive, #1f9d68);
 }
@@ -351,6 +473,97 @@
 .income-snapshot--inline .income-snapshot__empty {
   color: var(--pm-muted, #667085);
 }
+
+.camera-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at var(--camera-flash-x, calc(100% - 154px)) var(--camera-flash-y, 108px), rgba(255, 255, 255, .9) 0 10px, rgba(255, 242, 174, .46) 11px 18px, transparent 38px),
+    radial-gradient(circle at var(--camera-flash-x, calc(100% - 154px)) var(--camera-flash-y, 108px), rgba(255, 255, 255, .26) 0 1px, transparent 44vw);
+  animation: camera-flash-pop 640ms cubic-bezier(.16, .82, .18, 1) forwards;
+}
+.camera-flash::before,
+.camera-flash::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--camera-flash-x, calc(100% - 154px)) - 75vmax);
+  top: calc(var(--camera-flash-y, 108px) - 75vmax);
+  width: 150vmax;
+  height: 150vmax;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+}
+.camera-flash::before {
+  background:
+    conic-gradient(from -26deg at 50% 50%,
+      rgba(255, 255, 255, .92) 0deg 5deg,
+      transparent 7deg 15deg,
+      rgba(255, 236, 145, .58) 18deg 23deg,
+      transparent 25deg 38deg,
+      rgba(255, 255, 255, .66) 41deg 47deg,
+      transparent 50deg 64deg,
+      rgba(255, 245, 183, .45) 67deg 72deg,
+      transparent 76deg 360deg);
+  filter: blur(.4px);
+  opacity: 0;
+  animation: camera-rays-burst 640ms cubic-bezier(.16, .82, .18, 1) forwards;
+}
+.camera-flash::after {
+  background:
+    repeating-conic-gradient(from -32deg at 50% 50%,
+      rgba(255, 255, 255, .62) 0deg 1.4deg,
+      transparent 1.5deg 10deg);
+  opacity: 0;
+  transform: rotate(-4deg) scale(.2);
+  animation: camera-rays-spark 520ms ease-out forwards;
+}
+.camera-flash__source {
+  position: absolute;
+  left: var(--camera-flash-x, calc(100% - 154px));
+  top: var(--camera-flash-y, 108px);
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .85),
+    0 0 12px rgba(255, 255, 255, .95),
+    0 0 26px rgba(255, 241, 160, .72);
+  transform: translate(-50%, -50%) scale(.58);
+  animation: camera-flash-source-pop 420ms ease-out forwards;
+}
+
+@keyframes camera-flash-pop {
+  0% { opacity: 0; filter: saturate(1.05); }
+  8% { opacity: 1; }
+  22% { opacity: .82; }
+  100% { opacity: 0; }
+}
+
+@keyframes camera-rays-burst {
+  0% { opacity: 0; transform: rotate(-11deg) scale(.06); }
+  12% { opacity: 1; transform: rotate(-7deg) scale(.9); }
+  42% { opacity: .42; transform: rotate(-3deg) scale(1.08); }
+  100% { opacity: 0; transform: rotate(1deg) scale(1.18); }
+}
+
+@keyframes camera-rays-spark {
+  0% { opacity: 0; transform: rotate(-8deg) scale(.05); }
+  10% { opacity: .85; transform: rotate(-5deg) scale(.74); }
+  38% { opacity: .22; transform: rotate(2deg) scale(1.02); }
+  100% { opacity: 0; transform: rotate(7deg) scale(1.16); }
+}
+
+@keyframes camera-flash-source-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.35); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  48% { opacity: .82; transform: translate(-50%, -50%) scale(.92); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.68); }
+}
+
 @keyframes snapshot-delta-tumble {
   0% {
     filter: blur(.75px);
@@ -489,9 +702,29 @@
 .kpi-pill__value {
   display: inline-flex;
   align-items: baseline;
+  flex: 0 0 auto;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
+}
+.kpi-pill__main-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+.kpi-pill__value-label {
+  color: #62767a;
+  font-size: .62rem;
+  font-weight: 780;
+  letter-spacing: .02em;
+  line-height: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 .kpi-odometer-char,
 .kpi-odometer {
@@ -540,6 +773,167 @@
   text-transform: none;
   white-space: nowrap;
 }
+.kpi-pill__label-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible !important;
+}
+.kpi-pill__inline-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 2px 6px;
+  border: 1px solid rgba(251, 191, 36, .46);
+  border-radius: 999px;
+  background: rgba(255, 248, 232, .96);
+  color: #92400e !important;
+  font-size: .54rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .04em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  cursor: help;
+}
+.kpi-pill__inline-note {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 5300;
+  width: min(340px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .20);
+  color: #172033 !important;
+  font-size: .72rem !important;
+  font-weight: 750 !important;
+  letter-spacing: normal !important;
+  line-height: 1.35 !important;
+  opacity: 0;
+  pointer-events: none;
+  text-transform: none !important;
+  white-space: normal !important;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.kpi-pill__inline-badge:hover .kpi-pill__inline-note,
+.kpi-pill__inline-badge:focus-within .kpi-pill__inline-note {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.kpi-pill--has-details {
+  position: relative;
+  cursor: help;
+  outline: none;
+}
+.kpi-pill__details {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 5200;
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--poly-line, rgba(17, 24, 39, .12));
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, .24);
+  color: #172033;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.app-top-nav .kpi-pill:nth-last-child(-n+2) .kpi-pill__details {
+  right: 0;
+  left: auto;
+}
+.kpi-pill--has-details:hover .kpi-pill__details,
+.kpi-pill--has-details:focus-within .kpi-pill__details,
+.kpi-pill--has-details:focus .kpi-pill__details {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.tax-breakdown-popover {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  color: #172033;
+  font-size: .76rem;
+  line-height: 1.25;
+}
+.tax-breakdown-popover__header {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(17, 24, 39, .10);
+}
+.tax-breakdown-popover__header strong {
+  color: #111827;
+  font-size: .95rem;
+}
+.tax-breakdown-popover__header span {
+  color: #667085;
+  font-size: .72rem;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+.tax-breakdown-popover__section {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(17, 24, 39, .08);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.tax-breakdown-popover__section h4 {
+  margin: 0 0 4px;
+  color: #111827;
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.tax-breakdown-popover__section div:not(.tax-breakdown-popover__total),
+.tax-breakdown-popover__total {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tax-breakdown-popover__section div:not(.tax-breakdown-popover__total) {
+  color: #52616a;
+}
+.tax-breakdown-popover__section span {
+  min-width: 0;
+  color: inherit;
+  font-size: .72rem;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+.tax-breakdown-popover__section strong {
+  flex: 0 0 auto;
+  color: #172033;
+  font-size: .76rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tax-breakdown-popover__total {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(17, 24, 39, .10);
+  color: #111827;
+  font-weight: 900;
+}
 @keyframes kpi-odometer-roll {
   0% {
     filter: blur(0);
@@ -582,8 +976,9 @@
     font-size: 1rem;
   }
   .income-snapshot__toggle-button {
-    padding-inline: 6px;
-    font-size: .52rem;
+    width: 20px;
+    height: 20px;
+    padding: 0;
   }
 }
 .workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr) 216px; min-height: calc(100vh - var(--app-top-nav-height)); }
@@ -639,6 +1034,21 @@
 .tax-thermometer__heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .tax-thermometer--collapsed .tax-thermometer__heading { margin-bottom: 0; }
 .tax-thermometer__heading strong { display: block; color: #17313a; font-size: .95rem; }
+
+.tax-thermometer__title-with-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tax-thermometer__title-flag,
+.tax-thermometer__title-with-flag .state-flag-image {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid rgba(15, 23, 42, .18);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
 .tax-thermometer__heading em { font-style: normal; white-space: nowrap; }
 .tax-thermometer__heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .tax-thermometer__toggle { min-width: 58px; }
@@ -679,7 +1089,7 @@
 .tax-thermometer__tick--surtax { background: rgba(127,75,41,.58); }
 .tax-thermometer__tick--surtax span, .tax-thermometer__tick--surtax strong { color: #7f4b29; }
 .tax-thermometer__value { position: absolute; top: 38px; left: var(--thermo-position); width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 8px 18px rgba(24,49,58,.2); transition: left 640ms cubic-bezier(.22, 1, .36, 1), bottom 640ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms ease; will-change: left, bottom; }
-.tax-thermometer__value span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
+.tax-thermometer__value > span { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.92); color: #17313a; font-size: .65rem; white-space: nowrap; }
 .tax-thermometer__value--income { background: #17313a; }
 .tax-thermometer__value--taxable { background: #2f7480; }
 .tax-thermometer__value--tax { background: #c3732c; }
@@ -704,7 +1114,7 @@
 .impact-strip .tax-thermometer__tick { top: 7px; bottom: 5px; }
 .impact-strip .tax-thermometer__tick span { top: -10px; font-size: .52rem; }
 .impact-strip .tax-thermometer__value { top: 24px; width: 9px; height: 9px; }
-.impact-strip .tax-thermometer__value span { display: none; }
+.impact-strip .tax-thermometer__value > span { display: none; }
 .impact-strip .tax-thermometer__stats { gap: 4px 8px; margin-top: 5px; }
 .impact-strip .tax-thermometer__stats strong { font-size: .68rem; }
 .thermometer-rail .tax-thermometer-panel { display: flex; flex-direction: column; gap: 8px; }
@@ -713,6 +1123,124 @@
 .thermometer-rail .tax-thermometer-panel__summary-heading { gap: 6px; }
 .thermometer-rail .tax-thermometer-panel__summary-heading strong, .thermometer-rail .tax-thermometer__heading strong { font-size: .76rem; }
 .thermometer-rail .tax-thermometer-panel__summary-heading span, .thermometer-rail .tax-thermometer__heading span { display: none; }
+
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-flag {
+  display: inline-flex;
+  color: #17313a;
+  font-size: inherit;
+}
+
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-flag .state-flag-image {
+  display: inline-block;
+}
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-tax {
+  display: inline-flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+}
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-tax > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.thermometer-rail .tax-thermometer__heading .tax-thermometer__title-with-tax small {
+  color: #b42318;
+  font-size: .7rem;
+  font-weight: 950;
+  line-height: 1;
+}
+.tax-thermometer__title-value {
+  width: max-content;
+  margin: -4px auto 10px;
+  color: #b42318;
+  font-size: 1.64rem;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+.thermometer-rail .tax-thermometer__title-value {
+  margin: -2px auto 7px;
+}
+.tax-thermometer-mode-select {
+  position: relative;
+  z-index: 30;
+  min-width: 0;
+}
+.tax-thermometer-mode-select__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  max-width: 168px;
+  padding: 4px 7px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 9px;
+  background: #fff;
+  color: #17313a;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, .08);
+  font-size: .66rem;
+  font-weight: 900;
+}
+.tax-thermometer-mode-select__icons,
+.tax-thermometer-mode-select__option,
+.tax-thermometer-mode-select__button span {
+  display: inline-flex;
+  align-items: center;
+}
+.tax-thermometer-mode-select__icons {
+  flex: 0 0 auto;
+  gap: 3px;
+}
+.tax-thermometer-mode-select__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tax-thermometer-mode-select__chevron {
+  color: #667085;
+  font-size: .58rem;
+}
+.tax-thermometer-mode-select__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 80;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  min-width: 160px;
+  padding: 5px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, .18);
+}
+.tax-thermometer-mode-select__option {
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #17313a;
+  font-size: .68rem;
+  font-weight: 850;
+  text-align: left;
+  white-space: nowrap;
+}
+.tax-thermometer-mode-select__option:hover,
+.tax-thermometer-mode-select__option--selected {
+  background: #eff6ff;
+  color: #0b63f6;
+}
+.thermometer-rail .tax-thermometer-mode-select span,
+.thermometer-rail .tax-thermometer-mode-select__option span {
+  display: inline-flex;
+}
 .thermometer-rail .tax-thermometer-panel__summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .thermometer-rail .tax-thermometer-panel__summary-grid > div { padding: 6px; border-radius: 10px; }
 .thermometer-rail .tax-thermometer-panel__summary-grid span { font-size: .56rem; }
@@ -721,16 +1249,20 @@
 .thermometer-rail .tax-thermometer__heading-actions { flex-direction: column; align-items: flex-end; gap: 4px; }
 .thermometer-rail .tax-thermometer__heading em { font-size: .58rem; white-space: normal; text-align: right; }
 .thermometer-rail .tax-thermometer__toggle { min-width: 46px; padding: 4px 7px; font-size: .68rem; }
-.thermometer-rail .tax-thermometer__track { width: 58px; height: 245px; margin: 0 auto; background: linear-gradient(0deg, rgba(31, 157, 104, .20) 0 var(--thermo-green-end), rgba(245, 165, 36, .24) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .24) var(--thermo-yellow-end) 100%); }
+.thermometer-rail .tax-thermometer__track { width: 58px; height: 538px; margin: 0 auto; background: linear-gradient(0deg, rgba(31, 157, 104, .20) 0 var(--thermo-green-end), rgba(245, 165, 36, .24) var(--thermo-green-end) var(--thermo-yellow-end), rgba(229, 72, 77, .24) var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__heat { inset: 10px 20px; background: linear-gradient(0deg, #1f9d68 0 var(--thermo-green-end), #f5a524 var(--thermo-green-end) var(--thermo-yellow-end), #e5484d var(--thermo-yellow-end) 100%); }
 .thermometer-rail .tax-thermometer__tick { top: auto; bottom: var(--thermo-position); left: 50%; width: 72px; height: 1px; transform: translate(-50%, 50%); }
-.thermometer-rail .tax-thermometer__tick span { top: 50%; right: calc(100% + 4px); left: auto; transform: translateY(-50%); }
+.thermometer-rail .tax-thermometer__tick span { top: 50%; right: auto; left: calc(100% - 4px); transform: translateY(-50%); }
 .thermometer-rail .tax-thermometer__tick-label {
+  box-sizing: border-box;
   min-width: 78px;
+  width: max-content;
   padding: 3px 5px;
-  border: 1px solid rgba(24,49,58,.08);
+  border: 1px solid rgba(17,24,39,.34);
   border-radius: 8px;
-  text-align: right;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(17,24,39,.12);
+  text-align: left;
 }
 .thermometer-rail .tax-thermometer__tick-label strong {
   font-size: .55rem;
@@ -740,9 +1272,67 @@
 }
 .thermometer-rail .tax-thermometer__tick-label small {
   font-size: .49rem;
+  font-weight: 850;
+}
+.thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label { position: relative; border-color: rgba(17,24,39,.34); background: #fff; box-shadow: 0 2px 6px rgba(17,24,39,.12); }
+.thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label::before {
+  content: "←";
+  position: absolute;
+  top: 50%;
+  left: -16px;
+  color: rgba(17,24,39,.72);
+  font-size: .72rem;
+  font-weight: 950;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+.thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label::before {
+  display: none;
+}
+.thermometer-rail .tax-thermometer__distance-bubble {
+  position: absolute;
+  z-index: 6;
+  bottom: var(--thermo-position);
+  left: calc(50% + 11px);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border: 1px solid rgba(17,24,39,.24);
+  border-radius: 999px;
+  background: #fff;
+  color: #17313a;
+  font-size: .5rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(17,24,39,.12);
+  transform: translateY(50%);
+}
+.thermometer-rail .tax-thermometer__distance-bubble--away {
+  border-color: rgba(185, 28, 28, .22);
+  background: #fee2e2;
+  color: #7f1d1d;
+}
+.thermometer-rail .tax-thermometer__distance-bubble--past {
+  border-color: rgba(22, 101, 52, .24);
+  background: #dcfce7;
+  color: #14532d;
+}
+.thermometer-rail .tax-thermometer__distance-arrow {
+  color: currentColor;
+  font-size: .64rem;
+  line-height: .8;
 }
 .thermometer-rail .tax-thermometer__value { top: auto; bottom: var(--thermo-position); left: 50%; width: 11px; height: 11px; transform: translate(-50%, 50%); }
-.thermometer-rail .tax-thermometer__value span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 1px 5px; font-size: .55rem; }
+.thermometer-rail .tax-thermometer__value > span { top: 50%; left: calc(100% + 6px); transform: translateY(-50%); padding: 3px 6px; font-size: .55rem; }
+.thermometer-rail .tax-thermometer__value--tax > span {
+  background: #111827;
+  color: #fff;
+}
+.thermometer-rail .tax-thermometer__value--tax .tax-thermometer__value-label strong {
+  color: #fff;
+}
 .thermometer-rail .tax-thermometer__stats { display: grid; gap: 4px; margin-top: 8px; }
 .thermometer-rail .tax-thermometer__stats div { justify-content: space-between; gap: 4px; }
 .thermometer-rail .tax-thermometer__stats span { font-size: .58rem; }
@@ -751,7 +1341,20 @@
 .thermometer-rail .tax-thermometer__footer span { font-size: .58rem; }
 .thermometer-rail .tax-thermometer__footer strong { font-size: .64rem; text-align: right; }
 @media (prefers-reduced-motion: reduce) { .tax-thermometer__value { transition: none; will-change: auto; } }
-.content-topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; }
+.content-topbar { position: relative; z-index: 120; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin: 6px 0 8px; overflow: visible; }
+.content-topbar__title-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-state-selector {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: flex-end;
+}
 .content-topbar h2 { margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.22rem; color: #18313a; }
 .topbar-chip { padding: 6px 9px; border-radius: 999px; background: rgba(255,255,255,.82); border: 1px solid rgba(24,49,58,.1); color: #4f666d; font-size: .76rem; }
 .sheet-section { padding: 14px; border-radius: 18px; border: 1px solid rgba(24,49,58,.1); background: rgba(255,255,255,.86); box-shadow: 0 14px 30px rgba(24,49,58,.07); }
@@ -762,6 +1365,59 @@
 .metric-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 18px; border: 1px solid rgba(24,49,58,.09); background: rgba(255,255,255,.78); }
 .metric-card span { font-size: .8rem; color: #62767a; }
 .metric-card strong { font-size: 1.16rem; color: #16323a; }
+.federal-tax-panel__tiles,
+.state-tax-panel__tiles { grid-template-columns: repeat(auto-fit,minmax(108px,1fr)); gap: 5px; margin-bottom: 6px; }
+.federal-tax-panel__tiles .metric-card,
+.state-tax-panel__tiles .metric-card { gap: 2px; min-height: 0; padding: 5px 7px; border-radius: 9px; box-shadow: none; }
+.federal-tax-panel__tiles .metric-card span,
+.state-tax-panel__tiles .metric-card span { font-size: .58rem; line-height: 1.05; }
+.federal-tax-panel__tiles .metric-card strong,
+.state-tax-panel__tiles .metric-card strong { font-size: .76rem; line-height: 1.05; }
+.federal-tax-panel__tiles--result,
+.state-tax-panel__tiles--result { grid-template-columns: repeat(auto-fit,minmax(116px,1fr)); margin-bottom: 5px; }
+.tax-output-disclosure { margin-bottom: 8px; }
+.tax-output-disclosure summary { display: flex; align-items: center; width: fit-content; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(24,49,58,.16); border-radius: 8px; background: rgba(255,255,255,.72); color: #425b62; cursor: pointer; font-size: .72rem; font-weight: 800; list-style: none; user-select: none; }
+.tax-output-disclosure summary::-webkit-details-marker { display: none; }
+.tax-output-disclosure summary::before { content: "▸"; margin-right: 6px; color: #62767a; font-size: .75rem; }
+.tax-output-disclosure[open] summary { margin-bottom: 6px; }
+.tax-output-disclosure[open] summary::before { transform: rotate(90deg); }
+.tax-what-if-disclosure { margin-bottom: 8px; }
+.tax-what-if-disclosure summary { display: flex; align-items: center; width: fit-content; min-height: 28px; padding: 4px 9px; border: 1px solid rgba(24,49,58,.2); border-radius: 8px; background: #fff8e7; color: #7a5417; cursor: pointer; font-size: .72rem; font-weight: 850; list-style: none; user-select: none; }
+.tax-what-if-disclosure summary::-webkit-details-marker { display: none; }
+.tax-what-if-disclosure summary::before { content: "▸"; margin-right: 6px; font-size: .75rem; }
+.tax-what-if-disclosure[open] summary { margin-bottom: 6px; }
+.tax-what-if-disclosure[open] summary::before { transform: rotate(90deg); }
+.tax-what-if-disclosure__fields { grid-template-columns: repeat(2, minmax(140px, 220px)); margin-bottom: 8px; }
+.tax-field-label { display: flex !important; align-items: center; gap: 5px; min-width: 0; }
+.tax-field-label > span { color: inherit; white-space: nowrap; }
+.tax-field-label small { overflow: hidden; padding: 2px 5px; border-radius: 5px; background: #dbeafe; color: #1d4ed8; font-size: .58rem; font-weight: 850; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.tax-field-label button { flex: 0 0 auto; min-height: 20px; padding: 1px 5px; border: 1px solid rgba(24,49,58,.16); border-radius: 5px; background: rgba(255,255,255,.8); color: #425b62; cursor: pointer; font: inherit; font-size: .58rem; font-weight: 800; line-height: 1; }
+.tax-field-label button:hover { border-color: rgba(24,49,58,.32); background: #fff; }
+.asset-tax-select { transition: background-color 160ms ease, border-color 160ms ease; }
+.asset-tax-select--fully-taxable { background: #fee2e2; border-color: #f3a6a6; }
+.asset-tax-select--tax-free { background: #dcfce7; border-color: #86d7a2; }
+.asset-tax-select--federal-taxable-state-free { background: linear-gradient(90deg, #fee2e2 0 50%, #dcfce7 50% 100%); border-color: #c9b5a4; }
+.asset-tax-select--federal-free-state-taxable { background: linear-gradient(90deg, #dcfce7 0 50%, #fee2e2 50% 100%); border-color: #c9b5a4; }
+.asset-picker__trigger { gap: 6px; cursor: pointer; }
+.asset-picker__trigger:disabled { cursor: not-allowed; opacity: .55; }
+.asset-picker__menu { max-height: 320px; }
+.asset-picker__option { gap: 8px; }
+.account-picker__trigger .asset-tax-indicator,
+.account-picker__option .asset-tax-indicator {
+  display: inline-block;
+  flex: 0 0 18px;
+  margin-left: auto;
+  width: 18px;
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 24, 39, .18);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .34);
+}
+.asset-tax-indicator--fully-taxable { background: #fca5a5; }
+.asset-tax-indicator--tax-free { background: #86efac; }
+.asset-tax-indicator--federal-taxable-state-free { background: linear-gradient(90deg, #fca5a5 0 50%, #86efac 50% 100%); }
+.asset-tax-indicator--federal-free-state-taxable { background: linear-gradient(90deg, #86efac 0 50%, #fca5a5 50% 100%); }
 .metric-card--accent { background: linear-gradient(135deg, #18313a, #2c6470); border-color: transparent; }
 .metric-card--warning { background: linear-gradient(135deg, #7f4b29, #c3732c); border-color: transparent; }
 .metric-card--accent span,.metric-card--accent strong,.metric-card--warning span,.metric-card--warning strong { color: #f8faf7; }
@@ -790,10 +1446,36 @@
 .status-card { margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; }
 .status-card--error { border: 1px solid rgba(167,63,43,.14); background: rgba(255,236,232,.92); color: #8f3623; }
 .status-card--note { border: 1px solid rgba(35,96,106,.14); background: rgba(235,246,248,.94); color: #285860; }
-@media (max-width: 1180px) { .workspace-shell { grid-template-columns: 118px minmax(0, 1fr) 190px; } .workspace-shell--focus-grid { grid-template-columns: 118px minmax(0, 1fr); } .kpi-header { grid-template-columns: 1fr; } .kpi-header__metrics { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 205px; } .investments-workspace { height: calc(100vh - 150px); } }
-@media (max-width: 980px) { .workspace-shell,.workspace-shell--focus-grid { grid-template-columns: 1fr; } .sidebar { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .sidebar:hover { width: auto; box-shadow: none; } .sidebar__brand span,.nav-item span { display: block; } .sidebar__nav { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); } .thermometer-rail { position: static; height: auto; border-left: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .thermometer-rail .tax-thermometer-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 150px; } .content-panel { padding: 0 12px 18px; } .content-topbar { flex-direction: column; align-items: flex-start; } .portfolio-workstation__sticky { position: static; } .investments-workspace { height: auto; min-height: 520px; } .investments-workspace .table-wrap--tall { height: 64vh; } }
+@media (max-width: 1180px) { .workspace-shell { grid-template-columns: 118px minmax(0, 1fr) 190px; } .workspace-shell--focus-grid { grid-template-columns: 118px minmax(0, 1fr); } .kpi-header { grid-template-columns: 1fr; } .kpi-header__metrics { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 450px; } .investments-workspace { height: calc(100vh - 150px); } }
+@media (max-width: 980px) { .workspace-shell,.workspace-shell--focus-grid { grid-template-columns: 1fr; } .sidebar { position: static; width: auto; height: auto; border-right: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .sidebar:hover { width: auto; box-shadow: none; } .sidebar__brand span,.nav-item span { display: block; } .sidebar__nav { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); } .thermometer-rail { position: static; height: auto; border-left: 0; border-bottom: 1px solid rgba(18,41,54,.1); } .thermometer-rail .tax-thermometer-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } .thermometer-rail .tax-thermometer__track { height: 338px; } .content-panel { padding: 0 12px 18px; } .content-topbar { flex-direction: column; align-items: flex-start; } .portfolio-workstation__sticky { position: static; } .investments-workspace { height: auto; min-height: 520px; } .investments-workspace .table-wrap--tall { height: 64vh; } }
 
-.topbar-stack { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.topbar-stack { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.header-history-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  align-self: center;
+  margin: 0;
+}
+.header-history-controls button {
+  width: 22px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+}
+.header-history-controls button span { font-size: 16px; line-height: 1; transform: translateY(-1px); }
+.header-history-controls button:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.34); background: rgba(255, 255, 255, 0.15); color: #fff; }
+.header-history-controls button:disabled { color: rgba(255, 255, 255, 0.42); cursor: not-allowed; opacity: .52; }
+.content-topbar .state-flag-select,
+.content-topbar .topbar-state-selector { overflow: visible; }
 .ai-button { display: inline-flex; align-items: center; border: 1px solid rgba(24,49,58,.12); border-radius: 999px; padding: 8px 14px; background: linear-gradient(135deg, #17313a, #2b6571); color: #f8faf7; font-weight: 700; letter-spacing: .08em; text-decoration: none; }
 .ai-button--link { background: linear-gradient(135deg, #7f4b29, #c3732c); }
 .ai-button--assistant { background: linear-gradient(135deg, #244d42, #63823d); }
@@ -879,6 +1561,7 @@
 .investments-workspace .section-heading h2 { font-size: 1.05rem; }
 .investments-workspace .section-heading p { display: none; }
 .investments-workspace .actions-row { align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+
 .investments-workspace .debug-panel { display: block; margin-bottom: 6px; padding: 7px 9px; }
 .investments-workspace .debug-panel summary { cursor: pointer; font-weight: 700; }
 .investments-workspace .debug-panel:not([open]) { padding: 6px 9px; }
@@ -1009,6 +1692,21 @@
   letter-spacing: -.04em;
   line-height: 1;
   color: #f9fcfb;
+}
+
+.aftertaxum-logo__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aftertaxum-logo__us-flag {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, .42);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
 }
 .aftertaxum-logo__copy span,
 .aftertaxum-logo__copy small {
@@ -1803,7 +2501,10 @@
   top: auto;
   right: auto;
   z-index: 3000;
-  align-self: flex-start;
+  align-self: stretch;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
   margin: 0;
   width: 118px;
   max-width: 100%;
@@ -1996,6 +2697,19 @@
   font-size: clamp(2.25rem, 7vw, 4.75rem);
   font-weight: 500;
   letter-spacing: -.065em;
+}
+
+.app-splash .aftertaxum-logo__title {
+  align-items: flex-start;
+}
+
+.app-splash .aftertaxum-logo__us-flag {
+  width: 54px;
+  height: 36px;
+  margin-top: .08em;
+  border-radius: 4px;
+  border-color: rgba(6, 27, 56, .22);
+  box-shadow: 0 4px 10px rgba(6, 27, 56, .16);
 }
 
 .app-splash .aftertaxum-logo__copy span,
@@ -2267,14 +2981,14 @@
 }
 
 .sheet-table--workbook tr.investment-row--selected td {
-  background: #cfe3ff !important;
+  background: #eef5ff !important;
   outline: 0;
-  box-shadow: inset 0 2px 0 rgba(11, 99, 246, .72), inset 0 -2px 0 rgba(11, 99, 246, .72);
+  box-shadow: inset 0 0 0 1px rgba(11, 99, 246, .28);
 }
 
 .sheet-table--workbook tr.investment-row--selected td:first-child {
   border-left: 0;
-  box-shadow: inset 6px 0 0 var(--poly-blue), inset 0 2px 0 rgba(11, 99, 246, .72), inset 0 -2px 0 rgba(11, 99, 246, .72);
+  box-shadow: inset 3px 0 0 var(--poly-blue), inset 0 0 0 1px rgba(11, 99, 246, .28);
 }
 
 .sheet-table--workbook td:nth-child(18) .readonly-cell--text {
@@ -2348,6 +3062,10 @@
 .thermometer-rail .tax-thermometer {
   border-radius: 13px;
   background: #fff;
+}
+
+.thermometer-rail .tax-thermometer {
+  overflow: visible;
 }
 
 .tax-thermometer-panel__summary-grid > div {
@@ -2540,144 +3258,49 @@
   color: #b42318;
 }
 
-.tax-thermometer-mode-select__portfolio-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--poly-blue-soft);
-  color: var(--poly-blue-strong);
-  font-size: .62rem;
-  font-weight: 900;
+.finder-nav-button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  color: #0f766e;
 }
 
-.tax-thermometer:has(.tax-thermometer-mode-select__menu) {
-  overflow: visible;
+.finder-nav-button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
 }
 
-.tax-thermometer-mode-select {
-  position: relative;
-  min-width: 0;
-}
-
-.tax-thermometer-mode-select__button,
-.tax-thermometer-mode-select__option {
-  display: flex;
-  width: 100%;
+.row-navigation-controls {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-height: 32px;
+  padding: 2px 4px;
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 12px;
+  background: rgba(240, 253, 250, .86);
+}
+
+.row-navigation-controls__label,
+.row-navigation-controls__mode {
+  max-width: 140px;
   border: 0;
   background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tax-thermometer-mode-select__button { padding: 0; }
-
-.tax-thermometer-mode-select__icons {
-  display: inline-flex !important;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 3px;
-}
-
-.tax-thermometer-mode-select__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tax-thermometer-mode-select__chevron {
-  display: inline-block !important;
-  margin-left: auto;
-  color: var(--poly-muted);
-}
-
-.tax-thermometer-mode-select__menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 100;
-  display: grid;
-  width: max-content;
-  min-width: 180px;
-  max-width: min(260px, calc(100vw - 24px));
-  padding: 5px;
-  border: 1px solid var(--poly-line);
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, .18);
-}
-
-.tax-thermometer-mode-select__option {
-  padding: 7px 8px;
-  border-radius: 7px;
-  color: var(--poly-ink);
+  color: #0f766e;
   font-size: .7rem;
-  font-weight: 750;
-}
-
-.tax-thermometer-mode-select__option:hover,
-.tax-thermometer-mode-select__option:focus-visible,
-.tax-thermometer-mode-select__option--selected {
-  background: var(--poly-blue-soft);
-  color: var(--poly-blue-strong);
-}
-
-.app-shell--dark .tax-thermometer-mode-select__menu {
-  border-color: rgba(226, 232, 240, .16);
-  background: #172033;
-}
-
-.app-shell--dark .tax-thermometer-mode-select__option { color: #f8fafc; }
-
-.portfolio-allocation__bar {
-  display: flex;
-  height: 14px;
-  margin: 10px 0 12px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--poly-blue-soft);
-}
-
-.portfolio-allocation__bar span,
-.portfolio-allocation__label i {
-  background: hsl(calc(208 + var(--allocation-index) * 43) 68% 48%);
-}
-
-.portfolio-allocation__bar span { min-width: 0; }
-
-.portfolio-allocation__rows { display: grid; gap: 7px; }
-
-.portfolio-allocation__rows > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 8px;
-  align-items: center;
-  padding-bottom: 7px;
-  border-bottom: 1px solid var(--poly-line);
-}
-
-.portfolio-allocation__label {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  color: var(--poly-ink);
-  font-size: .68rem;
-  text-overflow: ellipsis;
+  font-weight: 820;
+  line-height: 1;
   white-space: nowrap;
 }
 
-.portfolio-allocation__label i { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
-.portfolio-allocation__rows strong { color: var(--poly-ink); font-size: .68rem; }
-.portfolio-allocation__rows em { grid-column: 2; color: var(--poly-muted); font-size: .6rem; font-style: normal; text-align: right; }
-.portfolio-allocation__empty { padding: 14px 4px; color: var(--poly-muted); font-size: .68rem; line-height: 1.4; }
+.row-navigation-controls__label {
+  padding: 0 4px;
+}
+
+.row-navigation-controls__mode {
+  cursor: pointer;
+  outline: none;
+}
 
 .column-toggle-group {
   display: inline-flex;
@@ -2686,19 +3309,242 @@
   margin-left: auto;
 }
 
-.column-toggle {
+.column-toggle-group--state {
+  margin-left: 0;
   min-height: 32px;
-  padding: 6px 10px;
+  padding: 4px 8px;
+  border: 1px solid var(--poly-border);
   border-radius: 999px;
+  background: rgba(255, 255, 255, .72);
   font-size: .72rem;
   font-weight: 750;
   letter-spacing: .03em;
 }
 
-.column-toggle--open {
-  border-color: rgba(31, 109, 106, .22);
+.column-toggle-group--state select {
+  width: auto;
+  min-width: 132px;
+  padding: 4px 24px 4px 8px;
+  font-size: .72rem;
+}
+
+.investment-what-if-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 42px;
+  padding: 8px 12px 8px 10px;
+  border: 1px solid rgba(34, 131, 107, .42);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(29, 131, 107, .98), rgba(28, 96, 133, .94));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), 0 12px 24px rgba(21, 94, 117, .18);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .02em;
+  line-height: 1;
+  user-select: none;
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.investment-what-if-toggle__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(113, 70, 18, .12);
+  color: #87530f;
+  font-size: .82rem;
+  line-height: 1;
+  transition: transform 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.investment-what-if-toggle__label {
+  font-size: .86rem;
+}
+
+.investment-what-if-toggle__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .22);
+  color: #fff;
+  font-size: .62rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.what-if-state-icon {
+  display: block;
+  width: 34px;
+  height: 20px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18));
+}
+
+.what-if-state-icon__frame {
+  fill: #07090d;
+}
+
+.what-if-state-icon__panel {
+  fill: #ffffff;
+}
+
+.what-if-state-icon__arrow {
+  fill: #07090d;
+  stroke: #07090d;
+  stroke-linejoin: round;
+  stroke-width: .4;
+}
+
+.what-if-state-icon__split {
+  stroke: rgba(255, 255, 255, .38);
+  stroke-linecap: round;
+  stroke-width: 1.1;
+}
+
+.investment-what-if-toggle--open {
+  border-color: rgba(116, 82, 20, .22);
+  background: linear-gradient(135deg, rgba(255, 248, 227, .96), rgba(244, 232, 202, .92));
+  color: #714612;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .82), 0 8px 20px rgba(76, 50, 14, .08);
+}
+
+.investment-what-if-toggle--open .investment-what-if-toggle__icon {
+  transform: rotate(90deg) scale(1.05);
+  background: rgba(255, 255, 255, .22);
+  color: #fff7d6;
+}
+
+.investment-what-if-toggle--open .investment-what-if-toggle__state {
+  background: rgba(113, 70, 18, .10);
+  color: #714612;
+}
+
+.investment-what-if-toggle:hover,
+.investment-what-if-toggle:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(153, 97, 23, .36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 12px 26px rgba(76, 50, 14, .14);
+  outline: none;
+}
+
+.investments-workspace .sheet-table--workbook td.investment-column--what-if-different {
+  background: var(--row-bg) !important;
+  box-shadow: none;
+}
+
+.investments-workspace .sheet-table--workbook td.investment-column--what-if-different :is(.asset-picker__trigger, select, input, .readonly-cell) {
+  border-color: rgba(239, 68, 68, .34) !important;
+  background: linear-gradient(135deg, rgba(254, 226, 226, .98), rgba(252, 165, 165, .82)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .58);
+}
+
+.what-if-symbol-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.what-if-overridden-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #b91c1c;
+  color: #fff;
+  font-size: .54rem;
+  font-weight: 950;
+  letter-spacing: .06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.state-flag-select {
+  position: relative;
+  min-width: 184px;
+}
+
+.state-flag-select--toolbar {
+  min-width: 170px;
+}
+
+.state-flag-select__button,
+.state-flag-select__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--poly-border);
+  background: rgba(255, 255, 255, .92);
+  color: var(--poly-ink);
+  font: inherit;
+  text-align: left;
+}
+
+.state-flag-select__button {
+  min-height: 28px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .74rem;
+  font-weight: 750;
+}
+
+.state-flag-select__chevron {
+  margin-left: auto;
+  color: var(--poly-muted);
+  font-size: .72rem;
+}
+
+.state-flag-select__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10000;
+  width: max(220px, 100%);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--poly-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+}
+
+.state-flag-select__option {
+  min-height: 30px;
+  padding: 5px 8px;
+  border-color: transparent;
+  border-radius: 10px;
+  font-size: .76rem;
+  cursor: pointer;
+}
+
+.state-flag-select__option:hover,
+.state-flag-select__option--selected {
   background: rgba(31, 109, 106, .10);
-  color: var(--poly-blue);
+  border-color: rgba(31, 109, 106, .18);
+}
+
+.state-flag-image {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  object-fit: cover;
+  border: 1px solid rgba(15, 23, 42, .18);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .14);
 }
 
 .sheet-table--workbook.sheet-table--hide-override {
@@ -2902,50 +3748,113 @@
 .investments-workspace .sheet-table--workbook td:nth-child(3) { left: var(--investment-col-3-left, 66px); }
 .investments-workspace .sheet-table--workbook th:nth-child(4),
 .investments-workspace .sheet-table--workbook td:nth-child(4) { left: var(--investment-col-4-left, 94px); }
-.investments-workspace .sheet-table--workbook tbody td:nth-child(5) {
-  position: static;
-  left: auto;
-  z-index: auto;
-  box-shadow: none;
+.investments-workspace .sheet-table--workbook th:nth-child(-n+6),
+.investments-workspace .sheet-table--workbook td:nth-child(-n+6) {
+  min-width: 0;
+  max-width: none;
 }
-.investments-workspace .sheet-table--workbook th:nth-child(5) {
-  left: auto;
-  z-index: 4;
-  box-shadow: none;
+.investments-workspace .sheet-table--workbook th:nth-child(5),
+.investments-workspace .sheet-table--workbook td:nth-child(5) {
+  position: sticky;
+  left: var(--investment-col-5-left, 210px);
+  z-index: 5;
 }
-.investments-workspace .sheet-table--workbook tfoot td:nth-child(5) {
+.investments-workspace .sheet-table--workbook th:nth-child(6),
+.investments-workspace .sheet-table--workbook td:nth-child(6) {
+  position: sticky;
+  left: var(--investment-col-6-left, 296px);
+  z-index: 5;
+  box-shadow: 8px 0 14px rgba(24,49,58,.06);
+}
+.investments-workspace .sheet-table--workbook thead th:nth-child(5),
+.investments-workspace .sheet-table--workbook thead th:nth-child(6) {
+  z-index: 8;
+  background: rgba(228,239,241,.98);
+}
+.investments-workspace .sheet-table--workbook tbody td:nth-child(5),
+.investments-workspace .sheet-table--workbook tbody td:nth-child(6) {
+  background: var(--row-bg) !important;
+}
+.investments-workspace .sheet-table--workbook tfoot td:nth-child(5),
+.investments-workspace .sheet-table--workbook tfoot td:nth-child(6) {
   position: sticky;
   bottom: 0;
-  left: auto;
+  left: var(--investment-col-5-left, 210px);
   z-index: 8;
-  box-shadow: none;
+  background: rgba(255,250,232,.98) !important;
 }
-.investments-workspace .sheet-table--workbook tfoot :is(th, td):nth-child(-n+4) {
+.investments-workspace .sheet-table--workbook tfoot td:nth-child(6) {
+  left: var(--investment-col-6-left, 296px);
+  box-shadow: 8px 0 14px rgba(24,49,58,.06);
+}
+.investments-workspace .sheet-table--workbook tfoot :is(th, td):nth-child(-n+6) {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column {
+  min-width: 0;
+  max-width: none;
+}
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--move,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--row,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--included,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--account,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--symbol,
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--normalPercent {
+  position: sticky;
+  z-index: 6;
+}
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--move { left: 0; }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--row { left: var(--investment-col-2-left, 78px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--included { left: var(--investment-col-3-left, 108px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--account { left: var(--investment-col-4-left, 136px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--symbol { left: var(--investment-col-5-left, 252px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--normalPercent {
+  left: var(--investment-col-6-left, 338px);
+  box-shadow: 8px 0 14px rgba(24,49,58,.06);
+}
+.investments-workspace .sheet-table--workbook thead :is(th, td).investment-column {
+  z-index: 9;
+  background: rgba(228,239,241,.98);
+}
+.investments-workspace .sheet-table--workbook tbody :is(td, th).investment-column {
+  background: var(--row-bg) !important;
+}
+.investments-workspace .sheet-table--workbook tfoot :is(th, td).investment-column {
+  z-index: 8;
+  background: rgba(255,250,232,.98) !important;
 }
 .investment-total-row__label {
   letter-spacing: .04em;
   text-align: left;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) thead th:nth-child(n+29):nth-child(-n+31) {
-  background: #fff5df;
+.investments-workspace .sheet-table--workbook .investment-column--override {
+  display: table-cell !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+29):nth-child(-n+31),
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tfoot td:nth-child(n+29):nth-child(-n+31) {
+.investments-workspace .sheet-table--workbook thead th.investment-column--override {
+  background: linear-gradient(135deg, rgba(255, 248, 227, .98), rgba(244, 232, 202, .96));
+  color: #714612;
+  border-color: rgba(116, 82, 20, .24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .82), inset 0 -2px 0 rgba(196, 139, 58, .24);
+}
+
+.investments-workspace .sheet-table--workbook tbody td.investment-column--override,
+.investments-workspace .sheet-table--workbook tfoot td.investment-column--override {
   background: rgba(255, 244, 218, .82) !important;
 }
 
-.investments-workspace .sheet-table--workbook:not(.sheet-table--hide-override) tbody td:nth-child(n+29):nth-child(-n+31) :is(input, select, .readonly-cell) {
+.investments-workspace .sheet-table--workbook tbody td.investment-column--override :is(input, select, .readonly-cell) {
   background-color: rgba(255, 250, 238, .96);
   box-shadow: inset 0 -1px 0 rgba(196, 139, 58, .22);
 }
 
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--deferred:not(.investment-row--selected),
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--non-taxable:not(.investment-row--selected) {
-  --row-bg: #bdeecb;
+  --row-bg: rgba(216, 244, 225, .96);
   --status-color: var(--poly-green);
   --status-bg: var(--poly-green-soft);
   --status-text: #067647;
@@ -2953,7 +3862,7 @@
 
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--taxable:not(.investment-row--selected),
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--partial:not(.investment-row--selected) {
-  --row-bg: #ffc6c6;
+  --row-bg: rgba(255, 224, 224, .96);
   --status-color: var(--poly-red);
   --status-bg: var(--poly-red-soft);
   --status-text: #b42318;
@@ -2981,6 +3890,22 @@
   --status-text: #9f5b5b;
 }
 
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--deferred:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--non-taxable:not(.investment-row--selected) {
+  --row-bg: rgba(244, 252, 247, .98);
+  --status-color: rgba(31, 157, 104, .58);
+  --status-bg: rgba(31, 157, 104, .06);
+  --status-text: #3d7259;
+}
+
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--taxable:not(.investment-row--selected),
+.investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--partial:not(.investment-row--selected) {
+  --row-bg: rgba(255, 247, 247, .98);
+  --status-color: rgba(208, 90, 90, .58);
+  --status-bg: rgba(208, 90, 90, .06);
+  --status-text: #8f5252;
+}
+
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) td {
   color: #667085;
   font-style: italic;
@@ -2990,89 +3915,6 @@
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) :is(input, select, button, .readonly-cell) {
   color: #667085;
   font-style: italic;
-}
-
-/* Highlighted matches share an obvious background; the current match gets a distinct focus treatment. */
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected {
-  --row-bg: #fff0a8 !important;
-  background-color: #fff0a8 !important;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected > td {
-  background-color: var(--row-bg) !important;
-  box-shadow: inset 0 2px 0 #e6b800, inset 0 -2px 0 #e6b800;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected > td:first-child {
-  box-shadow: inset 7px 0 0 #d69e00, inset 0 2px 0 #e6b800, inset 0 -2px 0 #e6b800;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected :is(input, select, .readonly-cell, .account-picker__trigger, .asset-picker__trigger) {
-  background-color: #fff8d6 !important;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target {
-  --row-bg: #c9d8ff !important;
-  background-color: #c9d8ff !important;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target > td {
-  background-color: var(--row-bg) !important;
-  box-shadow: inset 0 3px 0 #5b21b6, inset 0 -3px 0 #5b21b6;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target > td:first-child {
-  box-shadow: inset 9px 0 0 #5b21b6, inset 0 3px 0 #5b21b6, inset 0 -3px 0 #5b21b6;
-}
-
-.investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target :is(input, select, .readonly-cell, .account-picker__trigger, .asset-picker__trigger) {
-  border-color: rgba(91, 33, 182, .5) !important;
-  background-color: #e7edff !important;
-}
-
-/* Dark-mode counterpart: preserve the same amber-match / blue-focus hierarchy. */
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected {
-  --row-bg: #51430f !important;
-  background-color: #51430f !important;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected > td {
-  background-color: var(--row-bg) !important;
-  color: #fff7d6 !important;
-  box-shadow: inset 0 2px 0 #fdb022, inset 0 -2px 0 #fdb022;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected > td:first-child {
-  box-shadow: inset 7px 0 0 #fdb022, inset 0 2px 0 #fdb022, inset 0 -2px 0 #fdb022;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected :is(input, select, .readonly-cell, .account-picker__trigger, .asset-picker__trigger) {
-  -webkit-text-fill-color: #fff7d6 !important;
-  border-color: rgba(253, 176, 34, .5) !important;
-  background-color: #342f1d !important;
-  color: #fff7d6 !important;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target {
-  --row-bg: #263b70 !important;
-  background-color: #263b70 !important;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target > td {
-  background-color: var(--row-bg) !important;
-  color: #f5f3ff !important;
-  box-shadow: inset 0 3px 0 #c4b5fd, inset 0 -3px 0 #c4b5fd;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target > td:first-child {
-  box-shadow: inset 9px 0 0 #c4b5fd, inset 0 3px 0 #c4b5fd, inset 0 -3px 0 #c4b5fd;
-}
-
-.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--selected.investment-row--finder-target :is(input, select, .readonly-cell, .account-picker__trigger, .asset-picker__trigger) {
-  -webkit-text-fill-color: #f5f3ff !important;
-  border-color: rgba(196, 181, 253, .68) !important;
-  background-color: #202b50 !important;
-  color: #f5f3ff !important;
 }
 
 .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) :is(input, select, .readonly-cell, .account-picker__trigger) {
@@ -3193,6 +4035,26 @@
   color: #0b63f6;
 }
 
+.sheet-table--lookup .lookup-drag-heading--with-delete,
+.sheet-table--lookup .lookup-drag-cell--with-delete {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+}
+
+.sheet-table--lookup .lookup-drag-cell--with-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.sheet-table--lookup .lookup-inline-delete-button {
+  width: 30px;
+  height: 24px;
+  min-width: 30px;
+}
+
 .sheet-table--lookup tr.lookup-row--dragging td {
   opacity: .58;
 }
@@ -3217,6 +4079,1839 @@
     width: 100%;
   }
 }
+
+.sidebar__advanced-nav { display: grid; gap: 5px; padding-left: 7px; border-left: 1px solid rgba(11, 99, 246, .14); }
+.nav-item--advanced-toggle { margin-top: 4px; border-style: dashed; }
+.nav-item--advanced-toggle strong::after { content: " +"; font-size: .68rem; }
+.nav-item--advanced-toggle.nav-item--advanced-open strong::after { content: " -"; }
+.nav-item--advanced { min-height: 35px; opacity: .94; }
+.sidebar { z-index: 500; }
+.sidebar:hover,
+.sidebar:focus-within { z-index: 900; }
+
+
+.content-topbar__title { display: inline-flex; align-items: center; gap: 8px; }
+.content-topbar__title-stack { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; line-height: 1; }
+.content-topbar__tax-total { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 9px; border: 1px solid #111; border-radius: 999px; background: #fff7f7; color: #dc2626; font-family: "Geist", "Inter", "SF Pro Display", "Segoe UI", sans-serif; font-size: .88em; font-weight: 850; letter-spacing: -.02em; }
+.content-topbar__tax-total .kpi-pill__value { color: inherit; font: inherit; letter-spacing: inherit; }
+.content-topbar__tax-total--changed .kpi-odometer--spinning { color: #ef4444; text-shadow: 0 0 10px rgba(239,68,68,.25); }
+.nav-item__icon-1040 { position: relative; display: inline-grid; place-items: start start; flex: 0 0 auto; width: 26px; height: 20px; padding: 3px 2px 0 3px; overflow: hidden; border-radius: 2px; border: 1px solid #198754; background: linear-gradient(180deg, #cdeed5 0 23%, #fbfffc 23% 100%); color: #12633d; font-size: .42rem; font-style: normal; font-weight: 950; line-height: 1; letter-spacing: -.035em; box-shadow: 0 1px 2px rgba(16,24,40,.16), inset 0 -1px 0 rgba(25,135,84,.16); transform: rotate(-3deg); transform-origin: center; }
+.nav-item__icon-1040::before { content: ""; position: absolute; left: 3px; right: 3px; top: 9px; height: 8px; background: repeating-linear-gradient(180deg, rgba(25,135,84,.38) 0 1px, transparent 1px 3px), linear-gradient(90deg, transparent 0 3px, rgba(25,135,84,.32) 3px 4px, transparent 4px 11px, rgba(25,135,84,.32) 11px 12px, transparent 12px 100%); }
+.nav-item__icon-1040::after { content: ""; position: absolute; right: 3px; bottom: 2px; width: 5px; height: 5px; border-radius: 1px; border: 1px solid rgba(25,135,84,.58); background: linear-gradient(135deg, transparent 45%, rgba(25,135,84,.58) 46% 55%, transparent 56%); }
+.content-topbar__title--federal .nav-item__icon-1040 { color: #0d4f30; border-color: #0d6b3f; background: linear-gradient(180deg, #c5ead0 0 23%, #ffffff 23% 100%); }
+.content-topbar__title--state .nav-item__icon-state-tax { color: #111827; border-color: #2f2f2f; background: linear-gradient(180deg, #f8fafc 0 18%, #ffffff 18% 100%); font-size: .5rem; letter-spacing: -.045em; transform: rotate(3deg); box-shadow: 0 1px 2px rgba(16,24,40,.18), inset 0 -1px 0 rgba(17,24,39,.12); }
+.content-topbar__title--state .nav-item__icon-state-tax::before { top: 8px; height: 9px; background: repeating-linear-gradient(180deg, rgba(17,24,39,.5) 0 1px, transparent 1px 3px), linear-gradient(90deg, transparent 0 3px, rgba(17,24,39,.42) 3px 4px, transparent 4px 11px, rgba(17,24,39,.42) 11px 12px, transparent 12px 100%); }
+.content-topbar__title--state .nav-item__icon-state-tax::after { content: attr(data-state); right: 2px; top: 2px; bottom: auto; width: auto; height: auto; min-width: 8px; padding: 1px 2px; border: 1px solid rgba(17,24,39,.56); border-radius: 1px; background: #fff; color: #111827; font-size: .28rem; font-weight: 950; line-height: 1; letter-spacing: -.03em; }
+.investment-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.investments-workspace .drag-handle-heading,
+.investments-workspace .drag-handle-cell {
+  width: 84px;
+  min-width: 82px;
+}
+
+.row-split-button,
+.row-delete-button {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 7px;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.row-split-button:hover {
+  border-color: var(--poly-blue, #2563eb);
+  background: #eff6ff;
+  color: var(--poly-blue, #2563eb);
+}
+
+.row-delete-button:hover {
+  border-color: #dc2626;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.row-split-button .icon-button__icon,
+.row-delete-button .icon-button__icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.investment-row--finder-target td {
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.65);
+}
+
+.symbol-finder-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4100;
+  display: grid;
+  place-items: start center;
+  padding: 72px 18px 18px;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(4px);
+}
+
+.symbol-finder-panel {
+  width: min(620px, 100%);
+  padding: 18px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.24);
+}
+
+.symbol-finder-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.symbol-finder-panel__header h3 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+}
+
+.symbol-finder-panel__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.symbol-finder-panel__controls label {
+  display: grid;
+  gap: 5px;
+  color: #52616a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.symbol-finder-panel__controls input,
+.symbol-finder-panel__controls select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 10px;
+  background: #fff;
+  color: #172033;
+  font-weight: 800;
+}
+
+.symbol-finder-panel__results {
+  display: grid;
+  gap: 8px;
+  max-height: min(420px, 48vh);
+  overflow: auto;
+}
+
+.symbol-finder-panel__empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #52616a;
+  font-weight: 750;
+}
+
+.symbol-finder-result {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 12px;
+  background: #fff;
+  color: #172033;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.symbol-finder-result:hover {
+  border-color: var(--poly-blue, #2563eb);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.14);
+  transform: translateY(-1px);
+}
+
+.symbol-finder-result span {
+  overflow: hidden;
+  color: #52616a;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.symbol-finder-result em {
+  color: #0f766e;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.split-row-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(4px);
+}
+
+.split-row-dialog {
+  width: min(660px, 100%);
+  padding: 20px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+}
+
+.split-row-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.split-row-dialog__header h3 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+}
+
+.split-row-dialog__copy {
+  margin: 8px 0 18px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.split-row-dialog__field {
+  display: grid;
+  gap: 7px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.split-row-dialog__field input {
+  width: 120px;
+  padding: 9px 10px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 9px;
+  color: #172033;
+  font: inherit;
+}
+
+.split-row-dialog__field input:focus {
+  border-color: var(--poly-blue, #2563eb);
+  outline: 3px solid rgba(37, 99, 235, 0.13);
+}
+
+.split-row-dialog__controls {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.split-row-dialog__allocations {
+  max-height: 260px;
+  margin-top: 16px;
+  overflow-y: auto;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.split-row-dialog__allocation-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.split-row-dialog__allocation-table th,
+.split-row-dialog__allocation-table td {
+  height: 38px;
+  padding: 0 10px;
+  border-right: 1px solid var(--poly-line, #d7dde8);
+  border-bottom: 1px solid var(--poly-line, #d7dde8);
+  background: #fff;
+}
+
+.split-row-dialog__allocation-table th:last-child,
+.split-row-dialog__allocation-table td:last-child {
+  border-right: 0;
+}
+
+.split-row-dialog__allocation-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.split-row-dialog__allocation-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 32px;
+  background: #eef2f7;
+  color: #475467;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.split-row-dialog__allocation-table th:first-child {
+  width: 64px;
+  text-align: center;
+}
+
+.split-row-dialog__allocation-table th:nth-child(2) {
+  text-align: right;
+}
+
+.split-row-dialog__allocation-table th:last-child {
+  width: 164px;
+  text-align: center;
+}
+
+.split-row-dialog__row-number {
+  background: #f8fafc !important;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.split-row-dialog__balance-cell {
+  text-align: center;
+}
+
+.split-row-dialog__balance-button {
+  width: 100%;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-row-dialog__balance-button--subtract {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.split-row-dialog__balance-button:disabled {
+  border-color: #e4e7ec;
+  background: #f2f4f7;
+  color: #98a2b3;
+  cursor: not-allowed;
+}
+
+.split-row-dialog__currency-input {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.split-row-dialog__currency-input:focus-within {
+  border-color: var(--poly-blue, #2563eb);
+  outline: 3px solid rgba(37, 99, 235, 0.13);
+}
+
+.split-row-dialog__currency-input > span {
+  padding-left: 10px;
+  color: #667085;
+}
+
+.split-row-dialog__currency-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px 9px 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #172033;
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+}
+
+.split-row-dialog__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.split-row-dialog__summary > div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f5f7fb;
+}
+
+.split-row-dialog__summary > .split-row-dialog__summary--warning {
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.split-row-dialog__summary > .split-row-dialog__summary--warning strong {
+  color: #b42318;
+}
+
+.split-row-dialog__summary span,
+.split-row-dialog__summary strong {
+  display: block;
+}
+
+.split-row-dialog__summary span {
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.split-row-dialog__summary strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-row-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.split-row-dialog__warning {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.split-row-dialog__actions .primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+@media (max-width: 600px) {
+  .split-row-overlay { padding: 14px; }
+  .split-row-dialog__controls { align-items: stretch; flex-direction: column; }
+  .split-row-dialog__summary { grid-template-columns: 1fr; }
+}
+
+.model-version-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .42);
+  backdrop-filter: blur(5px);
+}
+
+.model-version-dialog {
+  width: min(700px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 20px;
+  overflow: hidden;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+}
+
+.model-version-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.model-version-dialog__header h3 {
+  margin: 3px 0 0;
+  color: #172033;
+  font-size: 19px;
+}
+
+.model-version-dialog__copy {
+  margin: 10px 0 18px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.model-version-dialog__field {
+  display: grid;
+  gap: 7px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.model-version-dialog__field input,
+.model-version-row__identity input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 8px;
+  color: #172033;
+  font: inherit;
+}
+
+.model-version-dialog__field input:focus,
+.model-version-row__identity input:focus {
+  border-color: var(--poly-blue, #2563eb);
+  outline: 3px solid rgba(37, 99, 235, .12);
+}
+
+.model-version-dialog__capacity {
+  margin-top: 8px;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.model-version-dialog__error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.model-version-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.model-version-list {
+  display: grid;
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 11px;
+}
+
+.model-version-list__empty {
+  padding: 28px;
+  color: #98a2b3;
+  font-size: 13px;
+  text-align: center;
+}
+
+.model-version-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--poly-line, #d7dde8);
+  background: #fff;
+}
+
+.model-version-row:last-child { border-bottom: 0; }
+.model-version-row:hover { background: #f8fafc; }
+
+.model-version-row__identity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.model-version-row__identity strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-version-row__identity small {
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.model-version-row__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.primary-button--compact { padding: 6px 9px; font-size: .76rem; }
+.model-version-row__delete { color: #b42318; }
+
+@media (max-width: 640px) {
+  .model-version-overlay { padding: 12px; }
+  .model-version-dialog { max-height: calc(100vh - 24px); padding: 16px; }
+  .model-version-row { grid-template-columns: 1fr; }
+  .model-version-row__actions { justify-content: flex-start; flex-wrap: wrap; }
+}
+
+.investments-workspace .sheet-table--workbook select.asset-tax-select--fully-taxable { background: #fee2e2; border-color: #f3a6a6; }
+.investments-workspace .sheet-table--workbook select.asset-tax-select--tax-free { background: #dcfce7; border-color: #86d7a2; }
+.investments-workspace .sheet-table--workbook select.asset-tax-select--federal-taxable-state-free { background: linear-gradient(90deg, #fee2e2 0 50%, #dcfce7 50% 100%); border-color: #c9b5a4; }
+.investments-workspace .sheet-table--workbook select.asset-tax-select--federal-free-state-taxable { background: linear-gradient(90deg, #dcfce7 0 50%, #fee2e2 50% 100%); border-color: #c9b5a4; }
+
+.tax-thermometer__track {
+  isolation: isolate;
+  border: 0 !important;
+  background: rgba(248, 250, 252, .82) !important;
+}
+
+.tax-thermometer__track::before,
+.tax-thermometer__track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.tax-thermometer__track::before {
+  z-index: 0;
+  background: linear-gradient(90deg, var(--rate-gradient-stops));
+  overflow: hidden;
+}
+
+.tax-thermometer__track::after {
+  z-index: 8;
+  border: 1px solid rgba(0, 0, 0, .86);
+}
+
+.tax-thermometer__heat {
+  z-index: 2;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .28) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .56), 0 1px 8px rgba(15, 23, 42, .08);
+  pointer-events: none;
+}
+
+.tax-thermometer__rate-band {
+  position: absolute;
+  z-index: 9;
+  top: 0;
+  bottom: 0;
+  left: var(--rate-start);
+  width: var(--rate-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: visible;
+  background: transparent;
+  border-right: 1px solid var(--rate-band-border);
+  pointer-events: none;
+}
+
+.tax-thermometer__rate-band--first {
+  border-top-left-radius: inherit;
+  border-bottom-left-radius: inherit;
+}
+
+.tax-thermometer__rate-band--last {
+  border-top-right-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
+.tax-thermometer__rate-band span {
+  position: relative;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-16px);
+  max-width: calc(100% - 4px);
+  padding: 2px 5px;
+  border: 1px solid rgba(15, 23, 42, .38);
+  border-radius: 4px;
+  background: #fff;
+  color: #10242d;
+  font-size: .58rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, .16);
+}
+
+.tax-thermometer__rate-band--compact span {
+  padding: 1px 2px;
+  font-size: .5rem;
+}
+
+.tax-thermometer__tick,
+.tax-thermometer__value {
+  z-index: 4;
+}
+
+.tax-thermometer__value-fill {
+  position: absolute;
+  z-index: 3;
+  top: 26px;
+  bottom: 26px;
+  left: 10px;
+  width: max(0px, calc(var(--thermo-position) - 10px));
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.2);
+  pointer-events: none;
+  transition: width 640ms cubic-bezier(.22, 1, .36, 1), height 640ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.tax-thermometer__value-fill--income,
+.tax-thermometer__value-fill--taxable,
+.tax-thermometer__value-fill--tax {
+  background: #2563eb;
+}
+
+.tax-thermometer__value {
+  width: 0;
+  height: 0;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.tax-thermometer__tick span {
+  z-index: 5;
+}
+
+.thermometer-rail .tax-thermometer__rate-band {
+  top: auto;
+  right: 0;
+  bottom: var(--rate-start);
+  left: 0;
+  width: auto;
+  height: var(--rate-size);
+  justify-content: flex-start;
+  border-right: 0;
+  border-top: 1px solid var(--rate-band-border);
+}
+
+.thermometer-rail .tax-thermometer__track::before {
+  background: linear-gradient(0deg, var(--rate-gradient-stops));
+}
+
+.thermometer-rail .tax-thermometer__rate-band--first {
+  border-radius: 0 0 999px 999px;
+}
+
+.thermometer-rail .tax-thermometer__rate-band--last {
+  border-radius: 999px 999px 0 0;
+}
+
+.thermometer-rail .tax-thermometer__rate-band span {
+  padding: 2px 4px;
+  font-size: .5rem;
+  transform: translateX(-36px);
+}
+
+.thermometer-rail .tax-thermometer__value-fill {
+  top: auto;
+  right: 20px;
+  bottom: 10px;
+  left: 20px;
+  width: auto;
+  height: max(0px, calc(var(--thermo-position) - 10px));
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.tax-thermometer__value .tax-thermometer__value-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+}
+
+.tax-thermometer__value-label em,
+.tax-thermometer__value-label strong {
+  display: inline;
+  font-style: normal;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tax-thermometer__value-label strong {
+  color: #0f2630;
+  font-weight: 950;
+}
+
+.tax-thermometer__value-label strong span {
+  position: static;
+  transform: none;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  display: block;
+}
+.tax-thermometer__value-label .tax-thermometer__value-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.tax-thermometer__value-label .tax-thermometer__value-flag,
+.tax-thermometer__value-label .state-flag-image {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.35);
+}
+
+.thermometer-rail .tax-thermometer__value .tax-thermometer__value-label {
+  align-items: flex-start;
+  gap: 2px;
+  flex-direction: column;
+}
+
+.thermometer-rail .tax-thermometer__value-label strong {
+  font-size: .52rem;
+}
+
+.tax-thermometer__no-tax-stamp {
+  position: absolute;
+  z-index: 36;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  display: grid;
+  place-items: center;
+  min-width: min(82%, 330px);
+  padding: 10px 18px;
+  border: 5px solid rgba(185, 28, 28, .86);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .82);
+  color: #991b1b;
+  font-size: clamp(1.45rem, 4.4vw, 3.2rem);
+  font-weight: 1000;
+  letter-spacing: .08em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255,255,255,.75);
+  box-shadow: 0 14px 32px rgba(127, 29, 29, .22), inset 0 0 0 2px rgba(185, 28, 28, .18);
+  pointer-events: none;
+}
+
+.thermometer-rail .tax-thermometer__no-tax-stamp {
+  min-width: 168px;
+  max-width: 210px;
+  padding: 10px 12px;
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+
+.app-shell--dark .tax-thermometer__no-tax-stamp {
+  border-color: rgba(248, 113, 113, .9);
+  background: rgba(15, 23, 42, .86);
+  color: #fecaca;
+  text-shadow: 0 1px 0 rgba(0,0,0,.5);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .38), inset 0 0 0 2px rgba(248, 113, 113, .2);
+}
+
+.tax-what-if-disclosure__tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.tax-what-if-table {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(17, 24, 39, .12);
+  border-radius: 12px;
+  background: rgba(255,255,255,.74);
+}
+.tax-what-if-table__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #17313a;
+}
+.tax-what-if-table__heading strong { font-size: .78rem; }
+.tax-what-if-table__heading span {
+  color: #b42318;
+  font-size: .78rem;
+  font-weight: 900;
+}
+.tax-what-if-table__grid {
+  display: grid;
+  grid-template-columns: minmax(90px, .7fr) minmax(130px, 1fr) 30px;
+  gap: 5px;
+  align-items: center;
+}
+.tax-what-if-table__grid--header {
+  color: #62767a;
+  font-size: .64rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.tax-what-if-table__grid input,
+.tax-what-if-table__grid select {
+  min-height: 30px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  font-size: .76rem;
+}
+.tax-what-if-table--deductions {
+  margin-top: 10px;
+}
+.tax-what-if-table--always-deductions {
+  margin: 10px 0;
+}
+.tax-what-if-table__row {
+  display: grid;
+  gap: 3px;
+}
+.tax-what-if-table__limitation {
+  margin: 0;
+  color: #b42318;
+  font-size: .68rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+.tax-what-if-table__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: #62767a;
+  font-size: .7rem;
+}
+.tax-what-if-table__summary strong {
+  color: #17313a;
+}
+.tax-deduction-mode {
+  margin-bottom: 8px;
+}
+
+.app-shell--dark {
+  --poly-bg: #07111f;
+  --poly-canvas: #0b1220;
+  --poly-surface: #111827;
+  --poly-surface-soft: #172033;
+  --poly-ink: #f8fafc;
+  --poly-muted: #cbd5e1;
+  --poly-faint: #94a3b8;
+  --poly-line: rgba(226, 232, 240, .14);
+  --poly-line-strong: rgba(226, 232, 240, .24);
+  --poly-blue: #60a5fa;
+  --poly-blue-strong: #93c5fd;
+  --poly-blue-soft: rgba(96, 165, 250, .16);
+  --poly-green: #34d399;
+  --poly-green-soft: rgba(52, 211, 153, .16);
+  --poly-red: #fb7185;
+  --poly-red-soft: rgba(251, 113, 133, .16);
+  --poly-amber: #fbbf24;
+  --poly-amber-soft: rgba(251, 191, 36, .16);
+  --poly-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 18px 44px rgba(0, 0, 0, .34);
+  --poly-shadow-tight: 0 1px 1px rgba(0, 0, 0, .22), 0 10px 28px rgba(0, 0, 0, .26);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% -8%, rgba(96, 165, 250, .16), transparent 28%),
+    radial-gradient(circle at 90% 2%, rgba(52, 211, 153, .10), transparent 24%),
+    linear-gradient(180deg, var(--poly-bg), var(--poly-canvas) 56%, #020617);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .portfolio-workstation__sticky,
+.app-shell--dark .content-topbar {
+  background: linear-gradient(180deg, rgba(7, 17, 31, .94), rgba(7, 17, 31, .74));
+  border-color: rgba(226, 232, 240, .10);
+}
+
+.app-shell--dark .sidebar,
+.app-shell--dark .sheet-section,
+.app-shell--dark .metric-card,
+.app-shell--dark .table-wrap,
+.app-shell--dark .tax-thermometer-panel,
+.app-shell--dark .tax-output-disclosure,
+.app-shell--dark .tax-what-if-disclosure,
+.app-shell--dark .ai-panel,
+.app-shell--dark .assistant-panel,
+.app-shell--dark .favorites-panel,
+.app-shell--dark .confirm-panel,
+.app-shell--dark .symbol-finder-panel,
+.app-shell--dark .split-row-dialog,
+.app-shell--dark .model-version-dialog,
+.app-shell--dark .topbar-menu__panel {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .94);
+  box-shadow: var(--poly-shadow);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .sidebar {
+  background: rgba(15, 23, 42, .82);
+}
+
+.app-shell--dark .nav-item {
+  color: var(--poly-muted);
+}
+
+.app-shell--dark .nav-item:hover,
+.app-shell--dark .topbar-menu__item:hover,
+.app-shell--dark .ghost-button:hover,
+.app-shell--dark .favorites-item:hover,
+.app-shell--dark .symbol-finder-result:hover {
+  background: rgba(96, 165, 250, .16);
+  color: var(--poly-blue-strong);
+}
+
+.app-shell--dark .row-navigation-controls {
+  border-color: rgba(45, 212, 191, .24);
+  background: rgba(15, 23, 42, .72);
+}
+
+.app-shell--dark .row-navigation-controls__label,
+.app-shell--dark .row-navigation-controls__mode {
+  color: #99f6e4;
+}
+
+.app-shell--dark .row-navigation-controls__mode option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.app-shell--dark .nav-item--active,
+.app-shell--dark .topbar-menu__item[aria-checked="true"] {
+  background: var(--poly-blue-soft);
+  color: var(--poly-blue-strong);
+}
+
+.app-shell--dark .topbar-menu__item,
+.app-shell--dark .app-action-menu__brand,
+.app-shell--dark .content-topbar__title,
+.app-shell--dark .section-heading h2,
+.app-shell--dark .metric-card strong,
+.app-shell--dark .sheet-table,
+.app-shell--dark .readonly-cell,
+.app-shell--dark .model-version-row__identity strong,
+.app-shell--dark .tax-what-if-table__summary strong {
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .ghost-button,
+.app-shell--dark .row-delete-button,
+.app-shell--dark .row-split-button,
+.app-shell--dark .symbol-finder-result,
+.app-shell--dark .favorites-item,
+.app-shell--dark .model-version-row,
+.app-shell--dark .split-row-dialog__allocation-table,
+.app-shell--dark .split-row-dialog__balance-button {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .86);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .form-grid input,
+.app-shell--dark .form-grid select,
+.app-shell--dark .sheet-table input,
+.app-shell--dark .sheet-table select,
+.app-shell--dark .assistant-panel__composer textarea,
+.app-shell--dark .model-version-dialog__field input,
+.app-shell--dark .model-version-row__identity input,
+.app-shell--dark .symbol-finder-panel__controls input,
+.app-shell--dark .symbol-finder-panel__controls select,
+.app-shell--dark .tax-what-if-table__grid input,
+.app-shell--dark .tax-what-if-table__grid select {
+  border-color: var(--poly-line);
+  background-color: rgba(2, 6, 23, .70);
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .04);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .form-grid input:hover,
+.app-shell--dark .form-grid select:hover,
+.app-shell--dark .sheet-table input:hover,
+.app-shell--dark .sheet-table select:hover {
+  background-color: rgba(15, 23, 42, .96);
+}
+
+.app-shell--dark .sheet-table th,
+.app-shell--dark .sheet-table--workbook thead th:nth-child(1),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(2),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(3),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(4),
+.app-shell--dark .sheet-table--workbook thead th:nth-child(5) {
+  background: rgba(30, 41, 59, .98);
+  color: var(--poly-muted);
+  border-color: var(--poly-line);
+}
+
+.app-shell--dark .sheet-table td {
+  border-color: rgba(226, 232, 240, .08);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr {
+  --row-bg: rgba(15, 23, 42, .86);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr:nth-child(even) {
+  --row-bg: rgba(19, 28, 45, .88);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr td,
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(1),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(2),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(3),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(4),
+.app-shell--dark .sheet-table--workbook tbody td:nth-child(5) {
+  background: var(--row-bg);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--deferred,
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--non-taxable {
+  --row-bg: rgba(20, 83, 45, .36);
+}
+
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--partial,
+.app-shell--dark .sheet-table--workbook tbody tr.investment-row--taxable {
+  --row-bg: rgba(127, 29, 29, .34);
+}
+
+.app-shell--dark .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--deferred td .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--non-taxable td .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--partial td .readonly-cell,
+.app-shell--dark .sheet-table--workbook tr.investment-row--taxable td .readonly-cell {
+  background: rgba(2, 6, 23, .42);
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .sheet-table--workbook tfoot th,
+.app-shell--dark .sheet-table--workbook tfoot td,
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(1),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(1),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(2),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(2),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(3),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(3),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(4),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(4),
+.app-shell--dark .sheet-table--workbook tfoot th:nth-child(5),
+.app-shell--dark .sheet-table--workbook tfoot td:nth-child(5) {
+  background: rgba(30, 41, 59, .98);
+  border-color: var(--poly-line-strong);
+}
+
+.app-shell--dark .account-picker__menu,
+.app-shell--dark .state-flag-select__menu,
+.app-shell--dark .tax-thermometer-mode-select__menu {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .98);
+  color: var(--poly-ink);
+  box-shadow: var(--poly-shadow);
+}
+
+.app-shell--dark .tax-thermometer-mode-select__trigger,
+.app-shell--dark .state-flag-select__button,
+.app-shell--dark .account-picker__trigger,
+.app-shell--dark .asset-picker__option,
+.app-shell--dark .state-flag-select__option,
+.app-shell--dark .tax-thermometer-mode-select__option {
+  color: var(--poly-ink);
+}
+
+.app-shell--dark .status-card,
+.app-shell--dark .view-state-strip,
+.app-shell--dark .symbol-finder-panel__empty,
+.app-shell--dark .model-version-list__empty {
+  border-color: var(--poly-line);
+  background: rgba(15, 23, 42, .78);
+  color: var(--poly-muted);
+}
+
+.app-shell--dark .topbar-chip,
+.app-shell--dark .section-heading p,
+.app-shell--dark .form-grid span,
+.app-shell--dark .metric-card span,
+.app-shell--dark .topbar-menu__label small,
+.app-shell--dark .symbol-finder-result span,
+.app-shell--dark .model-version-row__identity small,
+.app-shell--dark .split-row-dialog__copy,
+.app-shell--dark .tax-what-if-table__summary {
+  color: var(--poly-muted);
+}
+
+.app-shell--dark .income-snapshot,
+.app-shell--dark .income-snapshot--inline {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(2, 6, 23, .88)) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .26), inset 0 0 0 1px rgba(226, 232, 240, .04) !important;
+}
+
+.app-shell--dark .income-snapshot__button,
+.app-shell--dark .income-snapshot--inline .income-snapshot__button {
+  border-color: rgba(45, 212, 191, .38) !important;
+  background: linear-gradient(135deg, #0f766e, #155e75) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08) !important;
+}
+
+.app-shell--dark .income-snapshot__button:hover,
+.app-shell--dark .income-snapshot__button:focus-visible,
+.app-shell--dark .income-snapshot--inline .income-snapshot__button:hover,
+.app-shell--dark .income-snapshot--inline .income-snapshot__button:focus-visible {
+  border-color: rgba(94, 234, 212, .62) !important;
+  background: linear-gradient(135deg, #0d9488, #1d4ed8) !important;
+}
+
+.app-shell--dark .income-snapshot__line span,
+.app-shell--dark .income-snapshot__value span,
+.app-shell--dark .income-snapshot__period,
+.app-shell--dark .income-snapshot__captured,
+.app-shell--dark .income-snapshot__empty,
+.app-shell--dark .income-snapshot--inline .income-snapshot__line span,
+.app-shell--dark .income-snapshot--inline .income-snapshot__value span,
+.app-shell--dark .income-snapshot--inline .income-snapshot__period,
+.app-shell--dark .income-snapshot--inline .income-snapshot__captured {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .income-snapshot__value em {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .income-snapshot__toggle {
+  border-color: rgba(226, 232, 240, .14) !important;
+  background: rgba(2, 6, 23, .54) !important;
+}
+
+.app-shell--dark .income-snapshot__toggle-button {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .income-snapshot__toggle-button:hover,
+.app-shell--dark .income-snapshot__toggle-button:focus-visible {
+  background: rgba(96, 165, 250, .16) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .income-snapshot__toggle-button--active,
+.app-shell--dark .income-snapshot--inline .income-snapshot__toggle-button--active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+html.aftertaxus-dark-mode,
+html.aftertaxus-dark-mode body,
+html.aftertaxus-dark-mode #root {
+  background:
+    radial-gradient(circle at 20% -8%, rgba(96, 165, 250, .16), transparent 28%),
+    radial-gradient(circle at 90% 2%, rgba(52, 211, 153, .10), transparent 24%),
+    linear-gradient(180deg, #07111f, #0b1220 56%, #020617) !important;
+  color: #f8fafc;
+}
+
+.app-shell--dark .workspace-shell,
+.app-shell--dark .content-panel,
+.app-shell--dark .investments-workspace {
+  background: transparent !important;
+}
+
+.app-shell--dark .investments-workspace .table-wrap,
+.app-shell--dark .investments-workspace .table-wrap--tall,
+.app-shell--dark .investments-workspace .sheet-table,
+.app-shell--dark .investments-workspace .sheet-table--workbook {
+  background: #0f172a !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr {
+  --row-bg: #111827;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:nth-child(even) {
+  --row-bg: #172033;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--deferred,
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--non-taxable {
+  --row-bg: rgba(20, 83, 45, .44);
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--partial,
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--taxable {
+  --row-bg: rgba(127, 29, 29, .42);
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:hover {
+  --row-bg: rgba(30, 41, 59, .98);
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr td,
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr td:nth-child(1),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr td:nth-child(2),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr td:nth-child(3),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr td:nth-child(4),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr td:nth-child(5) {
+  background: var(--row-bg) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook th,
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th,
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th:nth-child(1),
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th:nth-child(2),
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th:nth-child(3),
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th:nth-child(4),
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th:nth-child(5) {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook .investment-column--override {
+  display: table-cell !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook thead th.investment-column--override {
+  background: linear-gradient(135deg, rgba(255, 248, 227, .98), rgba(244, 232, 202, .96)) !important;
+  color: #714612 !important;
+  border-color: rgba(116, 82, 20, .32) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .82), inset 0 -2px 0 rgba(196, 139, 58, .28) !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook input,
+.app-shell--dark .investments-workspace .sheet-table--workbook select,
+.app-shell--dark .investments-workspace .sheet-table--workbook .readonly-cell,
+.app-shell--dark .investments-workspace .account-picker__trigger,
+.app-shell--dark .investments-workspace .asset-picker__trigger {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: rgba(2, 6, 23, .56) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .investments-workspace .readonly-cell--total,
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot th,
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot td,
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot th:nth-child(1),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot td:nth-child(1),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot th:nth-child(2),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot td:nth-child(2),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot th:nth-child(3),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot td:nth-child(3),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot th:nth-child(4),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot td:nth-child(4),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot th:nth-child(5),
+.app-shell--dark .investments-workspace .sheet-table--workbook tfoot td:nth-child(5) {
+  background: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .thermometer-rail {
+  border-left-color: rgba(226, 232, 240, .14) !important;
+  background: linear-gradient(180deg, rgba(7, 17, 31, .98), rgba(2, 6, 23, .96)) !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer-panel,
+.app-shell--dark .thermometer-rail .tax-thermometer,
+.app-shell--dark .thermometer-rail .tax-thermometer-panel__summary {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: rgba(15, 23, 42, .94) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .35) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer-mode-select__button,
+.app-shell--dark .thermometer-rail .tax-thermometer-mode-select__menu,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick-label,
+.app-shell--dark .thermometer-rail .tax-thermometer__distance-bubble,
+.app-shell--dark .thermometer-rail .tax-thermometer__value > span {
+  border-color: rgba(226, 232, 240, .18) !important;
+  background: rgba(15, 23, 42, .96) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .30) !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer__heading strong,
+.app-shell--dark .thermometer-rail .tax-thermometer-panel__summary-heading strong,
+.app-shell--dark .thermometer-rail .tax-thermometer__stats strong,
+.app-shell--dark .thermometer-rail .tax-thermometer__footer strong,
+.app-shell--dark .thermometer-rail .tax-thermometer-mode-select__label {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer__heading span,
+.app-shell--dark .thermometer-rail .tax-thermometer-panel__summary-heading span,
+.app-shell--dark .thermometer-rail .tax-thermometer__stats span,
+.app-shell--dark .thermometer-rail .tax-thermometer__footer span {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer__track {
+  border-color: rgba(226, 232, 240, .22) !important;
+  background:
+    linear-gradient(0deg, rgba(34, 197, 94, .20) 0 var(--thermo-green-end), rgba(245, 158, 11, .22) var(--thermo-green-end) var(--thermo-yellow-end), rgba(239, 68, 68, .22) var(--thermo-yellow-end) 100%),
+    #020617 !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .08), 0 12px 30px rgba(0, 0, 0, .28) !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer__heat {
+  box-shadow: inset 0 0 0 1px rgba(248, 250, 252, .22) !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer__tick-label,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label {
+  border-color: #cbd5e1 !important;
+  background: #f8fafc !important;
+  color: #17313a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .28), inset 0 0 0 1px rgba(255, 255, 255, .78) !important;
+}
+
+.app-shell--dark .thermometer-rail .tax-thermometer__tick-label strong,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick-label em,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick-label small,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label strong,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label em,
+.app-shell--dark .thermometer-rail .tax-thermometer__tick--adjacent .tax-thermometer__tick-label small {
+  color: #17313a !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) {
+  --row-bg: #0f172a !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:nth-child(even):not(.investment-row--selected) {
+  --row-bg: #121c2d !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--deferred:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--non-taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--deferred:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--non-taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--deferred:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--non-taxable:not(.investment-row--selected) {
+  --row-bg: #123625 !important;
+  --status-color: rgba(52, 211, 153, .72) !important;
+  --status-bg: rgba(52, 211, 153, .14) !important;
+  --status-text: #bbf7d0 !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--partial:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--partial:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--zero-investment.investment-row--taxable:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--partial:not(.investment-row--selected),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded.investment-row--taxable:not(.investment-row--selected) {
+  --row-bg: #3b171c !important;
+  --status-color: rgba(251, 113, 133, .74) !important;
+  --status-bg: rgba(251, 113, 133, .14) !important;
+  --status-text: #fecdd3 !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr.investment-row--excluded:not(.investment-row--selected) {
+  opacity: .78;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td,
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(1),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(2),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(3),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(4),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td:nth-child(5),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) > td.investment-column--override {
+  background: var(--row-bg) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) :is(input, select, button, .readonly-cell, .account-picker__trigger, .asset-picker__trigger),
+.app-shell--dark .investments-workspace .sheet-table--workbook tbody tr:not(.investment-row--selected) td.investment-column--override :is(input, select, .readonly-cell) {
+  border-color: rgba(226, 232, 240, .18) !important;
+  background-color: rgba(15, 23, 42, .76) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06) !important;
+}
+
+.app-shell--dark .state-flag-select__button {
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: rgba(15, 23, 42, .92) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06), 0 8px 22px rgba(0, 0, 0, .24) !important;
+}
+
+.app-shell--dark .state-flag-select__chevron {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .state-flag-select__menu {
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: rgba(2, 6, 23, .98) !important;
+  box-shadow: 0 22px 54px rgba(0, 0, 0, .48) !important;
+}
+
+.app-shell--dark .state-flag-select__option {
+  border-color: transparent !important;
+  background: rgba(15, 23, 42, .88) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .state-flag-select__option:hover,
+.app-shell--dark .state-flag-select__option--selected {
+  border-color: rgba(96, 165, 250, .30) !important;
+  background: rgba(30, 64, 105, .92) !important;
+  color: #ffffff !important;
+}
+
+.app-shell--dark .state-flag-select__option .state-flag-image,
+.app-shell--dark .state-flag-select__button .state-flag-image {
+  border-color: rgba(248, 250, 252, .38) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .28);
+}
+
+.app-shell--dark .kpi-pill__details {
+  border-color: rgba(226, 232, 240, .18);
+  background: rgba(15, 23, 42, .98);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .46);
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-breakdown-popover {
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-breakdown-popover__header {
+  border-color: rgba(226, 232, 240, .14);
+}
+
+.app-shell--dark .tax-breakdown-popover__header strong,
+.app-shell--dark .tax-breakdown-popover__section h4,
+.app-shell--dark .tax-breakdown-popover__section strong,
+.app-shell--dark .tax-breakdown-popover__total {
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-breakdown-popover__header span,
+.app-shell--dark .tax-breakdown-popover__section div:not(.tax-breakdown-popover__total),
+.app-shell--dark .tax-breakdown-popover__section span {
+  color: #cbd5e1;
+}
+
+.app-shell--dark .tax-breakdown-popover__section {
+  border-color: rgba(226, 232, 240, .12);
+  background: rgba(2, 6, 23, .58);
+}
+
+.app-shell--dark .tax-breakdown-popover__total {
+  border-color: rgba(226, 232, 240, .14);
+}
+
+.kpi-pill .tax-breakdown-popover span,
+.app-top-nav .kpi-pill .tax-breakdown-popover span {
+  overflow: visible;
+  color: inherit;
+  font-size: .72rem;
+  font-weight: inherit;
+  letter-spacing: normal;
+  line-height: 1.25;
+  text-overflow: clip;
+  text-transform: none;
+  white-space: normal;
+}
+
+.kpi-pill .tax-breakdown-popover strong,
+.app-top-nav .kpi-pill .tax-breakdown-popover strong {
+  overflow: visible;
+  color: #172033;
+  font-size: .76rem;
+  letter-spacing: normal;
+  line-height: 1.25;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.kpi-pill .tax-breakdown-popover__header strong,
+.app-top-nav .kpi-pill .tax-breakdown-popover__header strong {
+  color: #111827;
+  font-size: .95rem;
+}
+
+.app-shell--dark .kpi-pill .tax-breakdown-popover strong,
+.app-shell--dark .app-top-nav .kpi-pill .tax-breakdown-popover strong,
+.app-shell--dark .kpi-pill .tax-breakdown-popover__header strong,
+.app-shell--dark .app-top-nav .kpi-pill .tax-breakdown-popover__header strong {
+  color: #f8fafc;
+}
+
+.app-shell--dark .kpi-pill__inline-badge {
+  border-color: rgba(251, 191, 36, .46);
+  background: rgba(120, 53, 15, .72);
+  color: #fde68a !important;
+}
+
+.app-shell--dark .kpi-pill__inline-note {
+  border-color: rgba(226, 232, 240, .16);
+  background: rgba(15, 23, 42, .98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .40);
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .lookup-table-wrap,
+.app-shell--dark .sheet-table--lookup {
+  background: #0f172a !important;
+}
+
+.app-shell--dark .sheet-table--lookup th,
+.app-shell--dark .sheet-table--lookup thead th,
+.app-shell--dark .sheet-table--lookup thead th:last-child,
+.app-shell--dark .sheet-table--lookup thead .lookup-drag-heading {
+  border-color: rgba(226, 232, 240, .14) !important;
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .sheet-table--lookup td,
+.app-shell--dark .sheet-table--lookup .lookup-table__actions,
+.app-shell--dark .sheet-table--lookup .lookup-drag-cell {
+  border-color: rgba(226, 232, 240, .10) !important;
+  background: #111827 !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) td,
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) .lookup-table__actions,
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) .lookup-drag-cell {
+  background: #121c2d !important;
+}
+
+.app-shell--dark .sheet-table--lookup input,
+.app-shell--dark .sheet-table--lookup select,
+.app-shell--dark .sheet-table--lookup .percent-input,
+.app-shell--dark .sheet-table--lookup .percent-input input {
+  border-color: rgba(226, 232, 240, .18) !important;
+  background-color: rgba(15, 23, 42, .78) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06) !important;
+}
+
+.app-shell--dark .sheet-table--lookup .percent-input span {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .sheet-table--lookup select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.app-shell--dark .sheet-table--lookup .lookup-drag-cell .drag-handle,
+.app-shell--dark .sheet-table--lookup .lookup-inline-delete-button,
+.app-shell--dark .sheet-table--lookup .lookup-table__actions .action-icon-button {
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: rgba(15, 23, 42, .90) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .06), 0 6px 16px rgba(0, 0, 0, .22) !important;
+}
+
+.app-shell--dark .sheet-table--lookup .lookup-drag-cell .drag-handle:hover,
+.app-shell--dark .sheet-table--lookup .lookup-inline-delete-button:hover,
+.app-shell--dark .sheet-table--lookup .lookup-table__actions .action-icon-button:hover {
+  border-color: rgba(96, 165, 250, .34) !important;
+  background: rgba(30, 64, 105, .92) !important;
+  color: #ffffff !important;
+}
+
+.app-shell--dark .sheet-table--lookup tbody td,
+.app-shell--dark .sheet-table--lookup tbody td:not(.lookup-drag-cell):not(.lookup-table__actions) {
+  background: #111827 !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) td,
+.app-shell--dark .sheet-table--lookup tbody tr:nth-child(even) td:not(.lookup-drag-cell):not(.lookup-table__actions) {
+  background: #121c2d !important;
+}
+
+.app-shell--dark .sheet-table--lookup tbody td input,
+.app-shell--dark .sheet-table--lookup tbody td input[type="text"],
+.app-shell--dark .sheet-table--lookup tbody td input[type="number"],
+.app-shell--dark .sheet-table--lookup tbody td input[type="date"],
+.app-shell--dark .sheet-table--lookup tbody td select {
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: #0f172a !important;
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .08) !important;
+}
+
+.app-shell--dark .sheet-table--lookup tbody td input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+.app-shell--dark .sheet-table--lookup tbody td input:-webkit-autofill,
+.app-shell--dark .sheet-table--lookup tbody td input:-webkit-autofill:hover,
+.app-shell--dark .sheet-table--lookup tbody td input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc !important;
+  box-shadow: 0 0 0 1000px #0f172a inset !important;
+}
+
+.app-shell--dark .symbol-finder-overlay {
+  background: rgba(2, 6, 23, .66) !important;
+  backdrop-filter: blur(6px);
+}
+
+.app-shell--dark .symbol-finder-panel {
+  border-color: rgba(226, 232, 240, .18) !important;
+  background: rgba(15, 23, 42, .98) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 28px 72px rgba(0, 0, 0, .52) !important;
+}
+
+.app-shell--dark .symbol-finder-panel__header h3,
+.app-shell--dark .symbol-finder-panel .eyebrow {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .symbol-finder-panel__controls label,
+.app-shell--dark .symbol-finder-panel__controls label span {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .symbol-finder-panel__controls input,
+.app-shell--dark .symbol-finder-panel__controls select {
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: #0f172a !important;
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .08) !important;
+}
+
+.app-shell--dark .symbol-finder-panel__controls input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+.app-shell--dark .symbol-finder-panel__controls select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.app-shell--dark .symbol-finder-panel__results {
+  scrollbar-color: #475569 #0f172a;
+}
+
+.app-shell--dark .symbol-finder-panel__empty,
+.app-shell--dark .symbol-finder-result {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: rgba(2, 6, 23, .62) !important;
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .symbol-finder-result:hover {
+  border-color: rgba(96, 165, 250, .34) !important;
+  background: rgba(30, 64, 105, .92) !important;
+  color: #ffffff !important;
+}
+
+.app-shell--dark .symbol-finder-result strong,
+.app-shell--dark .symbol-finder-result em {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .symbol-finder-result span {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .tax-what-if-table,
+.app-shell--dark .tax-what-if-table--deductions,
+.app-shell--dark .tax-what-if-table--always-deductions {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: rgba(15, 23, 42, .92) !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .04) !important;
+}
+
+.app-shell--dark .tax-what-if-table__heading,
+.app-shell--dark .tax-what-if-table__heading strong {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .tax-what-if-table__grid--header {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .tax-what-if-table__grid input,
+.app-shell--dark .tax-what-if-table__grid select {
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  border-color: rgba(226, 232, 240, .20) !important;
+  background: #0f172a !important;
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, .08) !important;
+}
+
+.app-shell--dark .tax-what-if-table__grid select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.app-shell--dark .tax-what-if-table__summary {
+  color: #cbd5e1 !important;
+}
+
+.app-shell--dark .tax-what-if-table__summary strong {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .tax-what-if-table__limitation {
+  color: #fb7185 !important;
+}
+
 .state-deduction-amount {
   position: relative;
   min-width: 0;
