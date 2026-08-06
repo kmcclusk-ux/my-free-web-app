@@ -91,7 +91,7 @@ type TickerRow = { id: number; symbol: string; percentReturn: number; assetType:
 type CategoryRow = { id: number; name: string; includeInAllocation: boolean };
 type TaxTreatmentRow = { id: number; label: string; ordinaryShare: number; preferredShare: number; stateRule: string; niitIncluded: boolean; localCategory: string; description: string };
 type AccountRow = { id: number; account: string; accountType: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
-type AccountTaxTypeRow = { id: number; taxStatus: string };
+type AccountTaxTypeRow = { id: number; taxStatus: string; includeInAllocation: boolean };
 type AccountTypeRow = { id: number; name: string; taxStatus: string };
 
 type TaxWhatIfItem = { id: number; amount: number; incomeType: string };
@@ -790,7 +790,7 @@ function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "l
 }
 const initialTaxTreatments: TaxTreatmentRow[] = ["tax-free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label) }));
 const assetTypeOptions = ["ETF", "Stock", "Income"];
-const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus }));
+const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus, includeInAllocation: true }));
 const initialAccountTypes: AccountTypeRow[] = [
   { id: 1, name: "IRA", taxStatus: "deferred" },
   { id: 2, name: "401k", taxStatus: "deferred" },
@@ -2350,10 +2350,12 @@ function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number):
   };
 }
 function workbookToAccountTaxTypeRow(row: Record<string, unknown>, index: number): AccountTaxTypeRow {
-  const base: AccountTaxTypeRow = { id: index + 1, taxStatus: "" };
+  const base: AccountTaxTypeRow = { id: index + 1, taxStatus: "", includeInAllocation: true };
+  const allocationValue = workbookField(row, "includeInAllocation", "include_in_allocation", "allocation", "selected");
   return {
     id: Number(workbookField(row, "id")) || index + 1,
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_status") ?? base.taxStatus,
+    includeInAllocation: allocationValue === undefined ? true : normalizeYesNo(allocationValue) === "yes",
   };
 }
 function workbookToAccountTypeRow(row: Record<string, unknown>, index: number): AccountTypeRow {
@@ -3534,13 +3536,14 @@ function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateM
     });
 }
 
-type TaxThermometerMode = "combined" | "federal" | "state" | "allocation";
+type TaxThermometerMode = "combined" | "federal" | "state" | "allocation" | "accountTax";
 
 function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mode: TaxThermometerMode; onChange: (mode: TaxThermometerMode) => void; stateCode: string; stateName: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement | null>(null);
   const options: Array<{ mode: TaxThermometerMode; label: string; icons: React.ReactNode }> = [
     { mode: "allocation", label: "Portfolio allocation", icons: <span aria-hidden="true">%</span> },
+    { mode: "accountTax", label: "Account tax category", icons: <span aria-hidden="true">%</span> },
     { mode: "combined", label: `Fed + ${stateName}`, icons: <><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /><span>+</span><StateFlagImage stateCode={stateCode} stateName={stateName} /></> },
     { mode: "federal", label: "Federal", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
     { mode: "state", label: stateName, icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
@@ -3594,7 +3597,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   );
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, stateCode, stateName, allocationRows }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }> }) {
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }> }) {
   const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>("allocation");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const totalTax = federalTax + stateTax;
@@ -3607,10 +3610,11 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const combinedTaxable = Math.max(federalTaxable, stateTaxable);
   const combinedEffectiveRate = federalEffectiveRate + stateEffectiveRate;
   const combinedBaseRateLabel = formatPercent(0.10 + rateLabelToDecimal(stateBaseRateLabel));
-  const allocationTotal = allocationRows.reduce((sum, row) => sum + row.amount, 0);
+  const activeAllocationRows = thermometerMode === "accountTax" ? accountTaxAllocationRows : allocationRows;
+  const allocationTotal = activeAllocationRows.reduce((sum, row) => sum + row.amount, 0);
   const allocationColors = ["#0b63f6", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e", "#06b6d4", "#ec4899"];
   let allocationCursor = 0;
-  const allocationSegments = allocationRows.map((row, index) => {
+  const allocationSegments = activeAllocationRows.map((row, index) => {
     const start = allocationCursor;
     allocationCursor += allocationTotal > 0 ? row.amount / allocationTotal * 100 : 0;
     const angle = ((start + allocationCursor) / 2 / 100 * 360 - 90) * Math.PI / 180;
@@ -3710,13 +3714,13 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
 
   return (
     <div className="tax-thermometer-panel">
-      {thermometerMode === "allocation" ? (
+      {thermometerMode === "allocation" || thermometerMode === "accountTax" ? (
         <div className={`tax-thermometer portfolio-allocation ${isCollapsed ? "tax-thermometer--collapsed" : ""}`}>
           <div className="tax-thermometer__heading">
-            <div><strong><TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} /></strong><span>Checked asset classes</span></div>
+            <div><strong><TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} /></strong><span>{thermometerMode === "accountTax" ? "Checked account tax categories" : "Checked asset classes"}</span></div>
             <div className="tax-thermometer__heading-actions"><button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={() => setIsCollapsed((current) => !current)} aria-expanded={!isCollapsed} aria-label={isCollapsed ? "Show portfolio allocation" : "Hide portfolio allocation"} title={isCollapsed ? "Show portfolio allocation" : "Hide portfolio allocation"}><VisibilityToggleIcon variant={isCollapsed ? "show" : "hide"} /></button></div>
           </div>
-          {!isCollapsed && <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{allocationRows.length ? <><div className="portfolio-allocation__pie-stage" role="img" aria-label={`Portfolio allocation: ${allocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`}><div className="portfolio-allocation__pie" style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><svg viewBox="0 0 200 200" aria-hidden="true">{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <line key={segment.label} x1={100 + Math.cos(segment.angle) * 57} y1={100 + Math.sin(segment.angle) * 57} x2={100 + Math.cos(segment.angle) * 72} y2={100 + Math.sin(segment.angle) * 72} stroke={allocationColors[segment.index % allocationColors.length]} />)}</svg>{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <span key={segment.label} className="portfolio-allocation__pie-label" style={{ left: `${50 + Math.cos(segment.angle) * 42}%`, top: `${50 + Math.sin(segment.angle) * 42}%`, borderColor: allocationColors[segment.index % allocationColors.length] }} title={`${segment.label}: ${formatCurrencyDetailed(segment.amount)}`}><strong>{segment.label}</strong>{formatPercent(segment.percent)}</span>)}</div><div className="portfolio-allocation__rows">{allocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select asset classes on the Asset Classes tab.</div>}</>}
+          {!isCollapsed && <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{activeAllocationRows.length ? <><div className="portfolio-allocation__pie-stage" role="img" aria-label={`${thermometerMode === "accountTax" ? "Account tax category" : "Portfolio"} allocation: ${activeAllocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`}><div className="portfolio-allocation__pie" style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><svg viewBox="0 0 200 200" aria-hidden="true">{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <line key={segment.label} x1={100 + Math.cos(segment.angle) * 57} y1={100 + Math.sin(segment.angle) * 57} x2={100 + Math.cos(segment.angle) * 72} y2={100 + Math.sin(segment.angle) * 72} stroke={allocationColors[segment.index % allocationColors.length]} />)}</svg>{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <span key={segment.label} className="portfolio-allocation__pie-label" style={{ left: `${50 + Math.cos(segment.angle) * 42}%`, top: `${50 + Math.sin(segment.angle) * 42}%`, borderColor: allocationColors[segment.index % allocationColors.length] }} title={`${segment.label}: ${formatCurrencyDetailed(segment.amount)}`}><strong>{segment.label}</strong>{formatPercent(segment.percent)}</span>)}</div><div className="portfolio-allocation__rows">{activeAllocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select categories on the {thermometerMode === "accountTax" ? "Account Tax Category" : "Asset Classes"} tab.</div>}</>}
         </div>
       ) : <TaxThermometer title={<TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} />} titleLabel={selectedThermometer.titleLabel} titleValue={formatCurrencyDetailed(selectedThermometer.total)} subtitle={selectedThermometer.subtitle} taxableIncome={selectedThermometer.taxableIncome} values={selectedThermometer.values} markers={selectedThermometer.markers} stats={selectedThermometer.stats} footerLabel={selectedThermometer.footerLabel} footerValue={selectedThermometer.footerValue} baseRateLabel={selectedThermometer.baseRateLabel} currentRateLabel={selectedThermometer.currentRateLabel} noTaxStamp={selectedThermometer.noTaxStamp} collapsed={isCollapsed} onToggle={() => setIsCollapsed((current) => !current)} />}
     </div>
@@ -5444,7 +5448,7 @@ export default function App() {
     setCategories(snapshot.categories.map((category) => ({ ...category, includeInAllocation: category.includeInAllocation !== false })));
     setTaxTreatments(snapshot.taxTreatments.map((row, index) => workbookToTaxTreatmentRow(row as unknown as Record<string, unknown>, index)));
     setAccounts(snapshot.accounts);
-    setAccountTaxTypes(snapshot.accountTaxTypes);
+    setAccountTaxTypes(snapshot.accountTaxTypes.map((row) => ({ ...row, includeInAllocation: row.includeInAllocation !== false })));
     setAccountTypes(mergeDefaultAccountTypes(snapshot.accountTypes));
     setFederalSettings(normalizeFederalSettings(snapshot.federalSettings));
     setStateSettings(normalizeStateSettings(snapshot.stateSettings));
@@ -5880,6 +5884,16 @@ export default function App() {
         amount: derivedRows.reduce((sum, row) => sum + (normalizeLookupKey(row.investmentType) === categoryKey ? Math.max(row.includedTotal, 0) : 0), 0),
       };
     }), [categories, derivedRows]);
+
+  const accountTaxAllocationRows = useMemo(() => accountTaxTypes
+    .filter((category) => category.includeInAllocation !== false && String(category.taxStatus || "").trim())
+    .map((category) => {
+      const categoryKey = normalizeLookupKey(category.taxStatus);
+      return {
+        label: category.taxStatus,
+        amount: derivedRows.reduce((sum, row) => sum + (normalizeLookupKey(row.taxStatus) === categoryKey ? Math.max(row.includedTotal, 0) : 0), 0),
+      };
+    }), [accountTaxTypes, derivedRows]);
 
   const flows = useMemo(() => derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
@@ -6994,6 +7008,9 @@ export default function App() {
         status: "taxStatus",
         label: "taxStatus",
         name: "taxStatus",
+        allocation: "includeInAllocation",
+        includeinallocation: "includeInAllocation",
+        selected: "includeInAllocation",
       },
       accountType: {
         accounttype: "name",
@@ -7727,7 +7744,7 @@ export default function App() {
         {activeTab === "taxTreatment" && taxTreatmentIssues.length > 0 && <div className="status-card status-card--error" role="alert"><strong>Tax treatment rules need attention.</strong> {taxTreatmentIssues.join(" ")}</div>}
         {activeTab === "taxTreatment" && <LookupTable title="Tax Treatments" subtitle="Structured rules used to divide investment income between federal ordinary and preferred income and determine state and local treatment. Ordinary plus preferred shares below 100% are federally exempt." rows={taxTreatments} duplicateKey="label" columns={[{ key: "label", label: "Treatment ID" }, { key: "ordinaryShare", label: "Federal ordinary", type: "percent" }, { key: "preferredShare", label: "Federal preferred", type: "percent" }, { key: "stateRule", label: "State rule", type: "select", options: ["taxable", "exempt", "treasury-exempt"] }, { key: "niitIncluded", label: "Include in NIIT", type: "checkbox" }, { key: "localCategory", label: "Local category", type: "select", options: localTaxBaseKeys }, { key: "description", label: "Explanation" }]} onChange={updateCollection(setTaxTreatments, ["ordinaryShare", "preferredShare"])} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "", ...defaultTaxTreatmentRule("income") })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Account type drives the investment tax status; cashflow inclusion comes directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "accountType", label: "Account type", type: "select", options: accountTypeOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} highlightedRowId={highlightedAccountRowId} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
-        {activeTab === "accountTaxType" && <LookupTable title="Account Tax Category" subtitle="Reference list for allowed account tax statuses." rows={accountTaxTypes} columns={[{ key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "" })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "accountTaxType" && <LookupTable title="Account Tax Category" subtitle="Reference list for allowed account tax statuses and account-tax allocation rollup." rows={accountTaxTypes} columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "", includeInAllocation: true })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountType" && <LookupTable title="Account Type" subtitle="Reference list for account kinds and the tax status each account type contributes to investments." rows={accountTypes} columns={[{ key: "name", label: "Account type" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }]} onChange={updateCollection(setAccountTypes)} onAdd={() => addRow(setAccountTypes, { id: Date.now(), name: "", taxStatus: "" })} onRemove={removeRow(setAccountTypes)} onReorder={reorderCollection(setAccountTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
 
         {activeTab === "federal" && (
@@ -7983,6 +8000,7 @@ export default function App() {
                 stateCode={selectedStateCode}
                 stateName={selectedStateName}
                 allocationRows={portfolioAllocationRows}
+                accountTaxAllocationRows={accountTaxAllocationRows}
               />
             </>
           ) : (
