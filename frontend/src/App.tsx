@@ -5936,8 +5936,11 @@ export default function App() {
       return {
         label: type.name,
         amount: derivedRows.reduce((sum, row) => {
-          const rowAccountType = accountMap[normalizeLookupKey(row.account)]?.accountType || inferAccountTypeFromAccountName(row.account);
-          return sum + (normalizeLookupKey(rowAccountType) === typeKey ? Math.max(row.includedTotal, 0) : 0);
+          const assignedType = String(accountMap[normalizeLookupKey(row.account)]?.accountType || "").trim();
+          const inferredType = inferAccountTypeFromAccountName(`${assignedType} ${row.account}`);
+          const candidateKeys = [assignedType, inferredType].map(normalizeLookupKey).filter(Boolean);
+          const matchesType = candidateKeys.some((candidateKey) => candidateKey === typeKey || candidateKey.includes(typeKey) || typeKey.includes(candidateKey));
+          return sum + (matchesType ? Math.max(row.includedTotal, 0) : 0);
         }, 0),
       };
     }), [accountTypes, derivedRows, accountMap]);
