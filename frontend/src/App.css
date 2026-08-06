@@ -1239,10 +1239,17 @@
 }
 .portfolio-allocation__rows { display: grid; gap: 6px; margin-top: 10px; }
 .portfolio-allocation__rows > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 7px 0; border-bottom: 1px solid rgba(24,49,58,.1); }
-.portfolio-allocation__rows span { overflow: hidden; color: #40595f; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.portfolio-allocation__rows span { display: flex; align-items: center; gap: 6px; overflow: hidden; color: #40595f; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.portfolio-allocation__rows span i { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
 .portfolio-allocation__rows strong { color: #17313a; font-size: .68rem; }
 .portfolio-allocation__rows em { grid-column: 2; color: #62767a; font-size: .6rem; font-style: normal; text-align: right; }
 .portfolio-allocation__empty { padding: 14px 4px; color: #62767a; font-size: .68rem; line-height: 1.4; }
+.portfolio-allocation__pie { position: relative; display: grid; place-items: center; width: 132px; height: 132px; margin: 12px auto; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(24,49,58,.08), 0 8px 20px rgba(24,49,58,.10); }
+.portfolio-allocation__pie::after { content: ""; position: absolute; width: 72px; height: 72px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(24,49,58,.08); }
+.portfolio-allocation__pie > span { position: relative; z-index: 1; display: grid; color: #62767a; font-size: .56rem; text-align: center; }
+.portfolio-allocation__pie > span strong { color: #17313a; font-size: .66rem; }
+.app-shell--dark .portfolio-allocation__pie::after { background: #0f172a; }
+.app-shell--dark .portfolio-allocation__pie > span strong { color: #f8fafc; }
 .thermometer-rail .tax-thermometer-mode-select span,
 .thermometer-rail .tax-thermometer-mode-select__option span {
   display: inline-flex;
