@@ -1237,6 +1237,12 @@
   background: #eff6ff;
   color: #0b63f6;
 }
+.portfolio-allocation__rows { display: grid; gap: 6px; margin-top: 10px; }
+.portfolio-allocation__rows > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 7px 0; border-bottom: 1px solid rgba(24,49,58,.1); }
+.portfolio-allocation__rows span { overflow: hidden; color: #40595f; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.portfolio-allocation__rows strong { color: #17313a; font-size: .68rem; }
+.portfolio-allocation__rows em { grid-column: 2; color: #62767a; font-size: .6rem; font-style: normal; text-align: right; }
+.portfolio-allocation__empty { padding: 14px 4px; color: #62767a; font-size: .68rem; line-height: 1.4; }
 .thermometer-rail .tax-thermometer-mode-select span,
 .thermometer-rail .tax-thermometer-mode-select__option span {
   display: inline-flex;
