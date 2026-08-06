@@ -3610,12 +3610,14 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const allocationTotal = allocationRows.reduce((sum, row) => sum + row.amount, 0);
   const allocationColors = ["#0b63f6", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e", "#06b6d4", "#ec4899"];
   let allocationCursor = 0;
+  const allocationSegments = allocationRows.map((row, index) => {
+    const start = allocationCursor;
+    allocationCursor += allocationTotal > 0 ? row.amount / allocationTotal * 100 : 0;
+    const angle = ((start + allocationCursor) / 2 / 100 * 360 - 90) * Math.PI / 180;
+    return { ...row, index, start, end: allocationCursor, angle, percent: allocationTotal > 0 ? row.amount / allocationTotal : 0 };
+  });
   const allocationGradient = allocationTotal > 0
-    ? `conic-gradient(${allocationRows.map((row, index) => {
-      const start = allocationCursor;
-      allocationCursor += row.amount / allocationTotal * 100;
-      return `${allocationColors[index % allocationColors.length]} ${start}% ${allocationCursor}%`;
-    }).join(", ")})`
+    ? `conic-gradient(${allocationSegments.map((segment) => `${allocationColors[segment.index % allocationColors.length]} ${segment.start}% ${segment.end}%`).join(", ")})`
     : "conic-gradient(#e5e7eb 0 100%)";
   const federalValues: ThermometerValue[] = [
     {
@@ -3714,7 +3716,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
             <div><strong><TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} /></strong><span>Checked asset classes</span></div>
             <div className="tax-thermometer__heading-actions"><button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={() => setIsCollapsed((current) => !current)} aria-expanded={!isCollapsed} aria-label={isCollapsed ? "Show portfolio allocation" : "Hide portfolio allocation"} title={isCollapsed ? "Show portfolio allocation" : "Hide portfolio allocation"}><VisibilityToggleIcon variant={isCollapsed ? "show" : "hide"} /></button></div>
           </div>
-          {!isCollapsed && <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{allocationRows.length ? <><div className="portfolio-allocation__pie" role="img" aria-label={`Portfolio allocation: ${allocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`} style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><div className="portfolio-allocation__rows">{allocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select asset classes on the Asset Classes tab.</div>}</>}
+          {!isCollapsed && <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{allocationRows.length ? <><div className="portfolio-allocation__pie-stage" role="img" aria-label={`Portfolio allocation: ${allocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`}><div className="portfolio-allocation__pie" style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><svg viewBox="0 0 200 200" aria-hidden="true">{allocationSegments.map((segment) => <line key={segment.label} x1={100 + Math.cos(segment.angle) * 57} y1={100 + Math.sin(segment.angle) * 57} x2={100 + Math.cos(segment.angle) * 72} y2={100 + Math.sin(segment.angle) * 72} stroke={allocationColors[segment.index % allocationColors.length]} />)}</svg>{allocationSegments.map((segment) => <span key={segment.label} className="portfolio-allocation__pie-label" style={{ left: `${50 + Math.cos(segment.angle) * 42}%`, top: `${50 + Math.sin(segment.angle) * 42}%`, borderColor: allocationColors[segment.index % allocationColors.length] }} title={`${segment.label}: ${formatCurrencyDetailed(segment.amount)}`}><strong>{segment.label}</strong>{formatPercent(segment.percent)}</span>)}</div><div className="portfolio-allocation__rows">{allocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select asset classes on the Asset Classes tab.</div>}</>}
         </div>
       ) : <TaxThermometer title={<TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} />} titleLabel={selectedThermometer.titleLabel} titleValue={formatCurrencyDetailed(selectedThermometer.total)} subtitle={selectedThermometer.subtitle} taxableIncome={selectedThermometer.taxableIncome} values={selectedThermometer.values} markers={selectedThermometer.markers} stats={selectedThermometer.stats} footerLabel={selectedThermometer.footerLabel} footerValue={selectedThermometer.footerValue} baseRateLabel={selectedThermometer.baseRateLabel} currentRateLabel={selectedThermometer.currentRateLabel} noTaxStamp={selectedThermometer.noTaxStamp} collapsed={isCollapsed} onToggle={() => setIsCollapsed((current) => !current)} />}
     </div>
