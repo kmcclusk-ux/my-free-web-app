@@ -5877,7 +5877,7 @@ export default function App() {
       const categoryKey = normalizeLookupKey(category.name);
       return {
         label: category.name,
-        amount: derivedRows.reduce((sum, row) => sum + (!row.incomeItem && normalizeLookupKey(row.investmentType) === categoryKey ? Math.max(toNumber(row.totalInvestment), 0) : 0), 0),
+        amount: derivedRows.reduce((sum, row) => sum + (normalizeLookupKey(row.investmentType) === categoryKey ? Math.max(row.includedTotal, 0) : 0), 0),
       };
     }), [categories, derivedRows]);
 
