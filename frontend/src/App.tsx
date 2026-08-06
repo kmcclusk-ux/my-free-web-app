@@ -3595,7 +3595,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
 }
 
 function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, filingStatus, stateCode, stateName, allocationRows }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }> }) {
-  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>("combined");
+  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>("allocation");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const totalTax = federalTax + stateTax;
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
