@@ -347,6 +347,7 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "useSymbol", label: "Use asset", defaultWidth: 62, minWidth: 48, group: "debug" },
   { id: "extraData", label: "$", defaultWidth: 48, minWidth: 38, group: "debug" },
 ] as const;
+type InvestmentColumnView = "main" | "debug";
 type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
 type InvestmentColumnWidths = Record<InvestmentColumnId, number>;
 function investmentColumnLabelWidth(label: string) {
@@ -4356,6 +4357,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onAdd, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onAdd: () => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
+  const [columnView, setColumnView] = useState<InvestmentColumnView>("main");
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const filteredAndSortedRows = useMemo(() => {
@@ -4885,7 +4887,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
   const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
     const group = "group" in column ? column.group : undefined;
     if (group === "override") return isWhatIfActive;
-    if (group === "tax" || group === "debug") return false;
+    if (group === "tax") return false;
+    if (group === "debug") return columnView === "debug";
     return true;
   };
   const visibleInvestmentColumns = INVESTMENT_COLUMN_DEFS.filter(isColumnVisible);
@@ -4982,6 +4985,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
           </div>
         )}
         <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
+          <label className="investment-column-view-select">
+            <span>View</span>
+            <select value={columnView} onChange={(event) => setColumnView(event.target.value as InvestmentColumnView)}>
+              <option value="main">Main</option>
+              <option value="debug">Debug</option>
+            </select>
+          </label>
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__label">WhatIf</span>
             <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "Click to close WhatIf columns" : "Click to open WhatIf columns"} title={isWhatIfActive ? "Close WhatIf columns" : "Open WhatIf columns"}><WhatIfStateIcon isOpen={!isWhatIfActive} /></span>
@@ -6369,7 +6379,7 @@ export default function App() {
     <span className="kpi-pill__inline-badge">
       Excluded income
       <span className="kpi-pill__inline-note" role="tooltip">
-        {formatCurrencyDetailed(hiddenFromAfterTaxIncome)} is still included when calculating tax liability, but is excluded from the after-tax income KPI. Change this on the Accounts tab by clearing “Exclude from aftertax income” for the account.
+        {formatCurrencyDetailed(hiddenFromAfterTaxIncome)} is still included when calculating tax liability, but is excluded from the after-tax income calculation. Change this on the Accounts tab by clearing “Exclude from aftertax income” for the account.
       </span>
     </span>
   ) : undefined;
@@ -6383,7 +6393,7 @@ export default function App() {
         <h4>Income math</h4>
         <div><span>Total included income for taxes</span><strong>{formatCurrencyDetailed(flows.totalIncome)}</strong></div>
         <div><span>Excluded from after-tax income display</span><strong>-{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
-        <div><span>Income used for after-tax KPI</span><strong>{formatCurrencyDetailed(flows.displayIncome)}</strong></div>
+        <div><span>Income used for after-tax calculation</span><strong>{formatCurrencyDetailed(flows.displayIncome)}</strong></div>
         <div><span>Total tax burden applied to spendable income</span><strong>-{formatCurrencyDetailed(spendableTaxBurden)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>After-tax income</span><strong>{formatCurrencyDetailed(afterTaxIncome)}</strong></div>
       </div>
@@ -6459,7 +6469,7 @@ export default function App() {
         <div><span>Investment dividends and interest</span><strong>{formatCurrencyDetailed(flows.investmentIncome)}</strong></div>
         <div><span>Non-investment income</span><strong>{formatCurrencyDetailed(flows.nonInvestmentIncome)}</strong></div>
         <div><span>Tax-free income</span><strong>{formatCurrencyDetailed(flows.nonTaxableIncome)}</strong></div>
-        <div><span>Excluded from after-tax KPI</span><strong>{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
+        <div><span>Excluded from after-tax calculation</span><strong>{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Annual income tile value</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
