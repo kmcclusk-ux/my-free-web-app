@@ -5882,7 +5882,7 @@ export default function App() {
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
-  const [isSummaryReportDialogOpen, setIsSummaryReportDialogOpen] = useState(false);
+  const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | null>(null);
   const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
   const [summaryReportName, setSummaryReportName] = useState("");
   const [summaryScenarioName, setSummaryScenarioName] = useState("Current workbook");
@@ -6082,13 +6082,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isSummaryReportDialogOpen) return;
+    if (!summaryReportDialogMode) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsSummaryReportDialogOpen(false);
+      if (event.key === "Escape") setSummaryReportDialogMode(null);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSummaryReportDialogOpen]);
+  }, [summaryReportDialogMode]);
 
   useEffect(() => {
     if (!isTopbarMenuOpen) return;
@@ -7289,7 +7289,7 @@ export default function App() {
       setIsSummaryReportListLoading(false);
     }
   };
-  const openSummaryReportDialog = () => {
+  const openSummaryReportDialog = (mode: "create" | "manage") => {
     setIsTopbarMenuOpen(false);
     setSummaryReportDestination("new");
     setSummaryReportName(`${selectedStateCode} tax scenarios`);
@@ -7299,7 +7299,7 @@ export default function App() {
     setSummaryScenarioDrafts(buildSummaryScenarioDrafts(scenarioLandingPages));
     setSummaryScenarioPendingDeleteKey("");
     setSummaryReportDialogError("");
-    setIsSummaryReportDialogOpen(true);
+    setSummaryReportDialogMode(mode);
     void refreshPublicSummaryReports();
   };
   const renameSummaryReport = async (pageId: string) => {
@@ -7356,7 +7356,7 @@ export default function App() {
     }
     setSummaryScenarioPendingDeleteKey("");
     setSummaryReportDialogError("");
-    window.setTimeout(() => document.getElementById("summary-report-add-current")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    setSummaryReportDialogMode("create");
   };
   const saveManagedScenario = async (pageId: string, scenarioId: string, remove = false) => {
     if (!authToken) {
@@ -7541,7 +7541,7 @@ export default function App() {
         return [{ id: landingPageId, name: saved.report.name, slug: saved.report.slug, createdAt: saved.report.createdAt, updatedAt: saved.report.updatedAt, payload: encodedPayload }, ...current];
       });
       setSummaryReportRenameDrafts((current) => ({ ...current, [landingPageId]: saved.report.name }));
-      setIsSummaryReportDialogOpen(false);
+      setSummaryReportDialogMode(null);
       window.open(saved.publicUrl, "_blank", "noopener,noreferrer");
       try {
         await navigator.clipboard.writeText(saved.publicUrl);
@@ -7606,9 +7606,13 @@ export default function App() {
             <TopbarActionIcon name="theme" />
             <span>{uiSettings.darkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSummaryReportDialog}>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
             <TopbarActionIcon name="report" />
-            <span>Create/Manage Scenario Reports</span>
+            <span>Create Scenario Report</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
+            <TopbarActionIcon name="report" />
+            <span>Manage Scenario Reports</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -8495,24 +8499,28 @@ export default function App() {
           <span className="camera-flash__source" />
         </div>
       )}
-      {isSummaryReportDialogOpen && createPortal(
-        <div className="summary-report-dialog-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsSummaryReportDialogOpen(false); }}>
+      {summaryReportDialogMode && createPortal(
+        <div className="summary-report-dialog-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSummaryReportDialogMode(null); }}>
           <section className="summary-report-dialog" role="dialog" aria-modal="true" aria-labelledby="summary-report-dialog-title">
             <div className="summary-report-dialog__header">
               <div>
                 <p className="eyebrow">Scenario Report</p>
-                <h3 id="summary-report-dialog-title">Create/manage scenario reports</h3>
+                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "manage" ? "Manage scenario reports" : "Create scenario report"}</h3>
               </div>
-              <button className="summary-report-dialog__close" type="button" onClick={() => setIsSummaryReportDialogOpen(false)} aria-label="Close scenario report dialog">×</button>
+              <button className="summary-report-dialog__close" type="button" onClick={() => setSummaryReportDialogMode(null)} aria-label="Close scenario report dialog">×</button>
             </div>
-            <p className="summary-report-dialog__copy">Manage your existing public reports, or save the current workbook summary as a scenario on a new or existing landing page.</p>
+            <p className="summary-report-dialog__copy">{summaryReportDialogMode === "manage"
+              ? "Edit your saved scenarios and manage the names and public links for existing reports."
+              : "Save the current workbook summary as a scenario on a new or existing public report."}</p>
+            {summaryReportDialogMode === "manage" ? (
+              <>
             <section className="summary-report-dialog__scenarios" aria-labelledby="summary-scenario-management-title">
               <div className="summary-report-dialog__management-heading">
                 <div>
                   <span>Existing scenarios</span>
                   <strong id="summary-scenario-management-title">{managedScenarioCount} saved {managedScenarioCount === 1 ? "scenario" : "scenarios"}</strong>
                 </div>
-                <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => prepareCurrentScenarioForReport()}>New report</button>
+                <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => prepareCurrentScenarioForReport()}>Create report</button>
               </div>
               {isSummaryReportListLoading && summaryLandingPageOptions.length === 0 ? (
                 <p className="summary-report-dialog__empty">Loading saved scenarios…</p>
@@ -8527,7 +8535,7 @@ export default function App() {
                           <strong>{page.name}</strong>
                           <small>{payload.scenarios.length} of {SCENARIOS_PER_LANDING_PAGE_LIMIT} scenarios</small>
                         </div>
-                        <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId) || payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT} onClick={() => prepareCurrentScenarioForReport(page.id)} title={payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT ? "This report has reached its scenario limit." : "Add the current workbook summary to this report"}>Add current</button>
+                        <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId) || payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT} onClick={() => prepareCurrentScenarioForReport(page.id)} title={payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT ? "This report has reached its scenario limit." : "Add the current workbook summary to this report"}>Add scenario</button>
                       </div>
                       <div className="summary-report-dialog__scenario-rows">
                         {payload.scenarios.map((scenario, index) => {
@@ -8589,6 +8597,13 @@ export default function App() {
                 </div>
               )}
             </section>
+            {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
+            <div className="summary-report-dialog__actions">
+              <button className="primary-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Done</button>
+            </div>
+              </>
+            ) : (
+              <>
             <div className="summary-report-dialog__section-heading" id="summary-report-add-current">
               <span>Add current summary</span>
               <small>The current workbook values become one scenario.</small>
@@ -8632,9 +8647,11 @@ export default function App() {
             </label>
             {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
             <div className="summary-report-dialog__actions">
-              <button className="ghost-button" type="button" onClick={() => setIsSummaryReportDialogOpen(false)}>Cancel</button>
+              <button className="ghost-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Cancel</button>
               <button className="primary-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void createSummaryReport(); }}>{summaryReportBusyId === "create" ? "Publishing…" : summaryReportDestination === "existing" ? "Add scenario" : "Create page and add"}</button>
             </div>
+              </>
+            )}
           </section>
         </div>,
         document.body
