@@ -129,7 +129,7 @@ type IncomePrimaryPeriod = "monthly" | "annual";
 type UiSettings = ModelUiSnapshot & { savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
-type AuthUser = { sub: string; email?: string; name?: string };
+type AuthUser = { sub: string; email?: string; name?: string; username?: string };
 type AuthState =
   | { status: "loading"; user: null; tokens: null; error?: string }
   | { status: "signedOut"; user: null; tokens: null; error?: string }
@@ -612,17 +612,50 @@ function normalizePublicReportSlug(value: unknown) {
     .replace(/-+$/g, "");
 }
 
+function publicUsernameForUser(user: AuthUser | null) {
+  const emailUsername = user?.email?.split("@")[0];
+  return normalizePublicReportSlug(user?.username || user?.name || emailUsername || user?.sub.slice(0, 12) || "user").slice(0, 32) || "user";
+}
+
+function namespacedPublicReportSlug(username: string, scenarioSlug: string) {
+  const cleanUsername = normalizePublicReportSlug(username).slice(0, 32);
+  const cleanScenario = normalizePublicReportSlug(scenarioSlug).slice(0, Math.max(1, 79 - cleanUsername.length));
+  return cleanUsername && cleanScenario ? `${cleanUsername}-${cleanScenario}` : "";
+}
+
 function readPublicReportSlugFromUrl() {
   if (typeof window === "undefined") return "";
   const segments = window.location.pathname.split("/").filter(Boolean);
+  if (segments.length === 2) {
+    const username = normalizePublicReportSlug(decodeURIComponent(segments[0]));
+    const scenario = normalizePublicReportSlug(decodeURIComponent(segments[1]));
+    if (!username || !scenario || RESERVED_PUBLIC_REPORT_SLUGS.has(username)) return "";
+    return namespacedPublicReportSlug(username, scenario);
+  }
   if (segments.length !== 1) return "";
   const decoded = decodeURIComponent(segments[0]).toLowerCase();
   const slug = normalizePublicReportSlug(decoded);
   return slug === decoded && !RESERVED_PUBLIC_REPORT_SLUGS.has(slug) ? slug : "";
 }
 
-function buildPublicSummaryReportUrl(slug: string) {
-  return `${PUBLIC_SITE_ORIGIN}/${encodeURIComponent(slug)}`;
+function readLegacyPublicReportSlugFromUrl() {
+  if (typeof window === "undefined") return "";
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  if (segments.length !== 2) return "";
+  return normalizePublicReportSlug(decodeURIComponent(segments[1]));
+}
+
+function readPublicReportUsernameFromUrl() {
+  if (typeof window === "undefined") return "";
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  return segments.length === 2 ? normalizePublicReportSlug(decodeURIComponent(segments[0])).slice(0, 32) : "";
+}
+
+function buildPublicSummaryReportUrl(slug: string, username: string) {
+  const cleanUsername = normalizePublicReportSlug(username).slice(0, 32);
+  const namespacePrefix = `${cleanUsername}-`;
+  const scenarioSlug = slug.startsWith(namespacePrefix) ? slug.slice(namespacePrefix.length) : slug;
+  return `${PUBLIC_SITE_ORIGIN}/${encodeURIComponent(cleanUsername)}/${encodeURIComponent(scenarioSlug)}`;
 }
 
 function authUserFromIdToken(idToken: string): AuthUser {
@@ -631,6 +664,9 @@ function authUserFromIdToken(idToken: string): AuthUser {
     sub: String(payload.sub || ""),
     email: typeof payload.email === "string" ? payload.email : undefined,
     name: typeof payload.name === "string" ? payload.name : undefined,
+    username: typeof payload["cognito:username"] === "string"
+      ? payload["cognito:username"]
+      : typeof payload.preferred_username === "string" ? payload.preferred_username : undefined,
   };
 }
 
@@ -2401,7 +2437,7 @@ async function getPublicSummaryReport(slug: string) {
   return json.report;
 }
 
-async function upsertPublicSummaryReport(report: { id: string; name: string; slug: string; previousSlug?: string; payload: SummaryReportPayload }, idToken?: string) {
+async function upsertPublicSummaryReport(report: { id: string; name: string; slug: string; previousSlug?: string; payload: SummaryReportPayload }, idToken: string | undefined, publicUsername: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, {
     method: "POST",
@@ -2410,7 +2446,7 @@ async function upsertPublicSummaryReport(report: { id: string; name: string; slu
   });
   const json = (await response.json()) as { report?: PublicSummaryReportRecord; publicUrl?: string; error?: string };
   if (!response.ok || !json.report) throw new Error(json.error || "Public report could not be saved.");
-  return { report: json.report, publicUrl: json.publicUrl || buildPublicSummaryReportUrl(json.report.slug) };
+  return { report: json.report, publicUrl: buildPublicSummaryReportUrl(json.report.slug, publicUsername) };
 }
 
 async function listPublicSummaryReports(idToken?: string) {
@@ -5945,6 +5981,7 @@ export default function App() {
   const isApplyingHistory = useRef(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
+  const publicUsername = publicUsernameForUser(authState.status === "signedIn" ? authState.user : null);
   const requiresSignIn = authEnabled && authState.status !== "signedIn";
   const closeTaxSummary = useCallback(() => setTaxSummaryKind(null), []);
   const currentHistorySnapshot = useMemo<PortfolioHistorySnapshot>(() => ({
@@ -6062,13 +6099,16 @@ export default function App() {
       setSummaryReportPayload(null);
       setPublicReportLoadState("loading");
       setPublicReportLoadError("");
+      const legacySlug = readLegacyPublicReportSlugFromUrl();
       getPublicSummaryReport(slug)
+        .catch((error) => legacySlug && legacySlug !== slug ? getPublicSummaryReport(legacySlug) : Promise.reject(error))
         .then((report) => {
           if (currentRequest !== requestVersion) return;
           const validatedPayload = decodeSummaryReportPayload(encodeSummaryReportPayload(report.payload));
           if (!validatedPayload) throw new Error("The public report data is invalid.");
-          if (report.slug !== slug) {
-            window.history.replaceState({}, document.title, `/${report.slug}`);
+          if (report.slug !== slug && report.slug !== legacySlug) {
+            const routeUsername = readPublicReportUsernameFromUrl();
+            window.history.replaceState({}, document.title, routeUsername ? new URL(buildPublicSummaryReportUrl(report.slug, routeUsername)).pathname : `/${report.slug}`);
           }
           setSummaryReportPayload(validatedPayload);
           setPublicReportLoadState("idle");
@@ -7369,8 +7409,9 @@ export default function App() {
       setSummaryReportDialogError("A scenario report with this name already exists.");
       return;
     }
-    const slug = normalizePublicReportSlug(name);
-    if (!slug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
+    const scenarioSlug = normalizePublicReportSlug(name);
+    const slug = namespacedPublicReportSlug(publicUsername, scenarioSlug);
+    if (!slug || RESERVED_PUBLIC_REPORT_SLUGS.has(scenarioSlug)) {
       setSummaryReportDialogError("Choose a report name that creates a valid public URL.");
       return;
     }
@@ -7378,7 +7419,7 @@ export default function App() {
     setSummaryReportBusyId(pageId);
     setSummaryReportDialogError("");
     try {
-      const saved = await upsertPublicSummaryReport({ id: pageId, name, slug, previousSlug: entry.page.slug, payload: renamedPayload }, authToken);
+      const saved = await upsertPublicSummaryReport({ id: pageId, name, slug, previousSlug: entry.page.slug, payload: renamedPayload }, authToken, publicUsername);
       const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
       setScenarioLandingPages((current) => current.map((page) => page.id === pageId
         ? { ...page, name: saved.report.name, slug: saved.report.slug, updatedAt: saved.report.updatedAt, payload: encodedPayload }
@@ -7516,7 +7557,8 @@ export default function App() {
         return;
       }
       reportName = existingEntry.page.name;
-      reportSlug = existingEntry.page.slug || normalizePublicReportSlug(existingEntry.page.name);
+      const existingScenarioSlug = normalizePublicReportSlug(existingEntry.page.name);
+      reportSlug = namespacedPublicReportSlug(publicUsername, existingScenarioSlug);
       previousSlug = existingEntry.page.slug;
     } else {
       if (!reportName) {
@@ -7532,9 +7574,9 @@ export default function App() {
         return;
       }
       landingPageId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `scenario-page-${Date.now()}`;
-      reportSlug = normalizePublicReportSlug(reportName);
+      reportSlug = namespacedPublicReportSlug(publicUsername, reportName);
     }
-    if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
+    if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(normalizePublicReportSlug(reportName))) {
       setSummaryReportDialogError("Choose a landing page name that creates a valid public URL.");
       return;
     }
@@ -7560,7 +7602,7 @@ export default function App() {
     setSummaryReportBusyId("publish");
     setSummaryReportDialogError("");
     try {
-      const saved = await upsertPublicSummaryReport({ id: landingPageId, name: reportName, slug: reportSlug, previousSlug, payload: reportPayload }, authToken);
+      const saved = await upsertPublicSummaryReport({ id: landingPageId, name: reportName, slug: reportSlug, previousSlug, payload: reportPayload }, authToken, publicUsername);
       const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
       setScenarioLandingPages((current) => {
         if (summaryReportDestination === "existing") {
@@ -8678,7 +8720,7 @@ export default function App() {
                   <label className="summary-report-dialog__field">
                     <span>Landing page name</span>
                     <input value={summaryReportName} maxLength={80} onChange={(event) => { setSummaryReportName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: 2025 income scenarios" />
-                    <small className="summary-report-dialog__url-preview">Public URL: {PUBLIC_SITE_ORIGIN}/{normalizePublicReportSlug(summaryReportName) || "report-name"}</small>
+                    <small className="summary-report-dialog__url-preview">Public URL: {PUBLIC_SITE_ORIGIN}/{publicUsername}/{normalizePublicReportSlug(summaryReportName) || "scenario"}</small>
                   </label>
                 ) : (
                   <label className="summary-report-dialog__field">
@@ -8704,12 +8746,12 @@ export default function App() {
                       {summaryLandingPageOptions.map(({ page, payload }) => {
                         const draftName = summaryReportRenameDrafts[page.id] ?? page.name;
                         const draftSlug = normalizePublicReportSlug(draftName);
-                        const publicUrl = page.slug ? buildPublicSummaryReportUrl(page.slug) : "";
+                        const publicUrl = page.slug ? buildPublicSummaryReportUrl(page.slug, publicUsername) : "";
                         return (
                           <div className="summary-report-dialog__report-row" key={page.id}>
                             <div className="summary-report-dialog__report-name">
                               <input aria-label={`Landing page name for ${page.name}`} value={draftName} maxLength={80} onChange={(event) => { const value = event.target.value; setSummaryReportRenameDrafts((current) => ({ ...current, [page.id]: value })); setSummaryReportDialogError(""); }} />
-                              <small>{page.slug ? publicUrl : `${PUBLIC_SITE_ORIGIN}/${draftSlug || "report-name"}`} · {payload.scenarios.length} published {payload.scenarios.length === 1 ? "scenario" : "scenarios"}</small>
+                              <small>{page.slug ? publicUrl : `${PUBLIC_SITE_ORIGIN}/${publicUsername}/${draftSlug || "scenario"}`} · {payload.scenarios.length} published {payload.scenarios.length === 1 ? "scenario" : "scenarios"}</small>
                             </div>
                             <div className="summary-report-dialog__report-actions">
                               {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
