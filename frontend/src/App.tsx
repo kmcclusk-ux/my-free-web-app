@@ -254,6 +254,33 @@ type WorkbookResponse = {
 };
 
 type PortfolioHistorySnapshot = ModelDataSnapshot;
+type SummaryReportPayload = {
+  generatedAt: string;
+  income: number;
+  investments: number;
+  afterTaxIncome: number;
+  marginalTaxRate: number;
+  marginalTaxRateLabel: string;
+  effectiveTaxRate: number;
+  federalTax: number;
+  stateTax: number;
+  localTax: number;
+  totalTax: number;
+  stateCode: string;
+  stateName: string;
+  localityName: string;
+  federalTaxable: number;
+  stateTaxable: number;
+  localTaxable: number;
+  filingStatus: FilingStatus;
+  localEffectiveRate: number;
+  localMarginalRate: number;
+  localBrackets: LocalTaxBracket[];
+  allocationRows: Array<{ label: string; amount: number }>;
+  accountTaxAllocationRows: Array<{ label: string; amount: number }>;
+  accountTypeAllocationRows: Array<{ label: string; amount: number }>;
+  taxTreatmentAllocationRows: Array<{ label: string; amount: number }>;
+};
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const API_BASE_URL = typeof window !== "undefined" &&
@@ -348,6 +375,7 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "extraData", label: "$", defaultWidth: 48, minWidth: 38, group: "debug" },
 ] as const;
 type InvestmentColumnView = "main" | "debug";
+type TaxSummaryKind = "federal" | "state" | "local";
 type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
 type InvestmentColumnWidths = Record<InvestmentColumnId, number>;
 function investmentColumnLabelWidth(label: string) {
@@ -401,6 +429,85 @@ function decodeJwtPayload<T extends Record<string, unknown>>(token: string): T {
   const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
   return JSON.parse(window.atob(padded)) as T;
+}
+
+function encodeUtf8Base64Url(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeUtf8Base64Url(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = window.atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function encodeSummaryReportPayload(payload: SummaryReportPayload) {
+  return encodeUtf8Base64Url(JSON.stringify(payload));
+}
+
+function decodeSummaryReportPayload(value: string): SummaryReportPayload | null {
+  try {
+    const parsed = JSON.parse(decodeUtf8Base64Url(value)) as Partial<SummaryReportPayload>;
+    if (
+      typeof parsed.income !== "number" ||
+      typeof parsed.investments !== "number" ||
+      typeof parsed.afterTaxIncome !== "number" ||
+      typeof parsed.marginalTaxRate !== "number" ||
+      typeof parsed.effectiveTaxRate !== "number" ||
+      typeof parsed.federalTax !== "number" ||
+      typeof parsed.stateTax !== "number" ||
+      typeof parsed.localTax !== "number" ||
+      typeof parsed.totalTax !== "number"
+    ) {
+      return null;
+    }
+    return {
+      generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : new Date().toISOString(),
+      income: parsed.income,
+      investments: parsed.investments,
+      afterTaxIncome: parsed.afterTaxIncome,
+      marginalTaxRate: parsed.marginalTaxRate,
+      marginalTaxRateLabel: typeof parsed.marginalTaxRateLabel === "string" ? parsed.marginalTaxRateLabel : formatPercent(parsed.marginalTaxRate),
+      effectiveTaxRate: parsed.effectiveTaxRate,
+      federalTax: parsed.federalTax,
+      stateTax: parsed.stateTax,
+      localTax: parsed.localTax,
+      totalTax: parsed.totalTax,
+      stateCode: typeof parsed.stateCode === "string" ? parsed.stateCode : "US",
+      stateName: typeof parsed.stateName === "string" ? parsed.stateName : "State",
+      localityName: typeof parsed.localityName === "string" ? parsed.localityName : "Local tax",
+      federalTaxable: typeof parsed.federalTaxable === "number" ? parsed.federalTaxable : 0,
+      stateTaxable: typeof parsed.stateTaxable === "number" ? parsed.stateTaxable : 0,
+      localTaxable: typeof parsed.localTaxable === "number" ? parsed.localTaxable : 0,
+      filingStatus: parsed.filingStatus === "single" || parsed.filingStatus === "mfj" || parsed.filingStatus === "mfs" || parsed.filingStatus === "hoh" ? parsed.filingStatus : "mfj",
+      localEffectiveRate: typeof parsed.localEffectiveRate === "number" ? parsed.localEffectiveRate : 0,
+      localMarginalRate: typeof parsed.localMarginalRate === "number" ? parsed.localMarginalRate : 0,
+      localBrackets: Array.isArray(parsed.localBrackets) ? parsed.localBrackets.filter((row): row is LocalTaxBracket => row && typeof row.threshold === "number" && typeof row.rate === "number") : [],
+      allocationRows: Array.isArray(parsed.allocationRows) ? parsed.allocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
+      accountTaxAllocationRows: Array.isArray(parsed.accountTaxAllocationRows) ? parsed.accountTaxAllocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
+      accountTypeAllocationRows: Array.isArray(parsed.accountTypeAllocationRows) ? parsed.accountTypeAllocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
+      taxTreatmentAllocationRows: Array.isArray(parsed.taxTreatmentAllocationRows) ? parsed.taxTreatmentAllocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readSummaryReportFromUrl() {
+  if (typeof window === "undefined") return null;
+  const summaryReport = new URLSearchParams(window.location.search).get("summaryReport");
+  return summaryReport ? decodeSummaryReportPayload(summaryReport) : null;
+}
+
+function buildSummaryReportUrl(payload: SummaryReportPayload) {
+  const url = new URL("/", window.location.href);
+  url.searchParams.set("summaryReport", encodeSummaryReportPayload(payload));
+  return url.toString();
 }
 
 function authUserFromIdToken(idToken: string): AuthUser {
@@ -821,11 +928,13 @@ const federalDeductionTypes = ["Mortgage interest", "Property tax", "Investment 
 const stateDeductionTypes = ["Mortgage interest", "Property tax", "Investment loss (Long Term)", "Investment loss (Short Term)", "Charitable contributions", "Medical expenses", "State-specific deduction", "Other itemized deduction"];
 const blankDeductionType = "";
 const federalDeductionLimitNotes: Record<string, string> = {
-  "Mortgage interest": "Mortgage interest has IRS limits based on loan date, debt amount, and qualified residence rules.",
-  "Property tax": "Property tax is part of the SALT deduction, which is capped together with state/local income taxes.",
+  "Mortgage interest": "The entered amount is used; qualified-residence, acquisition-debt, loan-date, and tracing limits are not automatically calculated.",
+  "Property tax": "Included with state income tax in the modeled SALT cap rather than deducted a second time.",
   "Investment loss (Long Term)": "Capital losses are generally limited to a $3,000 annual net capital loss deduction; unused losses carry forward.",
   "Investment loss (Short Term)": "Capital losses are generally limited to a $3,000 annual net capital loss deduction; unused losses carry forward.",
-  "Medical expenses": "Medical expenses are only deductible above the IRS AGI threshold and may be limited.",
+  "Charitable contributions": "The entered amount is used; AGI percentage limits, qualified-organization rules, and carryforwards are not automatically calculated.",
+  "Medical expenses": "The entered amount is used; enter only the eligible amount above the applicable AGI floor.",
+  "Other itemized deduction": "Eligibility, substantiation, and category-specific limits are not automatically validated.",
 };
 const federalAboveLineDeductionTypes = ["Capital loss deduction", "IRA contribution", "HSA contribution", "Student loan interest", "Self-employed health insurance", "Educator expenses", "Other adjustment"];
 const federalAboveLineDeductionLimitNotes: Record<string, string> = {
@@ -835,6 +944,7 @@ const federalAboveLineDeductionLimitNotes: Record<string, string> = {
   "Student loan interest": "Student loan interest deductions are capped and phase out at higher income levels.",
   "Self-employed health insurance": "Self-employed health insurance deductions are limited by business profit and eligibility for other coverage.",
   "Educator expenses": "Educator expense deductions are capped annually and require qualifying educator expenses.",
+  "Other adjustment": "Eligibility, phaseouts, and category-specific limits are not automatically validated.",
 };
 const localTaxBaseLabels: Record<LocalTaxBaseKey, string> = {
   wages: "Wages / salary",
@@ -848,6 +958,12 @@ const localTaxBaseLabels: Record<LocalTaxBaseKey, string> = {
   socialSecurity: "Social Security",
 };
 const localTaxBaseKeys = Object.keys(localTaxBaseLabels) as LocalTaxBaseKey[];
+const filingStatusLabels: Record<FilingStatus, string> = {
+  single: "Single",
+  mfj: "Married filing jointly",
+  mfs: "Married filing separately",
+  hoh: "Head of household",
+};
 const createEmptyLocalTaxBaseAmounts = () => localTaxBaseKeys.reduce((base, key) => ({ ...base, [key]: 0 }), {} as Record<LocalTaxBaseKey, number>);
 const noLocalTaxBase = (): LocalTaxBaseSelection => ({
   wages: false,
@@ -2489,6 +2605,77 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
+function TaxSummaryRow({ label, value, note, emphasis = false, status }: { label: string; value: string; note?: string; emphasis?: boolean; status?: string }) {
+  return (
+    <div className={`tax-summary-row ${emphasis ? "tax-summary-row--emphasis" : ""}`.trim()}>
+      <div className="tax-summary-row__label">
+        <span>{label}</span>
+        {status && <small>{status}</small>}
+        {note && <p>{note}</p>}
+      </div>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function TaxSummarySection({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <section className="tax-summary-section">
+      <div className="tax-summary-section__heading">
+        <h3>{title}</h3>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
+      <div className="tax-summary-section__rows">{children}</div>
+    </section>
+  );
+}
+
+function TaxSummaryModal({ eyebrow, title, subtitle, totalLabel, totalValue, totalDetail, onClose, children }: { eyebrow: string; title: string; subtitle: string; totalLabel: string; totalValue: string; totalDetail: string; onClose: () => void; children: React.ReactNode }) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="tax-summary-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="tax-summary-modal" role="dialog" aria-modal="true" aria-labelledby="tax-summary-title" aria-describedby="tax-summary-subtitle">
+        <header className="tax-summary-modal__header">
+          <div>
+            <p className="tax-summary-modal__eyebrow">{eyebrow}</p>
+            <h2 id="tax-summary-title">{title}</h2>
+            <p id="tax-summary-subtitle">{subtitle}</p>
+          </div>
+          <button ref={closeButtonRef} className="tax-summary-modal__close" type="button" onClick={onClose} aria-label="Close tax summary">×</button>
+        </header>
+        <div className="tax-summary-modal__total">
+          <div>
+            <span>{totalLabel}</span>
+            <strong>{totalValue}</strong>
+          </div>
+          <p>{totalDetail}</p>
+        </div>
+        <div className="tax-summary-modal__body">{children}</div>
+        <footer className="tax-summary-modal__footer">
+          <p>Planning estimate only. Review current law, eligibility, phaseouts, credits, carryforwards, and jurisdiction-specific rules before filing.</p>
+          <button className="primary-button primary-button--compact" type="button" onClick={onClose}>Done</button>
+        </footer>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 function CurrencyInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   const [draftValue, setDraftValue] = useState(formatCurrencyInput(value));
 
@@ -3279,7 +3466,7 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | 
   );
 }
 
-function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" }) {
+function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" | "report" }) {
   if (name === "menu") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3313,6 +3500,17 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M15.5 3.5a7.5 7.5 0 1 0 5 9.4 6 6 0 0 1-7.4-7.4 7.6 7.6 0 0 1 2.4-2z" />
+      </svg>
+    );
+  }
+
+  if (name === "report") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M6 4.5h9l3 3v12H6z" />
+        <path d="M15 4.5v4h4" />
+        <path d="M9 12h6" />
+        <path d="M9 16h6" />
       </svg>
     );
   }
@@ -3607,8 +3805,8 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   );
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }> }) {
-  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>("allocation");
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows, initialMode = "allocation" }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }>; initialMode?: TaxThermometerMode }) {
+  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>(initialMode);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const totalTax = federalTax + stateTax + (localEnabled ? localTax : 0);
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
@@ -5405,6 +5603,128 @@ function AppSplash({ message }: { message: string }) {
     </div>
   );
 }
+
+function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload }) {
+  const totalTaxShare = payload.income > 0 ? payload.totalTax / payload.income : 0;
+  const takeHomeRate = payload.income > 0 ? payload.afterTaxIncome / payload.income : 0;
+  const taxBreakdown = [
+    { label: "Federal income tax", value: payload.federalTax },
+    { label: `${payload.stateCode} state tax`, value: payload.stateTax },
+    { label: payload.localityName || "Local tax", value: payload.localTax },
+  ].filter((item) => item.value > 0.005);
+
+  return (
+    <div className="summary-report-page">
+      <div className="summary-report-page__hero">
+        <div className="summary-report-page__masthead">
+          <AfterTaxUSLogo />
+          <a className="summary-report-page__cta" href={new URL("/", window.location.href).toString()}>Open AfterTax US</a>
+        </div>
+        <p className="summary-report-page__eyebrow">Standalone summary report</p>
+        <h1>At {formatCurrency(payload.income)} of income, taxes usually feel bigger than people expect.</h1>
+        <div className="summary-report-page__income">{formatCurrency(payload.income)} annual income</div>
+        <p className="summary-report-page__lede">
+          This shareable snapshot highlights the tax drag, not the line-item detail. It is designed to spark curiosity about what AfterTax US can uncover in a full model.
+        </p>
+      </div>
+
+      <section className="summary-report-grid" aria-label="Summary metrics">
+        <article className="summary-report-card summary-report-card--highlight">
+          <span>Total tax burden</span>
+          <strong>{formatCurrencyDetailed(payload.totalTax)}</strong>
+          <em>{formatPercent(totalTaxShare)} of visible income</em>
+        </article>
+        <article className="summary-report-card">
+          <span>After-tax income</span>
+          <strong>{formatCurrencyDetailed(payload.afterTaxIncome)}</strong>
+          <em>{formatPercent(takeHomeRate)} kept after tax</em>
+        </article>
+        <article className="summary-report-card">
+          <span>Marginal tax rate</span>
+          <strong>{payload.marginalTaxRateLabel}</strong>
+          <em>What the next dollar can face</em>
+        </article>
+        <article className="summary-report-card">
+          <span>Total investments</span>
+          <strong>{formatCurrencyDetailed(payload.investments)}</strong>
+          <em>Current invested base</em>
+        </article>
+      </section>
+
+      <section className="summary-report-breakdown">
+        <div className="summary-report-breakdown__copy">
+          <p className="summary-report-page__eyebrow">Tax breakdown</p>
+          <h2>Where the money goes</h2>
+          <p>
+            Most people think in salary. This view reframes the same year in taxes removed: federal first, then state, then local drag layered on top.
+          </p>
+        </div>
+        <div className="summary-report-breakdown__list">
+          {taxBreakdown.map((item) => (
+            <div className="summary-report-breakdown__row" key={item.label}>
+              <span>{item.label}</span>
+              <strong>{formatCurrencyDetailed(item.value)}</strong>
+            </div>
+          ))}
+          <div className="summary-report-breakdown__row summary-report-breakdown__row--total">
+            <span>Total removed by income taxes</span>
+            <strong>{formatCurrencyDetailed(payload.totalTax)}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="summary-report-thermometer">
+        <div className="summary-report-breakdown__copy">
+          <p className="summary-report-page__eyebrow">Tax thermometer</p>
+          <h2>See the full stack of taxes together</h2>
+          <p>
+            This keeps the standalone report high level, but still shows where the current income sits across the combined federal, state, NIIT, and local thresholds.
+          </p>
+        </div>
+        <TaxThermometerPanel
+          federalTaxable={payload.federalTaxable}
+          stateTaxable={payload.stateTaxable}
+          federalTax={payload.federalTax}
+          stateTax={payload.stateTax}
+          localTaxable={payload.localTaxable}
+          localTax={payload.localTax}
+          localName={payload.localityName}
+          localEnabled={payload.localTax > 0 || payload.localMarginalRate > 0}
+          localEffectiveRate={payload.localEffectiveRate}
+          localMarginalRate={payload.localMarginalRate}
+          localBrackets={payload.localBrackets}
+          filingStatus={payload.filingStatus}
+          stateCode={payload.stateCode}
+          stateName={payload.stateName}
+          allocationRows={payload.allocationRows}
+          accountTaxAllocationRows={payload.accountTaxAllocationRows}
+          accountTypeAllocationRows={payload.accountTypeAllocationRows}
+          taxTreatmentAllocationRows={payload.taxTreatmentAllocationRows}
+          initialMode="combined"
+        />
+      </section>
+
+      <section className="summary-report-story">
+        <article className="summary-report-story__panel">
+          <p className="summary-report-page__eyebrow">What surprises people</p>
+          <h2>Your effective rate and marginal rate tell different stories.</h2>
+          <p>
+            Effective rate: <strong>{formatPercent(payload.effectiveTaxRate)}</strong>. Marginal rate: <strong>{payload.marginalTaxRateLabel}</strong>.
+            That gap is exactly why planning decisions can feel unintuitive without a dedicated after-tax view.
+          </p>
+        </article>
+        <article className="summary-report-story__panel">
+          <p className="summary-report-page__eyebrow">Why AfterTax US</p>
+          <h2>Go deeper when you are ready.</h2>
+          <p>
+            The full workspace layers in account types, ticker-level yields, federal/state/local tax treatment, and scenario planning so you can see what actually changes spendable income.
+          </p>
+        </article>
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const authEnabled = isCognitoEnabled();
   const [authState, setAuthState] = useState<AuthState>(readStoredAuth);
@@ -5419,6 +5739,7 @@ export default function App() {
   const [isWhatIfActive, setIsWhatIfActive] = useState(false);
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
+  const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState<InvestmentRow[]>(() => authEnabled ? [] : initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
@@ -5445,6 +5766,7 @@ export default function App() {
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
+  const [summaryReportPayload, setSummaryReportPayload] = useState<SummaryReportPayload | null>(readSummaryReportFromUrl);
   const [versionDialogMode, setVersionDialogMode] = useState<"save" | "restore" | null>(null);
   const [versionName, setVersionName] = useState("");
   const [versionDialogError, setVersionDialogError] = useState("");
@@ -5465,6 +5787,7 @@ export default function App() {
   const [historyVersion, setHistoryVersion] = useState(0);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
   const requiresSignIn = authEnabled && authState.status !== "signedIn";
+  const closeTaxSummary = useCallback(() => setTaxSummaryKind(null), []);
   const currentHistorySnapshot = useMemo<PortfolioHistorySnapshot>(() => ({
     investments,
     tickers,
@@ -5555,6 +5878,12 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, [authEnabled]);
+
+  useEffect(() => {
+    const syncSummaryReport = () => setSummaryReportPayload(readSummaryReportFromUrl());
+    window.addEventListener("popstate", syncSummaryReport);
+    return () => window.removeEventListener("popstate", syncSummaryReport);
+  }, []);
 
   useEffect(() => {
     if (!isTopbarMenuOpen) return;
@@ -6352,6 +6681,19 @@ export default function App() {
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
   const selectedLocalTaxProfile = getLocalTaxProfile(localTaxSettings.localityId);
+  const selectedStateBrackets = federalSettings.filingStatus === "mfj"
+    ? selectedStateTaxProfile.mfj
+    : federalSettings.filingStatus === "mfs"
+      ? selectedStateTaxProfile.mfs ?? selectedStateTaxProfile.single
+      : federalSettings.filingStatus === "hoh"
+        ? selectedStateTaxProfile.hoh ?? selectedStateTaxProfile.single
+        : selectedStateTaxProfile.single;
+  const federalSummaryAboveLineItems = federalSettings.aboveLineDeductionItems.filter((item) => item.deductionType);
+  const federalSummaryItemizedItems = federalSettings.deductionItems.filter((item) => item.deductionType);
+  const stateSummaryDeductionItems = stateSettings.deductionItems.filter((item) => item.deductionType);
+  const federalSaltEntered = federalDeductionSummary.propertyTax + displayedStateResult.tax;
+  const federalSaltOverCap = Math.max(federalSaltEntered - federalSettings.saltCap, 0);
+  const localSummaryName = localTaxSettings.localityName || selectedLocalTaxProfile.locality || "Local tax";
   const showLocalTaxBasePanel = localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none";
   const updateLocalTaxProfile = (localityId: string) => {
     const profile = getLocalTaxProfile(localityId);
@@ -6684,6 +7026,44 @@ export default function App() {
     setUiSettings((current) => ({ ...current, darkMode: !current.darkMode }));
     setIsTopbarMenuOpen(false);
   };
+  const currentSummaryReportPayload: SummaryReportPayload = {
+    generatedAt: new Date().toISOString(),
+    income: flows.displayIncome,
+    investments: flows.totalInvestmentAmount,
+    afterTaxIncome,
+    marginalTaxRate: marginalCombinedRate,
+    marginalTaxRateLabel: marginalCombinedRateLabel,
+    effectiveTaxRate: flows.displayIncome > 0 ? totalTax / flows.displayIncome : 0,
+    federalTax: federalTaxWithPayroll,
+    stateTax: stateTaxWithPayroll,
+    localTax: localTaxTotal,
+    totalTax,
+    stateCode: selectedStateCode,
+    stateName: selectedStateName,
+    localityName: localTaxSettings.enabled ? (localTaxSettings.localityName || localTaxResult.profile.locality || "Local tax") : "Local tax",
+    federalTaxable: federalTaxableAfterDeductions,
+    stateTaxable: stateTaxableAfterDeductions,
+    localTaxable: localTaxableIncome,
+    filingStatus: federalSettings.filingStatus,
+    localEffectiveRate: localTaxResult.effectiveRate,
+    localMarginalRate: localTaxResult.marginalRate,
+    localBrackets: selectedLocalTaxProfile.brackets || [],
+    allocationRows: portfolioAllocationRows,
+    accountTaxAllocationRows,
+    accountTypeAllocationRows,
+    taxTreatmentAllocationRows,
+  };
+  const openSummaryReport = async () => {
+    setIsTopbarMenuOpen(false);
+    const summaryReportUrl = buildSummaryReportUrl(currentSummaryReportPayload);
+    window.open(summaryReportUrl, "_blank", "noopener,noreferrer");
+    try {
+      await navigator.clipboard.writeText(summaryReportUrl);
+      setMcpTokenMessage("Summary report opened and link copied.");
+    } catch {
+      setMcpTokenMessage("Summary report opened.");
+    }
+  };
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
       <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
@@ -6734,6 +7114,10 @@ export default function App() {
           <button className="topbar-menu__item" type="button" role="menuitemcheckbox" aria-checked={uiSettings.darkMode} onClick={toggleDarkMode}>
             <TopbarActionIcon name="theme" />
             <span>{uiSettings.darkMode ? "Light Mode" : "Dark Mode"}</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { void openSummaryReport(); }}>
+            <TopbarActionIcon name="report" />
+            <span>Create Summary Report</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -7597,7 +7981,9 @@ export default function App() {
     return <AppSplash message={splashMessage} />;
   }
 
-  return (
+  return summaryReportPayload ? (
+    <SummaryReportStandalone payload={summaryReportPayload} />
+  ) : (
     <div className={`app-shell ${uiSettings.darkMode ? "app-shell--dark" : ""}`}>
       {isCameraFlashing && (
         <div
@@ -7607,6 +7993,210 @@ export default function App() {
         >
           <span className="camera-flash__source" />
         </div>
+      )}
+      {taxSummaryKind === "federal" && (
+        <TaxSummaryModal
+          eyebrow="2025 federal planning estimate"
+          title="Federal tax summary"
+          subtitle={`${filingStatusLabels[federalSettings.filingStatus]} · Current workbook income and enabled What-If items`}
+          totalLabel="Estimated federal tax"
+          totalValue={formatCurrencyDetailed(federalTaxWithPayroll)}
+          totalDetail={`${formatCurrencyDetailed(federalIncomeTaxTotal)} income tax plus ${formatCurrencyDetailed(w2PayrollTax.federal.total)} employee payroll tax.`}
+          onClose={closeTaxSummary}
+        >
+          <div className="tax-summary-modal__grid">
+            <TaxSummarySection title="Taxable income" subtitle="How the current workbook reaches federal taxable income.">
+              <TaxSummaryRow label="Ordinary income before deductions" value={formatCurrencyDetailed(ordinaryBeforeDeductions)} />
+              <TaxSummaryRow label="Preferred income before deductions" value={formatCurrencyDetailed(preferredBeforeDeductions)} note="Qualified dividends and modeled long-term gain income." />
+              <TaxSummaryRow label="Gross federal taxable income" value={formatCurrencyDetailed(grossFederalTaxable)} emphasis />
+              <TaxSummaryRow label="Above-the-line adjustments" value={`−${formatCurrencyDetailed(federalAboveLineDeductionSummary.total)}`} />
+              <TaxSummaryRow label="Income after above-the-line adjustments" value={formatCurrencyDetailed(federalTaxableBeforeStandardOrItemized)} />
+              <TaxSummaryRow label={federalSettings.deductionMode === "itemized" ? "Itemized deduction selected" : "Standard deduction selected"} value={`−${formatCurrencyDetailed(federalDeduction)}`} status="Applied" />
+              <TaxSummaryRow label="Federal taxable income" value={formatCurrencyDetailed(federalTaxableAfterDeductions)} emphasis />
+              <TaxSummaryRow label="Ordinary taxable income" value={formatCurrencyDetailed(ordinaryTaxable)} />
+              <TaxSummaryRow label="Preferred taxable income" value={formatCurrencyDetailed(prefTaxable)} />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Deduction election" subtitle="Comparison of the two modeled deduction paths.">
+              <TaxSummaryRow label="Standard deduction" value={formatCurrencyDetailed(federalSettings.standardDeduction)} status={federalSettings.deductionMode === "standard" ? "Selected" : "Not selected"} />
+              <TaxSummaryRow label="Modeled itemized deduction" value={formatCurrencyDetailed(itemizedFederalDeduction)} status={federalSettings.deductionMode === "itemized" ? "Selected" : "Not selected"} />
+              <TaxSummaryRow label="Deduction used in calculation" value={formatCurrencyDetailed(federalDeduction)} emphasis />
+              <TaxSummaryRow label="SALT cap configured in model" value={formatCurrencyDetailed(federalSettings.saltCap)} note="The cap is applied to modeled state income tax plus entered property tax." status="Limit" />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Above-the-line adjustments" subtitle="Adjustments reduce income before the standard or itemized deduction.">
+              {federalSummaryAboveLineItems.length === 0 && <TaxSummaryRow label="No adjustments entered" value={formatCurrencyDetailed(0)} />}
+              {federalSummaryAboveLineItems.map((item) => (
+                <TaxSummaryRow
+                  key={item.id}
+                  label={item.deductionType}
+                  value={formatCurrencyDetailed(Math.max(toNumber(item.amount), 0))}
+                  note={federalAboveLineDeductionLimitNotes[item.deductionType]}
+                  status="Entered"
+                />
+              ))}
+              {federalAboveLineDeductionSummary.capitalLossRaw > 0 && (
+                <>
+                  <TaxSummaryRow label="Capital loss entered" value={formatCurrencyDetailed(federalAboveLineDeductionSummary.capitalLossRaw)} />
+                  <TaxSummaryRow label="Annual capital-loss limit" value={formatCurrencyDetailed(3000)} status="Limit" />
+                  <TaxSummaryRow label="Capital loss applied above-line" value={formatCurrencyDetailed(federalAboveLineDeductionSummary.capitalLossDeduction)} emphasis />
+                </>
+              )}
+              <TaxSummaryRow label="Total above-the-line adjustments applied" value={formatCurrencyDetailed(federalAboveLineDeductionSummary.total)} emphasis />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Itemized deductions and limits" subtitle="Every entered item is shown, including items not selected for the current deduction method.">
+              {federalSummaryItemizedItems.length === 0 && <TaxSummaryRow label="No itemized deductions entered" value={formatCurrencyDetailed(0)} />}
+              {federalSummaryItemizedItems.map((item) => (
+                <TaxSummaryRow
+                  key={item.id}
+                  label={item.deductionType}
+                  value={formatCurrencyDetailed(Math.max(toNumber(item.amount), 0))}
+                  note={federalDeductionLimitNotes[item.deductionType]}
+                  status="Entered"
+                />
+              ))}
+              <TaxSummaryRow label="State income tax in SALT calculation" value={formatCurrencyDetailed(displayedStateResult.tax)} />
+              <TaxSummaryRow label="Property tax in SALT calculation" value={formatCurrencyDetailed(federalDeductionSummary.propertyTax)} />
+              <TaxSummaryRow label="Combined SALT entered" value={formatCurrencyDetailed(federalSaltEntered)} />
+              <TaxSummaryRow label="SALT cap" value={formatCurrencyDetailed(federalSettings.saltCap)} status="Limit" />
+              <TaxSummaryRow label="SALT deduction allowed" value={formatCurrencyDetailed(federalDeductionSummary.saltDeduction)} emphasis />
+              {federalSaltOverCap > 0 && <TaxSummaryRow label="SALT not deductible due to cap" value={formatCurrencyDetailed(federalSaltOverCap)} status="Limited" />}
+              {federalDeductionSummary.capitalLossRaw > 0 && <TaxSummaryRow label="Itemized capital losses entered" value={formatCurrencyDetailed(federalDeductionSummary.capitalLossRaw)} />}
+              {federalDeductionSummary.capitalLossRaw > 0 && <TaxSummaryRow label="Itemized capital loss applied" value={formatCurrencyDetailed(federalDeductionSummary.capitalLossDeduction)} note="The current model limits combined long- and short-term losses to $3,000 here." status="Limited" />}
+              <TaxSummaryRow label="Modeled itemized deduction total" value={formatCurrencyDetailed(itemizedFederalDeduction)} emphasis />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Federal tax components" subtitle="Income tax, investment surtax, and employee payroll taxes are separated.">
+              <TaxSummaryRow label="Ordinary income tax" value={formatCurrencyDetailed(federalOrdinaryTax)} />
+              <TaxSummaryRow label="Preferred income tax" value={formatCurrencyDetailed(federalPreferredTax)} />
+              <TaxSummaryRow label="Net investment income tax (NIIT)" value={formatCurrencyDetailed(federalNiit)} note={`Modeled threshold for this filing status: ${formatCurrencyDetailed(niitThreshold)}.`} />
+              <TaxSummaryRow label="Federal income tax" value={formatCurrencyDetailed(federalIncomeTaxTotal)} emphasis />
+              <TaxSummaryRow label="Employee Social Security" value={formatCurrencyDetailed(w2PayrollTax.federal.socialSecurity)} />
+              <TaxSummaryRow label="Employee Medicare" value={formatCurrencyDetailed(w2PayrollTax.federal.medicare)} />
+              <TaxSummaryRow label="Additional Medicare" value={formatCurrencyDetailed(w2PayrollTax.federal.additionalMedicare)} />
+              <TaxSummaryRow label="Total federal tax and payroll" value={formatCurrencyDetailed(federalTaxWithPayroll)} emphasis />
+              <TaxSummaryRow label="Effective federal income-tax rate" value={formatPercent(grossFederalTaxable > 0 ? federalIncomeTaxTotal / grossFederalTaxable : 0)} note="Federal income tax divided by gross modeled federal taxable income, before deductions." />
+              <TaxSummaryRow label="Current ordinary marginal bracket" value={marginalFederalRateLabel} />
+            </TaxSummarySection>
+          </div>
+          <div className="tax-summary-callout tax-summary-callout--warning">
+            <strong>Limitations to review</strong>
+            <p>The model automatically applies its configured SALT cap and $3,000 capital-loss cap. Mortgage-interest qualification, charitable and medical limits, credit eligibility, AMT, QBI, basis, carryforwards, and most income phaseouts require separate review.</p>
+          </div>
+        </TaxSummaryModal>
+      )}
+      {taxSummaryKind === "state" && (
+        <TaxSummaryModal
+          eyebrow={`2025 ${selectedStateName} planning estimate`}
+          title={`${selectedStateName} tax summary`}
+          subtitle={`${filingStatusLabels[federalSettings.filingStatus]} · ${selectedStateCode} income-tax and employee payroll model`}
+          totalLabel={`Estimated ${selectedStateCode} tax`}
+          totalValue={formatCurrencyDetailed(stateTaxWithPayroll)}
+          totalDetail={`${formatCurrencyDetailed(displayedStateResult.tax)} state income tax plus ${formatCurrencyDetailed(w2PayrollTax.state.total)} modeled state employee payroll contributions.`}
+          onClose={closeTaxSummary}
+        >
+          <div className="tax-summary-modal__grid">
+            <TaxSummarySection title="State taxable income" subtitle="Federal-taxable investment income is adjusted for state treatment before deductions.">
+              <TaxSummaryRow label="Federal-taxable investments" value={formatCurrencyDetailed(federalTaxableInvestmentIncome)} />
+              <TaxSummaryRow label="State taxability adjustment" value={formatSignedCurrency(stateInvestmentAdjustment)} note="Captures state-exempt and state-only taxable investment treatment." />
+              <TaxSummaryRow label="Federal What-If income" value={formatCurrencyDetailed(federalWhatIfIncome)} />
+              <TaxSummaryRow label={`${selectedStateCode} extra income`} value={formatCurrencyDetailed(effectiveExtraStateIncome)} />
+              <TaxSummaryRow label={`${selectedStateCode} gross modeled income`} value={formatCurrencyDetailed(stateGross)} emphasis />
+              <TaxSummaryRow label={stateSettings.deductionMode === "itemized" ? "Itemized deduction selected" : "Standard deduction selected"} value={`−${formatCurrencyDetailed(stateDeduction)}`} status={selectedStateHasIncomeTax ? "Applied" : "Not applicable"} />
+              <TaxSummaryRow label={`${selectedStateCode} taxable income`} value={formatCurrencyDetailed(stateTaxableAfterDeductions)} emphasis />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Deduction election" subtitle="State deductions are maintained separately from federal deductions.">
+              <TaxSummaryRow label={`${selectedStateCode} standard deduction`} value={formatCurrencyDetailed(stateSettings.standardDeduction)} status={stateSettings.deductionMode === "standard" ? "Selected" : "Not selected"} />
+              <TaxSummaryRow label={`${selectedStateCode} itemized deductions entered`} value={formatCurrencyDetailed(stateItemized)} status={stateSettings.deductionMode === "itemized" ? "Selected" : "Not selected"} />
+              <TaxSummaryRow label="Deduction used in calculation" value={formatCurrencyDetailed(selectedStateHasIncomeTax ? stateDeduction : 0)} emphasis />
+              {!selectedStateHasIncomeTax && <TaxSummaryRow label="Broad-based individual income tax" value="None modeled" note={selectedStateTaxProfile.note} status="No tax" />}
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Entered state deductions" subtitle="All state deduction rows are listed, whether or not itemizing is selected.">
+              {stateSummaryDeductionItems.length === 0 && <TaxSummaryRow label="No state deductions entered" value={formatCurrencyDetailed(0)} />}
+              {stateSummaryDeductionItems.map((item) => {
+                const federalMatch = federalDeductionTypes.includes(item.deductionType) ? deductionTotalByType(federalSettings.deductionItems, item.deductionType) : 0;
+                return (
+                  <TaxSummaryRow
+                    key={item.id}
+                    label={item.deductionType}
+                    value={formatCurrencyDetailed(Math.max(toNumber(item.amount), 0))}
+                    note={federalMatch > 0 ? `Federal worksheet amount for comparison: ${formatCurrencyDetailed(federalMatch)}.` : undefined}
+                    status="Entered"
+                  />
+                );
+              })}
+              <TaxSummaryRow label="State itemized total" value={formatCurrencyDetailed(stateItemized)} emphasis />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="State tax and rates" subtitle="The current state result and modeled marginal rate schedule.">
+              <TaxSummaryRow label={`${selectedStateCode} income tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} emphasis />
+              {w2PayrollTax.state.components.map((component) => <TaxSummaryRow key={component.label} label={component.label} value={formatCurrencyDetailed(component.tax)} />)}
+              {w2PayrollTax.state.components.length === 0 && <TaxSummaryRow label="State employee payroll contributions" value={formatCurrencyDetailed(0)} note="No state W-2 payroll component is modeled for this state." />}
+              <TaxSummaryRow label={`Total ${selectedStateCode} tax and payroll`} value={formatCurrencyDetailed(stateTaxWithPayroll)} emphasis />
+              <TaxSummaryRow label="Effective state income-tax rate" value={formatPercent(stateGross > 0 ? displayedStateResult.tax / stateGross : 0)} />
+              <TaxSummaryRow label="Current marginal state bracket" value={marginalStateRateLabel} />
+              {selectedStateBrackets.map((bracket) => <TaxSummaryRow key={`${bracket.threshold}-${bracket.rate}`} label={bracket.threshold > 0 ? `Taxable income over ${formatCurrencyDetailed(bracket.threshold)}` : "First modeled bracket"} value={formatPercent(bracket.rate)} status="Marginal rate" />)}
+            </TaxSummarySection>
+          </div>
+          <div className="tax-summary-callout tax-summary-callout--warning">
+            <strong>State-specific limits require review</strong>
+            <p>{selectedStateTaxProfile.note || `${selectedStateName} deductions, credits, exemptions, recapture rules, and phaseouts can differ from federal law.`} The calculator uses the amounts entered and does not automatically validate every state-specific deduction cap, credit, residency rule, or local surcharge.</p>
+          </div>
+        </TaxSummaryModal>
+      )}
+      {taxSummaryKind === "local" && (
+        <TaxSummaryModal
+          eyebrow="2025 local tax planning estimate"
+          title={localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" ? `${localSummaryName} tax summary` : "Local tax summary"}
+          subtitle={`${localTaxSettings.residency === "resident" ? "Resident" : "Nonresident / worked there"} · ${localTaxSettings.enabled ? "Local tax enabled" : "Local tax disabled"}`}
+          totalLabel="Estimated local tax"
+          totalValue={formatCurrencyDetailed(localTaxTotal)}
+          totalDetail={`${formatCurrencyDetailed(localTaxableIncome)} modeled local tax base at a ${formatPercent(localTaxResult.effectiveRate)} effective rate.`}
+          onClose={closeTaxSummary}
+        >
+          <div className="tax-summary-modal__grid">
+            <TaxSummarySection title="Local configuration" subtitle="The selected locality, taxpayer status, and current model rate.">
+              <TaxSummaryRow label="Local tax status" value={localTaxSettings.enabled ? "Enabled" : "Disabled"} status={localTaxSettings.enabled ? "Active" : "Off"} />
+              <TaxSummaryRow label="Locality" value={localSummaryName} />
+              <TaxSummaryRow label="Residency" value={localTaxSettings.residency === "resident" ? "Resident" : "Nonresident / worked there"} />
+              <TaxSummaryRow label="Rate structure" value={selectedLocalTaxProfile.kind === "progressive" ? "Progressive" : selectedLocalTaxProfile.kind === "flat" ? "Flat" : "No local income tax"} />
+              <TaxSummaryRow label="Configured current rate" value={formatPercent(localTaxSettings.rate)} />
+              <TaxSummaryRow label="Configured nonresident rate" value={formatPercent(localTaxSettings.nonresidentRate)} />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Local taxable base" subtitle="Each income category shows its current amount and whether the locality includes it.">
+              {localTaxBaseKeys.map((key) => (
+                <TaxSummaryRow
+                  key={key}
+                  label={localTaxBaseLabels[key]}
+                  value={formatCurrencyDetailed(localTaxBaseAmounts[key])}
+                  status={localTaxSettings.taxableBase[key] && localTaxSettings.enabled ? "Included" : "Excluded"}
+                />
+              ))}
+              <TaxSummaryRow label="Total taxable local base" value={formatCurrencyDetailed(localTaxableIncome)} emphasis />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Local tax result" subtitle="Estimated tax and the rate reached by the current taxable base.">
+              <TaxSummaryRow label="Local taxable base" value={formatCurrencyDetailed(localTaxableIncome)} />
+              <TaxSummaryRow label="Effective local rate" value={formatPercent(localTaxResult.effectiveRate)} />
+              <TaxSummaryRow label="Marginal local rate" value={formatPercent(localTaxResult.marginalRate)} />
+              <TaxSummaryRow label="Estimated local tax" value={formatCurrencyDetailed(localTaxTotal)} emphasis />
+              <TaxSummaryRow label="Local deductions and credits" value="Not modeled" note="The local estimate applies the selected rate schedule to the included income categories." status="Review" />
+            </TaxSummarySection>
+
+            <TaxSummarySection title="Modeled rate schedule" subtitle={selectedLocalTaxProfile.kind === "progressive" ? "Progressive thresholds used by the selected preset." : "Current flat-rate configuration."}>
+              {selectedLocalTaxProfile.kind === "progressive" && selectedLocalTaxProfile.brackets?.map((bracket) => <TaxSummaryRow key={`${bracket.threshold}-${bracket.rate}`} label={bracket.threshold > 0 ? `Taxable base over ${formatCurrencyDetailed(bracket.threshold)}` : "First modeled bracket"} value={formatPercent(bracket.rate)} status="Marginal rate" />)}
+              {selectedLocalTaxProfile.kind !== "progressive" && <TaxSummaryRow label={localTaxSettings.residency === "nonresident" ? "Nonresident rate used" : "Resident rate used"} value={formatPercent(localTaxSettings.enabled ? localTaxSettings.rate : 0)} />}
+            </TaxSummarySection>
+          </div>
+          <div className="tax-summary-callout">
+            <strong>Local rule note</strong>
+            <p>{selectedLocalTaxProfile.note} Local rules change frequently; confirm the current rate, residency and work-location sourcing, exemptions, wage base, deductions, credits, and filing requirements.</p>
+          </div>
+        </TaxSummaryModal>
       )}
       {versionDialogMode && createPortal(
         <div className="model-version-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeVersionDialog(); }}>
@@ -7691,7 +8281,7 @@ export default function App() {
         <main className="content-panel">
         <div className="content-topbar">
           <div className="content-topbar__title-group">
-            <div>
+            <div className="content-topbar__tax-heading">
               <h2 className={activeTab === "federal" ? "content-topbar__title content-topbar__title--federal" : activeTab === "state" ? "content-topbar__title content-topbar__title--state" : "content-topbar__title"}>
                 {activeTab === "federal" && <i className="nav-item__icon-1040" aria-hidden="true">1040</i>}
                 {activeTab === "state" && <i className="nav-item__icon-1040 nav-item__icon-state-tax" data-state={selectedStateCode} aria-hidden="true">{selectedStateCode === "CA" ? "540" : selectedStateCode}</i>}
@@ -7702,6 +8292,12 @@ export default function App() {
                   {activeTab === "local" && <TumblingCurrency className="content-topbar__tax-total" value={localTaxTotal} />}
                 </span>
               </h2>
+              {(activeTab === "federal" || activeTab === "state" || activeTab === "local") && (
+                <button className="tax-summary-trigger" type="button" onClick={() => setTaxSummaryKind(activeTab)} aria-haspopup="dialog">
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 2.75h6l3 3v11.5h-9z" /><path d="M11.5 2.75v3h3M7.8 9h4.4M7.8 11.8h4.4M7.8 14.6h3" /></svg>
+                  Tax summary
+                </button>
+              )}
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
