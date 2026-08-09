@@ -254,7 +254,26 @@ type WorkbookResponse = {
 };
 
 type PortfolioHistorySnapshot = ModelDataSnapshot;
+type SummaryReportScenario = {
+  id: string;
+  name: string;
+  source: "current" | "reference";
+  income: number;
+  wages: number;
+  ordinaryIncome: number;
+  preferredIncome: number;
+  investmentIncome: number;
+  federalTax: number;
+  stateTax: number;
+  localTax: number;
+  totalTax: number;
+  afterTaxIncome: number;
+  effectiveTaxRate: number;
+  marginalTaxRateLabel: string;
+  description: string;
+};
 type SummaryReportPayload = {
+  reportName: string;
   generatedAt: string;
   income: number;
   investments: number;
@@ -280,6 +299,7 @@ type SummaryReportPayload = {
   accountTaxAllocationRows: Array<{ label: string; amount: number }>;
   accountTypeAllocationRows: Array<{ label: string; amount: number }>;
   taxTreatmentAllocationRows: Array<{ label: string; amount: number }>;
+  scenarios: SummaryReportScenario[];
 };
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
@@ -450,6 +470,37 @@ function encodeSummaryReportPayload(payload: SummaryReportPayload) {
   return encodeUtf8Base64Url(JSON.stringify(payload));
 }
 
+function decodeSummaryReportScenario(value: unknown, index: number): SummaryReportScenario | null {
+  if (!value || typeof value !== "object") return null;
+  const scenario = value as Partial<SummaryReportScenario>;
+  if (
+    typeof scenario.income !== "number" ||
+    typeof scenario.federalTax !== "number" ||
+    typeof scenario.stateTax !== "number" ||
+    typeof scenario.localTax !== "number" ||
+    typeof scenario.totalTax !== "number" ||
+    typeof scenario.afterTaxIncome !== "number"
+  ) return null;
+  return {
+    id: typeof scenario.id === "string" && scenario.id ? scenario.id : `scenario-${index + 1}`,
+    name: typeof scenario.name === "string" && scenario.name.trim() ? scenario.name.trim() : `Scenario ${index + 1}`,
+    source: scenario.source === "current" ? "current" : "reference",
+    income: scenario.income,
+    wages: typeof scenario.wages === "number" ? scenario.wages : 0,
+    ordinaryIncome: typeof scenario.ordinaryIncome === "number" ? scenario.ordinaryIncome : 0,
+    preferredIncome: typeof scenario.preferredIncome === "number" ? scenario.preferredIncome : 0,
+    investmentIncome: typeof scenario.investmentIncome === "number" ? scenario.investmentIncome : 0,
+    federalTax: scenario.federalTax,
+    stateTax: scenario.stateTax,
+    localTax: scenario.localTax,
+    totalTax: scenario.totalTax,
+    afterTaxIncome: scenario.afterTaxIncome,
+    effectiveTaxRate: typeof scenario.effectiveTaxRate === "number" ? scenario.effectiveTaxRate : scenario.income > 0 ? scenario.totalTax / scenario.income : 0,
+    marginalTaxRateLabel: typeof scenario.marginalTaxRateLabel === "string" ? scenario.marginalTaxRateLabel : "—",
+    description: typeof scenario.description === "string" ? scenario.description : "",
+  };
+}
+
 function decodeSummaryReportPayload(value: string): SummaryReportPayload | null {
   try {
     const parsed = JSON.parse(decodeUtf8Base64Url(value)) as Partial<SummaryReportPayload>;
@@ -466,7 +517,29 @@ function decodeSummaryReportPayload(value: string): SummaryReportPayload | null 
     ) {
       return null;
     }
+    const decodedScenarios = Array.isArray(parsed.scenarios)
+      ? parsed.scenarios.map(decodeSummaryReportScenario).filter((scenario): scenario is SummaryReportScenario => Boolean(scenario))
+      : [];
+    const scenarios = decodedScenarios.length ? decodedScenarios : [{
+      id: "current-model",
+      name: "Current modeled scenario",
+      source: "current" as const,
+      income: parsed.income,
+      wages: 0,
+      ordinaryIncome: 0,
+      preferredIncome: 0,
+      investmentIncome: 0,
+      federalTax: parsed.federalTax,
+      stateTax: parsed.stateTax,
+      localTax: parsed.localTax,
+      totalTax: parsed.totalTax,
+      afterTaxIncome: parsed.afterTaxIncome,
+      effectiveTaxRate: parsed.effectiveTaxRate,
+      marginalTaxRateLabel: typeof parsed.marginalTaxRateLabel === "string" ? parsed.marginalTaxRateLabel : formatPercent(parsed.marginalTaxRate),
+      description: "Current values from the shared summary.",
+    }];
     return {
+      reportName: typeof parsed.reportName === "string" && parsed.reportName.trim() ? parsed.reportName.trim() : "Tax scenario summary",
       generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : new Date().toISOString(),
       income: parsed.income,
       investments: parsed.investments,
@@ -492,6 +565,7 @@ function decodeSummaryReportPayload(value: string): SummaryReportPayload | null 
       accountTaxAllocationRows: Array.isArray(parsed.accountTaxAllocationRows) ? parsed.accountTaxAllocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
       accountTypeAllocationRows: Array.isArray(parsed.accountTypeAllocationRows) ? parsed.accountTypeAllocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
       taxTreatmentAllocationRows: Array.isArray(parsed.taxTreatmentAllocationRows) ? parsed.taxTreatmentAllocationRows.filter((row): row is { label: string; amount: number } => row && typeof row.label === "string" && typeof row.amount === "number") : [],
+      scenarios,
     };
   } catch {
     return null;
@@ -5605,122 +5679,79 @@ function AppSplash({ message }: { message: string }) {
 }
 
 function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload }) {
-  const totalTaxShare = payload.income > 0 ? payload.totalTax / payload.income : 0;
-  const takeHomeRate = payload.income > 0 ? payload.afterTaxIncome / payload.income : 0;
-  const taxBreakdown = [
-    { label: "Federal income tax", value: payload.federalTax },
-    { label: `${payload.stateCode} state tax`, value: payload.stateTax },
-    { label: payload.localityName || "Local tax", value: payload.localTax },
-  ].filter((item) => item.value > 0.005);
-
   return (
-    <div className="summary-report-page">
-      <div className="summary-report-page__hero">
-        <div className="summary-report-page__masthead">
-          <AfterTaxUSLogo />
-          <a className="summary-report-page__cta" href={new URL("/", window.location.href).toString()}>Open AfterTax US</a>
-        </div>
-        <p className="summary-report-page__eyebrow">Standalone summary report</p>
-        <h1>At {formatCurrency(payload.income)} of income, taxes usually feel bigger than people expect.</h1>
-        <div className="summary-report-page__income">{formatCurrency(payload.income)} annual income</div>
-        <p className="summary-report-page__lede">
-          This shareable snapshot highlights the tax drag, not the line-item detail. It is designed to spark curiosity about what AfterTax US can uncover in a full model.
-        </p>
-      </div>
-
-      <section className="summary-report-grid" aria-label="Summary metrics">
-        <article className="summary-report-card summary-report-card--highlight">
-          <span>Total tax burden</span>
-          <strong>{formatCurrencyDetailed(payload.totalTax)}</strong>
-          <em>{formatPercent(totalTaxShare)} of visible income</em>
-        </article>
-        <article className="summary-report-card">
-          <span>After-tax income</span>
-          <strong>{formatCurrencyDetailed(payload.afterTaxIncome)}</strong>
-          <em>{formatPercent(takeHomeRate)} kept after tax</em>
-        </article>
-        <article className="summary-report-card">
-          <span>Marginal tax rate</span>
-          <strong>{payload.marginalTaxRateLabel}</strong>
-          <em>What the next dollar can face</em>
-        </article>
-        <article className="summary-report-card">
-          <span>Total investments</span>
-          <strong>{formatCurrencyDetailed(payload.investments)}</strong>
-          <em>Current invested base</em>
-        </article>
-      </section>
-
-      <section className="summary-report-breakdown">
-        <div className="summary-report-breakdown__copy">
-          <p className="summary-report-page__eyebrow">Tax breakdown</p>
-          <h2>Where the money goes</h2>
-          <p>
-            Most people think in salary. This view reframes the same year in taxes removed: federal first, then state, then local drag layered on top.
-          </p>
-        </div>
-        <div className="summary-report-breakdown__list">
-          {taxBreakdown.map((item) => (
-            <div className="summary-report-breakdown__row" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{formatCurrencyDetailed(item.value)}</strong>
-            </div>
-          ))}
-          <div className="summary-report-breakdown__row summary-report-breakdown__row--total">
-            <span>Total removed by income taxes</span>
-            <strong>{formatCurrencyDetailed(payload.totalTax)}</strong>
+    <div className="summary-report-page summary-scenarios-page">
+      <header className="summary-scenarios-page__header">
+        <div className="summary-scenarios-page__brand">
+          <AfterTaxUSMark idSuffix="summary-scenarios" />
+          <div>
+            <strong>AfterTax US</strong>
+            <span>Scenario report</span>
           </div>
         </div>
-      </section>
-
-      <section className="summary-report-thermometer">
-        <div className="summary-report-breakdown__copy">
-          <p className="summary-report-page__eyebrow">Tax thermometer</p>
-          <h2>See the full stack of taxes together</h2>
-          <p>
-            This keeps the standalone report high level, but still shows where the current income sits across the combined federal, state, NIIT, and local thresholds.
-          </p>
+        <div className="summary-scenarios-page__generated">
+          <span>Generated</span>
+          <strong>{new Date(payload.generatedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</strong>
         </div>
-        <TaxThermometerPanel
-          federalTaxable={payload.federalTaxable}
-          stateTaxable={payload.stateTaxable}
-          federalTax={payload.federalTax}
-          stateTax={payload.stateTax}
-          localTaxable={payload.localTaxable}
-          localTax={payload.localTax}
-          localName={payload.localityName}
-          localEnabled={payload.localTax > 0 || payload.localMarginalRate > 0}
-          localEffectiveRate={payload.localEffectiveRate}
-          localMarginalRate={payload.localMarginalRate}
-          localBrackets={payload.localBrackets}
-          filingStatus={payload.filingStatus}
-          stateCode={payload.stateCode}
-          stateName={payload.stateName}
-          allocationRows={payload.allocationRows}
-          accountTaxAllocationRows={payload.accountTaxAllocationRows}
-          accountTypeAllocationRows={payload.accountTypeAllocationRows}
-          taxTreatmentAllocationRows={payload.taxTreatmentAllocationRows}
-          initialMode="combined"
-        />
-      </section>
+      </header>
 
-      <section className="summary-report-story">
-        <article className="summary-report-story__panel">
-          <p className="summary-report-page__eyebrow">What surprises people</p>
-          <h2>Your effective rate and marginal rate tell different stories.</h2>
+      <main className="summary-scenarios-page__main">
+        <section className="summary-scenarios-page__intro">
+          <p className="summary-report-page__eyebrow">Tax scenario summary</p>
+          <h1>{payload.reportName}</h1>
           <p>
-            Effective rate: <strong>{formatPercent(payload.effectiveTaxRate)}</strong>. Marginal rate: <strong>{payload.marginalTaxRateLabel}</strong>.
-            That gap is exactly why planning decisions can feel unintuitive without a dedicated after-tax view.
+            {payload.scenarios.length} scenarios using {filingStatusLabels[payload.filingStatus].toLowerCase()} filing status and {payload.stateName} tax treatment. Amounts are annual planning estimates from the 2025 model.
           </p>
-        </article>
-        <article className="summary-report-story__panel">
-          <p className="summary-report-page__eyebrow">Why AfterTax US</p>
-          <h2>Go deeper when you are ready.</h2>
-          <p>
-            The full workspace layers in account types, ticker-level yields, federal/state/local tax treatment, and scenario planning so you can see what actually changes spendable income.
-          </p>
-        </article>
-      </section>
+        </section>
+
+        <section className="summary-scenario-list" aria-label="Tax scenarios">
+          {payload.scenarios.map((scenario, index) => {
+            const otherOrdinaryIncome = Math.max(scenario.ordinaryIncome - scenario.wages, 0);
+            return (
+              <article className="summary-scenario-card" key={scenario.id}>
+                <div className="summary-scenario-card__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
+                <div className="summary-scenario-card__content">
+                  <div className="summary-scenario-card__heading">
+                    <div>
+                      <div className="summary-scenario-card__title-line">
+                        <h2>{scenario.name}</h2>
+                        <span>{scenario.source === "current" ? "Current workbook" : "Reference scenario"}</span>
+                      </div>
+                      <p>{scenario.description}</p>
+                    </div>
+                    <div className="summary-scenario-card__headline">
+                      <span>Total estimated tax</span>
+                      <strong>{formatCurrencyDetailed(scenario.totalTax)}</strong>
+                      <small>{formatPercent(scenario.effectiveTaxRate)} of annual income</small>
+                    </div>
+                  </div>
+
+                  <div className="summary-scenario-card__facts" aria-label={`${scenario.name} income composition`}>
+                    <div><span>Annual income</span><strong>{formatCurrencyDetailed(scenario.income)}</strong></div>
+                    <div><span>W-2 wages</span><strong>{formatCurrencyDetailed(scenario.wages)}</strong></div>
+                    <div><span>Other ordinary income</span><strong>{formatCurrencyDetailed(otherOrdinaryIncome)}</strong></div>
+                    <div><span>Preferred income / dividends</span><strong>{formatCurrencyDetailed(scenario.preferredIncome)}</strong></div>
+                    <div><span>Investment income</span><strong>{formatCurrencyDetailed(scenario.investmentIncome)}</strong></div>
+                  </div>
+
+                  <div className="summary-scenario-card__taxes" aria-label={`${scenario.name} tax breakdown`}>
+                    <div><span>Federal tax and payroll</span><strong>{formatCurrencyDetailed(scenario.federalTax)}</strong></div>
+                    <div><span>{payload.stateCode} tax and payroll</span><strong>{formatCurrencyDetailed(scenario.stateTax)}</strong></div>
+                    <div><span>{payload.localityName || "Local tax"}</span><strong>{formatCurrencyDetailed(scenario.localTax)}</strong></div>
+                    <div className="summary-scenario-card__after-tax"><span>After-tax income</span><strong>{formatCurrencyDetailed(scenario.afterTaxIncome)}</strong></div>
+                    <div><span>Marginal rate</span><strong>{scenario.marginalTaxRateLabel}</strong></div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+
+        <footer className="summary-scenarios-page__footer">
+          <p>Figures are estimates and do not include every credit, phaseout, deduction limit, or jurisdiction-specific rule.</p>
+          <a href="https://www.aftertaxus.com/">See your own scenario</a>
+        </footer>
+      </main>
     </div>
   );
 }
@@ -5740,6 +5771,11 @@ export default function App() {
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
+  const [isSummaryReportDialogOpen, setIsSummaryReportDialogOpen] = useState(false);
+  const [summaryReportName, setSummaryReportName] = useState("");
+  const [summaryScenarioName, setSummaryScenarioName] = useState("Current workbook");
+  const [includeCurrentSummaryScenario, setIncludeCurrentSummaryScenario] = useState(true);
+  const [summaryReportDialogError, setSummaryReportDialogError] = useState("");
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState<InvestmentRow[]>(() => authEnabled ? [] : initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
@@ -5884,6 +5920,15 @@ export default function App() {
     window.addEventListener("popstate", syncSummaryReport);
     return () => window.removeEventListener("popstate", syncSummaryReport);
   }, []);
+
+  useEffect(() => {
+    if (!isSummaryReportDialogOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsSummaryReportDialogOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSummaryReportDialogOpen]);
 
   useEffect(() => {
     if (!isTopbarMenuOpen) return;
@@ -7026,7 +7071,80 @@ export default function App() {
     setUiSettings((current) => ({ ...current, darkMode: !current.darkMode }));
     setIsTopbarMenuOpen(false);
   };
+  const referenceScenarioIncome = flows.displayIncome > 0 ? flows.displayIncome : 100000;
+  const buildReferenceSummaryScenario = ({ id, name, wages, preferredIncome, description }: { id: string; name: string; wages: number; preferredIncome: number; description: string }): SummaryReportScenario => {
+    const income = Math.max(wages + preferredIncome, 0);
+    const federalTaxable = Math.max(income - federalAboveLineDeductionSummary.total - federalDeduction, 0);
+    const preferredTaxable = Math.min(preferredIncome, federalTaxable);
+    const ordinaryTaxableIncome = Math.max(federalTaxable - preferredTaxable, 0);
+    const federalIncomeTax = federalCombinedTax2025({
+      ordinaryTaxable: ordinaryTaxableIncome,
+      preferredTaxable,
+      filingStatus: federalSettings.filingStatus,
+      magi: income,
+      netInvestmentIncome: preferredIncome,
+    }).tax;
+    const payrollTax = calculateW2PayrollTax(wages, federalSettings.filingStatus, selectedStateCode);
+    const scenarioStateTaxable = Math.max(income - stateDeduction, 0);
+    const stateIncomeTax = localStateTax2025(scenarioStateTaxable, selectedStateCode, federalSettings.filingStatus).tax;
+    const scenarioLocalTaxable = localTaxSettings.enabled
+      ? (localTaxSettings.taxableBase.wages ? wages : 0) + (localTaxSettings.taxableBase.dividends ? preferredIncome : 0)
+      : 0;
+    const scenarioLocalResult = calculateLocalTax(localTaxSettings, scenarioLocalTaxable);
+    const federalTax = federalIncomeTax + payrollTax.federal.total;
+    const stateTax = stateIncomeTax + payrollTax.state.total;
+    const localTax = scenarioLocalResult.tax;
+    const scenarioTotalTax = federalTax + stateTax + localTax;
+    const scenarioCombinedMarginalLabel = getReachedTaxRateLabel(
+      buildCombinedTaxRateMarkers(marginalFederalMarkers, marginalStateMarkers, selectedStateCode, selectedStateName, marginalStateBaseRateLabel, federalSettings.filingStatus),
+      Math.max(federalTaxable, scenarioStateTaxable),
+      marginalCombinedBaseRateLabel
+    );
+    const scenarioMarginalRate = rateLabelToDecimal(scenarioCombinedMarginalLabel) + scenarioLocalResult.marginalRate;
+    return {
+      id,
+      name,
+      source: "reference",
+      income,
+      wages,
+      ordinaryIncome: wages,
+      preferredIncome,
+      investmentIncome: preferredIncome,
+      federalTax,
+      stateTax,
+      localTax,
+      totalTax: scenarioTotalTax,
+      afterTaxIncome: income - scenarioTotalTax,
+      effectiveTaxRate: income > 0 ? scenarioTotalTax / income : 0,
+      marginalTaxRateLabel: formatPercent(scenarioMarginalRate),
+      description,
+    };
+  };
+  const referenceSummaryScenarios: SummaryReportScenario[] = [
+    buildReferenceSummaryScenario({
+      id: "salary-income",
+      name: "Salary income",
+      wages: referenceScenarioIncome,
+      preferredIncome: 0,
+      description: `${formatCurrency(referenceScenarioIncome)} of W-2 wages with no preferred investment income.`,
+    }),
+    buildReferenceSummaryScenario({
+      id: "qualified-dividend-income",
+      name: "Qualified-dividend income",
+      wages: 0,
+      preferredIncome: referenceScenarioIncome,
+      description: `${formatCurrency(referenceScenarioIncome)} of preferred investment income with no W-2 wages.`,
+    }),
+    buildReferenceSummaryScenario({
+      id: "mixed-salary-dividends",
+      name: "80% salary / 20% qualified dividends",
+      wages: referenceScenarioIncome * 0.8,
+      preferredIncome: referenceScenarioIncome * 0.2,
+      description: `${formatCurrency(referenceScenarioIncome * 0.8)} of W-2 wages and ${formatCurrency(referenceScenarioIncome * 0.2)} of preferred investment income.`,
+    }),
+  ];
   const currentSummaryReportPayload: SummaryReportPayload = {
+    reportName: "Tax scenario summary",
     generatedAt: new Date().toISOString(),
     income: flows.displayIncome,
     investments: flows.totalInvestmentAmount,
@@ -7052,10 +7170,60 @@ export default function App() {
     accountTaxAllocationRows,
     accountTypeAllocationRows,
     taxTreatmentAllocationRows,
+    scenarios: [],
   };
-  const openSummaryReport = async () => {
+  const openSummaryReportDialog = () => {
     setIsTopbarMenuOpen(false);
-    const summaryReportUrl = buildSummaryReportUrl(currentSummaryReportPayload);
+    setSummaryReportName(`${selectedStateCode} income and tax scenarios`);
+    setSummaryScenarioName("Current workbook");
+    setIncludeCurrentSummaryScenario(true);
+    setSummaryReportDialogError("");
+    setIsSummaryReportDialogOpen(true);
+  };
+  const createSummaryReport = async () => {
+    const reportName = summaryReportName.trim();
+    const currentScenarioName = summaryScenarioName.trim();
+    if (!reportName) {
+      setSummaryReportDialogError("Enter a report name.");
+      return;
+    }
+    if (includeCurrentSummaryScenario && !currentScenarioName) {
+      setSummaryReportDialogError("Enter a name for the current workbook scenario.");
+      return;
+    }
+    if (includeCurrentSummaryScenario && referenceSummaryScenarios.some((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(currentScenarioName))) {
+      setSummaryReportDialogError("Use a scenario name that differs from the three reference scenarios.");
+      return;
+    }
+    const currentScenario: SummaryReportScenario = {
+      id: "current-workbook",
+      name: currentScenarioName,
+      source: "current",
+      income: currentSummaryReportPayload.income,
+      wages: effectiveW2Income,
+      ordinaryIncome: ordinaryBeforeDeductions,
+      preferredIncome: preferredBeforeDeductions,
+      investmentIncome: flows.investmentIncome,
+      federalTax: currentSummaryReportPayload.federalTax,
+      stateTax: currentSummaryReportPayload.stateTax,
+      localTax: currentSummaryReportPayload.localTax,
+      totalTax: currentSummaryReportPayload.totalTax,
+      afterTaxIncome: currentSummaryReportPayload.afterTaxIncome,
+      effectiveTaxRate: currentSummaryReportPayload.effectiveTaxRate,
+      marginalTaxRateLabel: currentSummaryReportPayload.marginalTaxRateLabel,
+      description: `${formatCurrency(effectiveW2Income)} of W-2 wages, ${formatCurrency(preferredBeforeDeductions)} of preferred income, and ${formatCurrency(flows.investmentIncome)} of investment income in the current workbook.`,
+    };
+    const reportPayload: SummaryReportPayload = {
+      ...currentSummaryReportPayload,
+      reportName,
+      generatedAt: new Date().toISOString(),
+      scenarios: [
+        ...(includeCurrentSummaryScenario ? [currentScenario] : []),
+        ...referenceSummaryScenarios,
+      ],
+    };
+    const summaryReportUrl = buildSummaryReportUrl(reportPayload);
+    setIsSummaryReportDialogOpen(false);
     window.open(summaryReportUrl, "_blank", "noopener,noreferrer");
     try {
       await navigator.clipboard.writeText(summaryReportUrl);
@@ -7115,9 +7283,9 @@ export default function App() {
             <TopbarActionIcon name="theme" />
             <span>{uiSettings.darkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { void openSummaryReport(); }}>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSummaryReportDialog}>
             <TopbarActionIcon name="report" />
-            <span>Create Summary Report</span>
+            <span>Create Scenario Report</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -7993,6 +8161,52 @@ export default function App() {
         >
           <span className="camera-flash__source" />
         </div>
+      )}
+      {isSummaryReportDialogOpen && createPortal(
+        <div className="summary-report-dialog-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsSummaryReportDialogOpen(false); }}>
+          <section className="summary-report-dialog" role="dialog" aria-modal="true" aria-labelledby="summary-report-dialog-title">
+            <div className="summary-report-dialog__header">
+              <div>
+                <p className="eyebrow">Scenario Report</p>
+                <h3 id="summary-report-dialog-title">Create a named scenario report</h3>
+              </div>
+              <button className="summary-report-dialog__close" type="button" onClick={() => setIsSummaryReportDialogOpen(false)} aria-label="Close scenario report dialog">×</button>
+            </div>
+            <p className="summary-report-dialog__copy">The report compares the same annual income across salary, qualified-dividend, and mixed-income cases. You can also include the current workbook as a separate scenario.</p>
+            <label className="summary-report-dialog__field">
+              <span>Report name</span>
+              <input value={summaryReportName} maxLength={80} onChange={(event) => { setSummaryReportName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: 2025 income mix comparison" autoFocus />
+            </label>
+            <div className="summary-report-dialog__reference">
+              <div>
+                <span>Reference scenarios</span>
+                <strong>{formatCurrencyDetailed(referenceScenarioIncome)} annual income</strong>
+              </div>
+              <ol>
+                {referenceSummaryScenarios.map((scenario) => <li key={scenario.id}>{scenario.name}</li>)}
+              </ol>
+            </div>
+            <label className="summary-report-dialog__include">
+              <input type="checkbox" checked={includeCurrentSummaryScenario} onChange={(event) => { setIncludeCurrentSummaryScenario(event.target.checked); setSummaryReportDialogError(""); }} />
+              <span>
+                <strong>Add the current workbook as a scenario</strong>
+                <small>Uses the income composition and tax results currently shown in AfterTax US.</small>
+              </span>
+            </label>
+            {includeCurrentSummaryScenario && (
+              <label className="summary-report-dialog__field">
+                <span>Current scenario name</span>
+                <input value={summaryScenarioName} maxLength={60} onChange={(event) => { setSummaryScenarioName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: Current portfolio" />
+              </label>
+            )}
+            {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
+            <div className="summary-report-dialog__actions">
+              <button className="ghost-button" type="button" onClick={() => setIsSummaryReportDialogOpen(false)}>Cancel</button>
+              <button className="primary-button" type="button" onClick={() => { void createSummaryReport(); }}>Create report</button>
+            </div>
+          </section>
+        </div>,
+        document.body
       )}
       {taxSummaryKind === "federal" && (
         <TaxSummaryModal

@@ -6658,3 +6658,533 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
     display: none;
   }
 }
+
+.summary-report-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5250;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .56);
+  backdrop-filter: blur(7px);
+}
+
+.summary-report-dialog {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 22px;
+  overflow-y: auto;
+  border: 1px solid #d8e0ea;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 32px 90px rgba(15, 23, 42, .3);
+  color: #172033;
+}
+
+.summary-report-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.summary-report-dialog__header h3 {
+  margin: 3px 0 0;
+  font-size: 1.25rem;
+}
+
+.summary-report-dialog__close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d8e0ea;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475467;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.25rem;
+}
+
+.summary-report-dialog__copy {
+  margin: 11px 0 18px;
+  color: #667085;
+  font-size: .8rem;
+  line-height: 1.55;
+}
+
+.summary-report-dialog__field {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  color: #344054;
+  font-size: .72rem;
+  font-weight: 850;
+}
+
+.summary-report-dialog__field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 9px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-weight: 650;
+}
+
+.summary-report-dialog__field input:focus {
+  border-color: #2563eb;
+  outline: 3px solid rgba(37, 99, 235, .13);
+}
+
+.summary-report-dialog__reference {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
+  gap: 18px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.summary-report-dialog__reference > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.summary-report-dialog__reference span {
+  color: #667085;
+  font-size: .64rem;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.summary-report-dialog__reference strong {
+  font-size: .85rem;
+}
+
+.summary-report-dialog__reference ol {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 20px;
+  color: #475467;
+  font-size: .72rem;
+  line-height: 1.35;
+}
+
+.summary-report-dialog__include {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 13px 14px;
+  border: 1px solid rgba(37, 99, 235, .2);
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1d2939;
+  cursor: pointer;
+}
+
+.summary-report-dialog__include input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  accent-color: #2563eb;
+}
+
+.summary-report-dialog__include span {
+  display: grid;
+  gap: 3px;
+}
+
+.summary-report-dialog__include strong {
+  font-size: .78rem;
+}
+
+.summary-report-dialog__include small {
+  color: #667085;
+  font-size: .66rem;
+  line-height: 1.4;
+}
+
+.summary-report-dialog__error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.summary-report-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog {
+  border-color: rgba(148, 163, 184, .26);
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__copy,
+html.aftertaxus-dark-mode .summary-report-dialog__field,
+html.aftertaxus-dark-mode .summary-report-dialog__reference ol,
+html.aftertaxus-dark-mode .summary-report-dialog__include small {
+  color: #b7c4d6;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__field input,
+html.aftertaxus-dark-mode .summary-report-dialog__close {
+  border-color: rgba(148, 163, 184, .28);
+  background: #07111f;
+  color: #f8fafc;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__reference {
+  border-color: rgba(148, 163, 184, .2);
+  background: rgba(2, 6, 23, .5);
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__include {
+  border-color: rgba(96, 165, 250, .3);
+  background: rgba(30, 64, 175, .2);
+  color: #f8fafc;
+}
+
+.summary-scenarios-page {
+  min-height: 100vh;
+  padding: 0 24px 56px;
+  background: #f4f6f8;
+  color: #18212f;
+}
+
+.summary-scenarios-page__header,
+.summary-scenarios-page__main {
+  width: min(1160px, 100%);
+  margin: 0 auto;
+}
+
+.summary-scenarios-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 86px;
+  border-bottom: 1px solid #d7dee7;
+}
+
+.summary-scenarios-page__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.summary-scenarios-page__brand .aftertaxum-logo__mark {
+  width: 38px;
+  height: 38px;
+}
+
+.summary-scenarios-page__brand > div {
+  display: grid;
+  gap: 1px;
+}
+
+.summary-scenarios-page__brand strong {
+  font-size: .9rem;
+}
+
+.summary-scenarios-page__brand span,
+.summary-scenarios-page__generated span {
+  color: #697586;
+  font-size: .65rem;
+}
+
+.summary-scenarios-page__generated {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.summary-scenarios-page__generated strong {
+  font-size: .74rem;
+}
+
+.summary-scenarios-page__intro {
+  padding: 48px 0 26px;
+}
+
+.summary-scenarios-page__intro h1 {
+  max-width: 900px;
+  margin: 8px 0 12px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  letter-spacing: -.045em;
+  line-height: 1;
+}
+
+.summary-scenarios-page__intro > p:last-child {
+  max-width: 800px;
+  margin: 0;
+  color: #526071;
+  font-size: .92rem;
+  line-height: 1.65;
+}
+
+.summary-scenario-list {
+  display: grid;
+  gap: 16px;
+}
+
+.summary-scenario-card {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #d8dfe8;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .045);
+}
+
+.summary-scenario-card__number {
+  display: grid;
+  place-items: start center;
+  padding-top: 21px;
+  border-right: 1px solid #e2e7ed;
+  background: #f8fafc;
+  color: #7a8798;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.summary-scenario-card__content {
+  min-width: 0;
+}
+
+.summary-scenario-card__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 24px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e2e7ed;
+}
+
+.summary-scenario-card__title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-scenario-card__title-line h2 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.summary-scenario-card__title-line span {
+  padding: 3px 7px;
+  border: 1px solid #d8dfe8;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #59677a;
+  font-size: .54rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.summary-scenario-card__heading p {
+  margin: 6px 0 0;
+  color: #5f6c7d;
+  font-size: .74rem;
+  line-height: 1.5;
+}
+
+.summary-scenario-card__headline {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  text-align: right;
+}
+
+.summary-scenario-card__headline span,
+.summary-scenario-card__headline small {
+  color: #697586;
+  font-size: .6rem;
+}
+
+.summary-scenario-card__headline strong {
+  font-size: 1.42rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.035em;
+}
+
+.summary-scenario-card__facts,
+.summary-scenario-card__taxes {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.summary-scenario-card__facts {
+  border-bottom: 1px solid #e2e7ed;
+  background: #fbfcfd;
+}
+
+.summary-scenario-card__facts > div,
+.summary-scenario-card__taxes > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-right: 1px solid #e7ebf0;
+}
+
+.summary-scenario-card__facts > div:last-child,
+.summary-scenario-card__taxes > div:last-child {
+  border-right: 0;
+}
+
+.summary-scenario-card__facts span,
+.summary-scenario-card__taxes span {
+  color: #697586;
+  font-size: .59rem;
+  line-height: 1.35;
+}
+
+.summary-scenario-card__facts strong,
+.summary-scenario-card__taxes strong {
+  overflow: hidden;
+  font-size: .76rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-scenario-card__after-tax {
+  background: #ecfdf5;
+}
+
+.summary-scenario-card__after-tax span,
+.summary-scenario-card__after-tax strong {
+  color: #11633f;
+}
+
+.summary-scenarios-page__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 22px;
+  padding: 20px 22px;
+  border: 1px solid #d8dfe8;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.summary-scenarios-page__footer p {
+  max-width: 760px;
+  margin: 0;
+  color: #697586;
+  font-size: .68rem;
+  line-height: 1.5;
+}
+
+.summary-scenarios-page__footer a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 17px;
+  border-radius: 9px;
+  background: #172033;
+  color: #fff;
+  font-size: .76rem;
+  font-weight: 850;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .summary-report-dialog-overlay {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .summary-report-dialog {
+    max-height: calc(100vh - 20px);
+    padding: 18px;
+  }
+
+  .summary-report-dialog__reference {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-scenarios-page {
+    padding: 0 14px 34px;
+  }
+
+  .summary-scenarios-page__header {
+    min-height: 72px;
+  }
+
+  .summary-scenarios-page__generated {
+    display: none;
+  }
+
+  .summary-scenarios-page__intro {
+    padding: 34px 0 20px;
+  }
+
+  .summary-scenario-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .summary-scenario-card__heading {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 17px;
+  }
+
+  .summary-scenario-card__headline {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .summary-scenario-card__facts,
+  .summary-scenario-card__taxes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-scenario-card__facts > div,
+  .summary-scenario-card__taxes > div {
+    border-right: 0;
+    border-bottom: 1px solid #e7ebf0;
+  }
+
+  .summary-scenario-card__facts > div:nth-child(odd),
+  .summary-scenario-card__taxes > div:nth-child(odd) {
+    border-right: 1px solid #e7ebf0;
+  }
+
+  .summary-scenarios-page__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary-scenarios-page__footer a {
+    width: 100%;
+  }
+}
