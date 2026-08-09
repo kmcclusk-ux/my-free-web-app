@@ -6671,7 +6671,7 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
 }
 
 .summary-report-dialog {
-  width: min(760px, 100%);
+  width: min(840px, 100%);
   max-height: calc(100vh - 48px);
   padding: 22px;
   overflow-y: auto;
@@ -6724,6 +6724,18 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
   background: #f8fafc;
 }
 
+.summary-report-dialog__scenarios {
+  overflow: hidden;
+  border: 1px solid #cfdbea;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+}
+
+.summary-report-dialog__scenarios + .summary-report-dialog__management {
+  margin-top: 14px;
+}
+
 .summary-report-dialog__management-heading,
 .summary-report-dialog__section-heading {
   display: flex;
@@ -6735,6 +6747,11 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
 .summary-report-dialog__management-heading {
   padding: 12px 14px;
   border-bottom: 1px solid #e4e9f0;
+}
+
+.summary-report-dialog__management-heading > .ghost-button {
+  min-height: 34px;
+  padding: 0 11px;
 }
 
 .summary-report-dialog__management-heading > div {
@@ -6766,6 +6783,140 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
   padding: 16px 14px;
   color: #667085;
   font-size: .72rem;
+}
+
+.summary-report-dialog__scenario-list {
+  display: grid;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.summary-report-dialog__scenario-group {
+  border-bottom: 1px solid #e4e9f0;
+}
+
+.summary-report-dialog__scenario-group:last-child {
+  border-bottom: 0;
+}
+
+.summary-report-dialog__scenario-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8fafc;
+}
+
+.summary-report-dialog__scenario-group-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.summary-report-dialog__scenario-group-heading strong {
+  overflow: hidden;
+  color: #1d2939;
+  font-size: .76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-report-dialog__scenario-group-heading small,
+.summary-report-dialog__scenario-fields small {
+  color: #667085;
+  font-size: .61rem;
+  font-weight: 650;
+}
+
+.summary-report-dialog__scenario-group-heading .ghost-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 9px;
+}
+
+.summary-report-dialog__scenario-rows {
+  display: grid;
+}
+
+.summary-report-dialog__scenario-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 11px 14px;
+  border-top: 1px solid #edf1f5;
+}
+
+.summary-report-dialog__scenario-index {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: #e9f1fb;
+  color: #24558b;
+  font-size: .61rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.summary-report-dialog__scenario-fields {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.summary-report-dialog__scenario-fields input,
+.summary-report-dialog__scenario-fields textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #cfd8e3;
+  border-radius: 8px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+}
+
+.summary-report-dialog__scenario-fields input {
+  min-height: 35px;
+  font-size: .72rem;
+  font-weight: 780;
+}
+
+.summary-report-dialog__scenario-fields textarea {
+  min-height: 54px;
+  resize: vertical;
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.summary-report-dialog__scenario-fields input:focus,
+.summary-report-dialog__scenario-fields textarea:focus {
+  border-color: #2563eb;
+  outline: 3px solid rgba(37, 99, 235, .13);
+}
+
+.summary-report-dialog__scenario-actions {
+  display: grid;
+  gap: 7px;
+}
+
+.summary-report-dialog__scenario-actions .ghost-button {
+  min-width: 92px;
+  min-height: 33px;
+  padding: 0 9px;
+}
+
+.summary-report-dialog__remove {
+  color: #b42318;
+}
+
+.summary-report-dialog__remove.is-confirming {
+  border-color: #d92d20;
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .summary-report-dialog__report-list {
@@ -6993,6 +7144,8 @@ html.aftertaxus-dark-mode .summary-report-dialog__management-heading small,
 html.aftertaxus-dark-mode .summary-report-dialog__section-heading small,
 html.aftertaxus-dark-mode .summary-report-dialog__empty,
 html.aftertaxus-dark-mode .summary-report-dialog__report-name small,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-group-heading small,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-fields small,
 html.aftertaxus-dark-mode .summary-report-dialog__url-preview {
   color: #b7c4d6;
 }
@@ -7000,6 +7153,8 @@ html.aftertaxus-dark-mode .summary-report-dialog__url-preview {
 html.aftertaxus-dark-mode .summary-report-dialog__field input,
 html.aftertaxus-dark-mode .summary-report-dialog__field select,
 html.aftertaxus-dark-mode .summary-report-dialog__report-name input,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-fields input,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-fields textarea,
 html.aftertaxus-dark-mode .summary-report-dialog__close {
   border-color: rgba(148, 163, 184, .28);
   background: #07111f;
@@ -7008,7 +7163,9 @@ html.aftertaxus-dark-mode .summary-report-dialog__close {
 
 html.aftertaxus-dark-mode .summary-report-dialog__destinations label,
 html.aftertaxus-dark-mode .summary-report-dialog__current,
-html.aftertaxus-dark-mode .summary-report-dialog__management {
+html.aftertaxus-dark-mode .summary-report-dialog__management,
+html.aftertaxus-dark-mode .summary-report-dialog__scenarios,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-group-heading {
   border-color: rgba(148, 163, 184, .2);
   background: rgba(2, 6, 23, .5);
 }
@@ -7019,7 +7176,8 @@ html.aftertaxus-dark-mode .summary-report-dialog__destinations label.is-selected
 }
 
 html.aftertaxus-dark-mode .summary-report-dialog__destinations strong,
-html.aftertaxus-dark-mode .summary-report-dialog__current dd {
+html.aftertaxus-dark-mode .summary-report-dialog__current dd,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-group-heading strong {
   color: #f8fafc;
 }
 
@@ -7028,8 +7186,21 @@ html.aftertaxus-dark-mode .summary-report-dialog__current dl div {
 }
 
 html.aftertaxus-dark-mode .summary-report-dialog__management-heading,
-html.aftertaxus-dark-mode .summary-report-dialog__report-row {
+html.aftertaxus-dark-mode .summary-report-dialog__report-row,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-group,
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-row {
   border-color: rgba(148, 163, 184, .18);
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-index {
+  background: rgba(37, 99, 235, .2);
+  color: #93c5fd;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__remove.is-confirming {
+  border-color: rgba(248, 113, 113, .7);
+  background: rgba(127, 29, 29, .26);
+  color: #fca5a5;
 }
 
 .public-report-status {
@@ -7355,6 +7526,20 @@ html.aftertaxus-dark-mode .summary-report-dialog__report-row {
 
   .summary-report-dialog__report-actions {
     justify-content: flex-end;
+  }
+
+  .summary-report-dialog__scenario-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .summary-report-dialog__scenario-actions {
+    grid-column: 2;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .summary-report-dialog__scenario-actions .ghost-button {
+    min-width: 88px;
   }
 
   .summary-scenarios-page {

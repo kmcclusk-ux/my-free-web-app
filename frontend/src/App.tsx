@@ -277,6 +277,7 @@ type SummaryReportScenario = {
   localityName?: string;
   filingStatus?: FilingStatus;
 };
+type SummaryScenarioDraft = Pick<SummaryReportScenario, "name" | "description">;
 type SummaryReportPayload = {
   reportName: string;
   generatedAt: string;
@@ -591,6 +592,24 @@ function decodeSummaryReportPayload(value: string): SummaryReportPayload | null 
   } catch {
     return null;
   }
+}
+
+function summaryScenarioDraftKey(reportId: string, scenarioId: string) {
+  return `${reportId}:${scenarioId}`;
+}
+
+function buildSummaryScenarioDrafts(pages: ScenarioLandingPage[]) {
+  const drafts: Record<string, SummaryScenarioDraft> = {};
+  pages.forEach((page) => {
+    const payload = decodeSummaryReportPayload(page.payload);
+    payload?.scenarios.forEach((scenario) => {
+      drafts[summaryScenarioDraftKey(page.id, scenario.id)] = {
+        name: scenario.name,
+        description: scenario.description,
+      };
+    });
+  });
+  return drafts;
 }
 
 function readSummaryReportFromUrl() {
@@ -5870,6 +5889,8 @@ export default function App() {
   const [selectedSummaryLandingPageId, setSelectedSummaryLandingPageId] = useState("");
   const [summaryReportDialogError, setSummaryReportDialogError] = useState("");
   const [summaryReportRenameDrafts, setSummaryReportRenameDrafts] = useState<Record<string, string>>({});
+  const [summaryScenarioDrafts, setSummaryScenarioDrafts] = useState<Record<string, SummaryScenarioDraft>>({});
+  const [summaryScenarioPendingDeleteKey, setSummaryScenarioPendingDeleteKey] = useState("");
   const [summaryReportBusyId, setSummaryReportBusyId] = useState("");
   const [isSummaryReportListLoading, setIsSummaryReportListLoading] = useState(false);
   const [scenarioLandingPages, setScenarioLandingPages] = useState<ScenarioLandingPage[]>([]);
@@ -7213,6 +7234,7 @@ export default function App() {
   const summaryLandingPageOptions = scenarioLandingPages
     .map((page) => ({ page, payload: decodeSummaryReportPayload(page.payload) }))
     .filter((entry): entry is { page: ScenarioLandingPage; payload: SummaryReportPayload } => Boolean(entry.payload));
+  const managedScenarioCount = summaryLandingPageOptions.reduce((total, entry) => total + entry.payload.scenarios.length, 0);
   const currentSummaryReportPayload: SummaryReportPayload = {
     reportName: "Tax scenario summary",
     generatedAt: new Date().toISOString(),
@@ -7260,6 +7282,7 @@ export default function App() {
         ...current,
         ...Object.fromEntries(publishedPages.map((page) => [page.id, page.name])),
       }));
+      setSummaryScenarioDrafts(buildSummaryScenarioDrafts(publishedPages));
     } catch (error) {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Public reports could not be loaded.");
     } finally {
@@ -7273,6 +7296,8 @@ export default function App() {
     setSummaryScenarioName("Current workbook");
     setSelectedSummaryLandingPageId(summaryLandingPageOptions[0]?.page.id || "");
     setSummaryReportRenameDrafts(Object.fromEntries(summaryLandingPageOptions.map(({ page }) => [page.id, page.name])));
+    setSummaryScenarioDrafts(buildSummaryScenarioDrafts(scenarioLandingPages));
+    setSummaryScenarioPendingDeleteKey("");
     setSummaryReportDialogError("");
     setIsSummaryReportDialogOpen(true);
     void refreshPublicSummaryReports();
@@ -7314,6 +7339,101 @@ export default function App() {
       setMcpTokenMessage(`Scenario report renamed. Public link: ${saved.publicUrl}`);
     } catch (error) {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Scenario report could not be renamed.");
+    } finally {
+      setSummaryReportBusyId("");
+    }
+  };
+  const prepareCurrentScenarioForReport = (pageId?: string) => {
+    const entry = pageId ? summaryLandingPageOptions.find(({ page }) => page.id === pageId) : undefined;
+    if (entry) {
+      setSummaryReportDestination("existing");
+      setSelectedSummaryLandingPageId(entry.page.id);
+      setSummaryScenarioName(`Scenario ${entry.payload.scenarios.length + 1}`);
+    } else {
+      setSummaryReportDestination("new");
+      setSummaryReportName((current) => current || `${selectedStateCode} tax scenarios`);
+      setSummaryScenarioName("Current workbook");
+    }
+    setSummaryScenarioPendingDeleteKey("");
+    setSummaryReportDialogError("");
+    window.setTimeout(() => document.getElementById("summary-report-add-current")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
+  const saveManagedScenario = async (pageId: string, scenarioId: string, remove = false) => {
+    if (!authToken) {
+      setSummaryReportDialogError("Sign in to manage scenarios.");
+      return;
+    }
+    const entry = summaryLandingPageOptions.find(({ page }) => page.id === pageId);
+    const scenario = entry?.payload.scenarios.find((candidate) => candidate.id === scenarioId);
+    if (!entry || !scenario) {
+      setSummaryReportDialogError("This scenario could not be found. Refresh the report list and try again.");
+      return;
+    }
+    if (remove && entry.payload.scenarios.length === 1) {
+      setSummaryReportDialogError("A public report must contain at least one scenario. Add another scenario before removing this one.");
+      return;
+    }
+    const draftKey = summaryScenarioDraftKey(pageId, scenarioId);
+    const draft = summaryScenarioDrafts[draftKey] || { name: scenario.name, description: scenario.description };
+    const scenarioName = draft.name.trim();
+    const scenarioDescription = draft.description.trim();
+    if (!remove && !scenarioName) {
+      setSummaryReportDialogError("Enter a scenario name.");
+      return;
+    }
+    if (!remove && scenarioName.length > 60) {
+      setSummaryReportDialogError("Scenario names can contain up to 60 characters.");
+      return;
+    }
+    if (!remove && scenarioDescription.length > 300) {
+      setSummaryReportDialogError("Scenario descriptions can contain up to 300 characters.");
+      return;
+    }
+    if (!remove && entry.payload.scenarios.some((candidate) => candidate.id !== scenarioId && normalizeLookupKey(candidate.name) === normalizeLookupKey(scenarioName))) {
+      setSummaryReportDialogError("Use a scenario name that is not already on this landing page.");
+      return;
+    }
+    const reportSlug = entry.page.slug || normalizePublicReportSlug(entry.page.name);
+    if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
+      setSummaryReportDialogError("This report needs a valid public URL before its scenarios can be changed.");
+      return;
+    }
+    const updatedPayload: SummaryReportPayload = {
+      ...entry.payload,
+      generatedAt: new Date().toISOString(),
+      scenarios: remove
+        ? entry.payload.scenarios.filter((candidate) => candidate.id !== scenarioId)
+        : entry.payload.scenarios.map((candidate) => candidate.id === scenarioId
+          ? { ...candidate, name: scenarioName, description: scenarioDescription }
+          : candidate),
+    };
+    const busyId = `${remove ? "remove" : "save"}:${draftKey}`;
+    setSummaryReportBusyId(busyId);
+    setSummaryReportDialogError("");
+    try {
+      const saved = await upsertPublicSummaryReport({
+        id: pageId,
+        name: entry.page.name,
+        slug: reportSlug,
+        previousSlug: entry.page.slug,
+        payload: updatedPayload,
+      }, authToken);
+      const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
+      setScenarioLandingPages((current) => current.map((page) => page.id === pageId
+        ? { ...page, name: saved.report.name, slug: saved.report.slug, updatedAt: saved.report.updatedAt, payload: encodedPayload }
+        : page));
+      setSummaryScenarioDrafts((current) => {
+        if (remove) {
+          const next = { ...current };
+          delete next[draftKey];
+          return next;
+        }
+        return { ...current, [draftKey]: { name: scenarioName, description: scenarioDescription } };
+      });
+      setSummaryScenarioPendingDeleteKey("");
+      setMcpTokenMessage(remove ? "Scenario removed from the public report." : "Scenario changes published.");
+    } catch (error) {
+      setSummaryReportDialogError(error instanceof Error ? error.message : remove ? "Scenario could not be removed." : "Scenario changes could not be saved.");
     } finally {
       setSummaryReportBusyId("");
     }
@@ -8386,6 +8506,57 @@ export default function App() {
               <button className="summary-report-dialog__close" type="button" onClick={() => setIsSummaryReportDialogOpen(false)} aria-label="Close scenario report dialog">×</button>
             </div>
             <p className="summary-report-dialog__copy">Manage your existing public reports, or save the current workbook summary as a scenario on a new or existing landing page.</p>
+            <section className="summary-report-dialog__scenarios" aria-labelledby="summary-scenario-management-title">
+              <div className="summary-report-dialog__management-heading">
+                <div>
+                  <span>Existing scenarios</span>
+                  <strong id="summary-scenario-management-title">{managedScenarioCount} saved {managedScenarioCount === 1 ? "scenario" : "scenarios"}</strong>
+                </div>
+                <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => prepareCurrentScenarioForReport()}>New report</button>
+              </div>
+              {isSummaryReportListLoading && summaryLandingPageOptions.length === 0 ? (
+                <p className="summary-report-dialog__empty">Loading saved scenarios…</p>
+              ) : summaryLandingPageOptions.length === 0 ? (
+                <p className="summary-report-dialog__empty">No scenarios have been created yet. Add the current summary to create the first one.</p>
+              ) : (
+                <div className="summary-report-dialog__scenario-list">
+                  {summaryLandingPageOptions.map(({ page, payload }) => (
+                    <section className="summary-report-dialog__scenario-group" key={page.id} aria-label={`${page.name} scenarios`}>
+                      <div className="summary-report-dialog__scenario-group-heading">
+                        <div>
+                          <strong>{page.name}</strong>
+                          <small>{payload.scenarios.length} of {SCENARIOS_PER_LANDING_PAGE_LIMIT} scenarios</small>
+                        </div>
+                        <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId) || payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT} onClick={() => prepareCurrentScenarioForReport(page.id)} title={payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT ? "This report has reached its scenario limit." : "Add the current workbook summary to this report"}>Add current</button>
+                      </div>
+                      <div className="summary-report-dialog__scenario-rows">
+                        {payload.scenarios.map((scenario, index) => {
+                          const draftKey = summaryScenarioDraftKey(page.id, scenario.id);
+                          const draft = summaryScenarioDrafts[draftKey] || { name: scenario.name, description: scenario.description };
+                          const saveBusyId = `save:${draftKey}`;
+                          const removeBusyId = `remove:${draftKey}`;
+                          const isPendingRemoval = summaryScenarioPendingDeleteKey === draftKey;
+                          return (
+                            <article className="summary-report-dialog__scenario-row" key={scenario.id}>
+                              <div className="summary-report-dialog__scenario-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
+                              <div className="summary-report-dialog__scenario-fields">
+                                <input aria-label={`Scenario name for ${scenario.name}`} value={draft.name} maxLength={60} onChange={(event) => { const name = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [draftKey]: { ...draft, name } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
+                                <textarea aria-label={`Scenario description for ${scenario.name}`} value={draft.description} maxLength={300} rows={2} onChange={(event) => { const description = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [draftKey]: { ...draft, description } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
+                                <small>{scenario.stateCode || payload.stateCode} · {filingStatusLabels[scenario.filingStatus || payload.filingStatus]} · {formatCurrencyDetailed(scenario.income)} income · {formatCurrencyDetailed(scenario.totalTax)} tax</small>
+                              </div>
+                              <div className="summary-report-dialog__scenario-actions">
+                                <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void saveManagedScenario(page.id, scenario.id); }}>{summaryReportBusyId === saveBusyId ? "Saving…" : "Save"}</button>
+                                <button className={`ghost-button summary-report-dialog__remove${isPendingRemoval ? " is-confirming" : ""}`} type="button" disabled={Boolean(summaryReportBusyId) || payload.scenarios.length === 1} onClick={() => { if (isPendingRemoval) { void saveManagedScenario(page.id, scenario.id, true); } else { setSummaryScenarioPendingDeleteKey(draftKey); setSummaryReportDialogError(""); } }} title={payload.scenarios.length === 1 ? "Add another scenario before removing this one." : isPendingRemoval ? "Confirm removal from this public report" : "Remove this scenario"}>{summaryReportBusyId === removeBusyId ? "Removing…" : isPendingRemoval ? "Confirm remove" : "Remove"}</button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </section>
             <section className="summary-report-dialog__management" aria-labelledby="summary-report-management-title">
               <div className="summary-report-dialog__management-heading">
                 <div>
@@ -8418,7 +8589,7 @@ export default function App() {
                 </div>
               )}
             </section>
-            <div className="summary-report-dialog__section-heading">
+            <div className="summary-report-dialog__section-heading" id="summary-report-add-current">
               <span>Add current summary</span>
               <small>The current workbook values become one scenario.</small>
             </div>
