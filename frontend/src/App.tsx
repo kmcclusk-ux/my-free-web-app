@@ -124,6 +124,7 @@ type ModelDataSnapshot = {
   isWhatIfActive: boolean;
 };
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
+type ScenarioLandingPage = { id: string; name: string; slug?: string; createdAt: string; updatedAt: string; payload: string };
 type IncomePrimaryPeriod = "monthly" | "annual";
 type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
@@ -271,6 +272,10 @@ type SummaryReportScenario = {
   effectiveTaxRate: number;
   marginalTaxRateLabel: string;
   description: string;
+  stateCode?: string;
+  stateName?: string;
+  localityName?: string;
+  filingStatus?: FilingStatus;
 };
 type SummaryReportPayload = {
   reportName: string;
@@ -301,6 +306,14 @@ type SummaryReportPayload = {
   taxTreatmentAllocationRows: Array<{ label: string; amount: number }>;
   scenarios: SummaryReportScenario[];
 };
+type PublicSummaryReportRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  payload: SummaryReportPayload;
+  createdAt: string;
+  updatedAt: string;
+};
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 const API_BASE_URL = typeof window !== "undefined" &&
@@ -311,6 +324,8 @@ const API_BASE_URL = typeof window !== "undefined" &&
 const WORKSPACE_ID = "default";
 const WORKBOOK_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mdio6n9O8qlon0SeIt8GOA65XkZ-Xwva7a30DOURLDU/edit?gid=0#gid=0";
 const CHATGPT_URL = "https://chatgpt.com/";
+const PUBLIC_SITE_ORIGIN = "https://aftertaxus.com";
+const RESERVED_PUBLIC_REPORT_SLUGS = new Set(["api", "assets", "auth", "hello", "login", "logout", "mcp-v5", "reports", "signin", "signup"]);
 const CURRENT_MCP_CONNECTOR_PATH = "/mcp-v5";
 const WORKBOOK_REMOTE_REFRESH_INTERVAL_MS = 5000;
 
@@ -353,6 +368,8 @@ const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
 const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
 const WORKBOOK_HISTORY_LIMIT = 100;
 const MODEL_VERSION_LIMIT = 10;
+const SCENARIO_LANDING_PAGE_LIMIT = 20;
+const SCENARIOS_PER_LANDING_PAGE_LIMIT = 20;
 const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
@@ -498,6 +515,10 @@ function decodeSummaryReportScenario(value: unknown, index: number): SummaryRepo
     effectiveTaxRate: typeof scenario.effectiveTaxRate === "number" ? scenario.effectiveTaxRate : scenario.income > 0 ? scenario.totalTax / scenario.income : 0,
     marginalTaxRateLabel: typeof scenario.marginalTaxRateLabel === "string" ? scenario.marginalTaxRateLabel : "—",
     description: typeof scenario.description === "string" ? scenario.description : "",
+    stateCode: typeof scenario.stateCode === "string" ? scenario.stateCode : undefined,
+    stateName: typeof scenario.stateName === "string" ? scenario.stateName : undefined,
+    localityName: typeof scenario.localityName === "string" ? scenario.localityName : undefined,
+    filingStatus: scenario.filingStatus === "single" || scenario.filingStatus === "mfj" || scenario.filingStatus === "mfs" || scenario.filingStatus === "hoh" ? scenario.filingStatus : undefined,
   };
 }
 
@@ -578,10 +599,28 @@ function readSummaryReportFromUrl() {
   return summaryReport ? decodeSummaryReportPayload(summaryReport) : null;
 }
 
-function buildSummaryReportUrl(payload: SummaryReportPayload) {
-  const url = new URL("/", window.location.href);
-  url.searchParams.set("summaryReport", encodeSummaryReportPayload(payload));
-  return url.toString();
+function normalizePublicReportSlug(value: unknown) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
+}
+
+function readPublicReportSlugFromUrl() {
+  if (typeof window === "undefined") return "";
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  if (segments.length !== 1) return "";
+  const decoded = decodeURIComponent(segments[0]).toLowerCase();
+  const slug = normalizePublicReportSlug(decoded);
+  return slug === decoded && !RESERVED_PUBLIC_REPORT_SLUGS.has(slug) ? slug : "";
+}
+
+function buildPublicSummaryReportUrl(slug: string) {
+  return `${PUBLIC_SITE_ORIGIN}/${encodeURIComponent(slug)}`;
 }
 
 function authUserFromIdToken(idToken: string): AuthUser {
@@ -2329,6 +2368,42 @@ async function saveWorkbook(workspaceId: string, payload: WorkbookResponse, idTo
   const json = (await response.json()) as { updatedAt?: string; error?: string };
   if (!response.ok) throw new Error(json.error || "Workbook save failed");
   return json;
+}
+
+async function getPublicSummaryReport(slug: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ calc: "PUBLIC_REPORT_GET", slug }),
+  });
+  const json = (await response.json()) as { report?: PublicSummaryReportRecord; error?: string };
+  if (!response.ok || !json.report) throw new Error(json.error || "Public report could not be loaded.");
+  return json.report;
+}
+
+async function upsertPublicSummaryReport(report: { id: string; name: string; slug: string; previousSlug?: string; payload: SummaryReportPayload }, idToken?: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello`, {
+    method: "POST",
+    headers: authHeaders(idToken),
+    body: JSON.stringify({ calc: "PUBLIC_REPORT_UPSERT", reportId: report.id, name: report.name, slug: report.slug, previousSlug: report.previousSlug, payload: report.payload }),
+  });
+  const json = (await response.json()) as { report?: PublicSummaryReportRecord; publicUrl?: string; error?: string };
+  if (!response.ok || !json.report) throw new Error(json.error || "Public report could not be saved.");
+  return { report: json.report, publicUrl: json.publicUrl || buildPublicSummaryReportUrl(json.report.slug) };
+}
+
+async function listPublicSummaryReports(idToken?: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello`, {
+    method: "POST",
+    headers: authHeaders(idToken),
+    body: JSON.stringify({ calc: "PUBLIC_REPORT_LIST" }),
+  });
+  const json = (await response.json()) as { reports?: PublicSummaryReportRecord[]; error?: string };
+  if (!response.ok) throw new Error(json.error || "Public reports could not be loaded.");
+  return Array.isArray(json.reports) ? json.reports : [];
 }
 
 function workbookRefreshMarker(response: WorkbookResponse) {
@@ -5678,6 +5753,20 @@ function AppSplash({ message }: { message: string }) {
   );
 }
 
+function PublicReportStatus({ title, message }: { title: string; message: string }) {
+  return (
+    <main className="public-report-status">
+      <div className="public-report-status__card">
+        <AfterTaxUSLogo />
+        <p className="summary-report-page__eyebrow">Public scenario report</p>
+        <h1>{title}</h1>
+        <p>{message}</p>
+        <a href={PUBLIC_SITE_ORIGIN}>Open AfterTax US</a>
+      </div>
+    </main>
+  );
+}
+
 function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload }) {
   return (
     <div className="summary-report-page summary-scenarios-page">
@@ -5690,7 +5779,7 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
           </div>
         </div>
         <div className="summary-scenarios-page__generated">
-          <span>Generated</span>
+          <span>Updated</span>
           <strong>{new Date(payload.generatedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</strong>
         </div>
       </header>
@@ -5700,13 +5789,16 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
           <p className="summary-report-page__eyebrow">Tax scenario summary</p>
           <h1>{payload.reportName}</h1>
           <p>
-            {payload.scenarios.length} scenarios using {filingStatusLabels[payload.filingStatus].toLowerCase()} filing status and {payload.stateName} tax treatment. Amounts are annual planning estimates from the 2025 model.
+            {payload.scenarios.length} saved {payload.scenarios.length === 1 ? "scenario" : "scenarios"}. Each scenario reflects the workbook values when it was added. Amounts are annual planning estimates from the 2025 model.
           </p>
         </section>
 
         <section className="summary-scenario-list" aria-label="Tax scenarios">
           {payload.scenarios.map((scenario, index) => {
             const otherOrdinaryIncome = Math.max(scenario.ordinaryIncome - scenario.wages, 0);
+            const scenarioStateCode = scenario.stateCode || payload.stateCode;
+            const scenarioLocalityName = scenario.localityName || payload.localityName || "Local tax";
+            const scenarioFilingStatus = scenario.filingStatus || payload.filingStatus;
             return (
               <article className="summary-scenario-card" key={scenario.id}>
                 <div className="summary-scenario-card__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
@@ -5715,7 +5807,7 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
                     <div>
                       <div className="summary-scenario-card__title-line">
                         <h2>{scenario.name}</h2>
-                        <span>{scenario.source === "current" ? "Current workbook" : "Reference scenario"}</span>
+                        <span>{scenarioStateCode} · {filingStatusLabels[scenarioFilingStatus]}</span>
                       </div>
                       <p>{scenario.description}</p>
                     </div>
@@ -5736,8 +5828,8 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
 
                   <div className="summary-scenario-card__taxes" aria-label={`${scenario.name} tax breakdown`}>
                     <div><span>Federal tax and payroll</span><strong>{formatCurrencyDetailed(scenario.federalTax)}</strong></div>
-                    <div><span>{payload.stateCode} tax and payroll</span><strong>{formatCurrencyDetailed(scenario.stateTax)}</strong></div>
-                    <div><span>{payload.localityName || "Local tax"}</span><strong>{formatCurrencyDetailed(scenario.localTax)}</strong></div>
+                    <div><span>{scenarioStateCode} tax and payroll</span><strong>{formatCurrencyDetailed(scenario.stateTax)}</strong></div>
+                    <div><span>{scenarioLocalityName}</span><strong>{formatCurrencyDetailed(scenario.localTax)}</strong></div>
                     <div className="summary-scenario-card__after-tax"><span>After-tax income</span><strong>{formatCurrencyDetailed(scenario.afterTaxIncome)}</strong></div>
                     <div><span>Marginal rate</span><strong>{scenario.marginalTaxRateLabel}</strong></div>
                   </div>
@@ -5772,10 +5864,15 @@ export default function App() {
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
   const [isSummaryReportDialogOpen, setIsSummaryReportDialogOpen] = useState(false);
+  const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
   const [summaryReportName, setSummaryReportName] = useState("");
   const [summaryScenarioName, setSummaryScenarioName] = useState("Current workbook");
-  const [includeCurrentSummaryScenario, setIncludeCurrentSummaryScenario] = useState(true);
+  const [selectedSummaryLandingPageId, setSelectedSummaryLandingPageId] = useState("");
   const [summaryReportDialogError, setSummaryReportDialogError] = useState("");
+  const [summaryReportRenameDrafts, setSummaryReportRenameDrafts] = useState<Record<string, string>>({});
+  const [summaryReportBusyId, setSummaryReportBusyId] = useState("");
+  const [isSummaryReportListLoading, setIsSummaryReportListLoading] = useState(false);
+  const [scenarioLandingPages, setScenarioLandingPages] = useState<ScenarioLandingPage[]>([]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [investments, setInvestments] = useState<InvestmentRow[]>(() => authEnabled ? [] : initialInvestments);
   const [tickers, setTickers] = useState(initialTickers);
@@ -5803,6 +5900,8 @@ export default function App() {
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
   const [summaryReportPayload, setSummaryReportPayload] = useState<SummaryReportPayload | null>(readSummaryReportFromUrl);
+  const [publicReportLoadState, setPublicReportLoadState] = useState<"idle" | "loading" | "error">(() => !readSummaryReportFromUrl() && readPublicReportSlugFromUrl() ? "loading" : "idle");
+  const [publicReportLoadError, setPublicReportLoadError] = useState("");
   const [versionDialogMode, setVersionDialogMode] = useState<"save" | "restore" | null>(null);
   const [versionName, setVersionName] = useState("");
   const [versionDialogError, setVersionDialogError] = useState("");
@@ -5916,9 +6015,49 @@ export default function App() {
   }, [authEnabled]);
 
   useEffect(() => {
-    const syncSummaryReport = () => setSummaryReportPayload(readSummaryReportFromUrl());
+    let requestVersion = 0;
+    const syncSummaryReport = () => {
+      const currentRequest = ++requestVersion;
+      const embeddedReport = readSummaryReportFromUrl();
+      if (embeddedReport) {
+        setSummaryReportPayload(embeddedReport);
+        setPublicReportLoadState("idle");
+        setPublicReportLoadError("");
+        return;
+      }
+      const slug = readPublicReportSlugFromUrl();
+      if (!slug) {
+        setSummaryReportPayload(null);
+        setPublicReportLoadState("idle");
+        setPublicReportLoadError("");
+        return;
+      }
+      setSummaryReportPayload(null);
+      setPublicReportLoadState("loading");
+      setPublicReportLoadError("");
+      getPublicSummaryReport(slug)
+        .then((report) => {
+          if (currentRequest !== requestVersion) return;
+          const validatedPayload = decodeSummaryReportPayload(encodeSummaryReportPayload(report.payload));
+          if (!validatedPayload) throw new Error("The public report data is invalid.");
+          if (report.slug !== slug) {
+            window.history.replaceState({}, document.title, `/${report.slug}`);
+          }
+          setSummaryReportPayload(validatedPayload);
+          setPublicReportLoadState("idle");
+        })
+        .catch((error: Error) => {
+          if (currentRequest !== requestVersion) return;
+          setPublicReportLoadState("error");
+          setPublicReportLoadError(error.message || "This public scenario report is unavailable.");
+        });
+    };
+    syncSummaryReport();
     window.addEventListener("popstate", syncSummaryReport);
-    return () => window.removeEventListener("popstate", syncSummaryReport);
+    return () => {
+      requestVersion += 1;
+      window.removeEventListener("popstate", syncSummaryReport);
+    };
   }, []);
 
   useEffect(() => {
@@ -7071,78 +7210,9 @@ export default function App() {
     setUiSettings((current) => ({ ...current, darkMode: !current.darkMode }));
     setIsTopbarMenuOpen(false);
   };
-  const referenceScenarioIncome = flows.displayIncome > 0 ? flows.displayIncome : 100000;
-  const buildReferenceSummaryScenario = ({ id, name, wages, preferredIncome, description }: { id: string; name: string; wages: number; preferredIncome: number; description: string }): SummaryReportScenario => {
-    const income = Math.max(wages + preferredIncome, 0);
-    const federalTaxable = Math.max(income - federalAboveLineDeductionSummary.total - federalDeduction, 0);
-    const preferredTaxable = Math.min(preferredIncome, federalTaxable);
-    const ordinaryTaxableIncome = Math.max(federalTaxable - preferredTaxable, 0);
-    const federalIncomeTax = federalCombinedTax2025({
-      ordinaryTaxable: ordinaryTaxableIncome,
-      preferredTaxable,
-      filingStatus: federalSettings.filingStatus,
-      magi: income,
-      netInvestmentIncome: preferredIncome,
-    }).tax;
-    const payrollTax = calculateW2PayrollTax(wages, federalSettings.filingStatus, selectedStateCode);
-    const scenarioStateTaxable = Math.max(income - stateDeduction, 0);
-    const stateIncomeTax = localStateTax2025(scenarioStateTaxable, selectedStateCode, federalSettings.filingStatus).tax;
-    const scenarioLocalTaxable = localTaxSettings.enabled
-      ? (localTaxSettings.taxableBase.wages ? wages : 0) + (localTaxSettings.taxableBase.dividends ? preferredIncome : 0)
-      : 0;
-    const scenarioLocalResult = calculateLocalTax(localTaxSettings, scenarioLocalTaxable);
-    const federalTax = federalIncomeTax + payrollTax.federal.total;
-    const stateTax = stateIncomeTax + payrollTax.state.total;
-    const localTax = scenarioLocalResult.tax;
-    const scenarioTotalTax = federalTax + stateTax + localTax;
-    const scenarioCombinedMarginalLabel = getReachedTaxRateLabel(
-      buildCombinedTaxRateMarkers(marginalFederalMarkers, marginalStateMarkers, selectedStateCode, selectedStateName, marginalStateBaseRateLabel, federalSettings.filingStatus),
-      Math.max(federalTaxable, scenarioStateTaxable),
-      marginalCombinedBaseRateLabel
-    );
-    const scenarioMarginalRate = rateLabelToDecimal(scenarioCombinedMarginalLabel) + scenarioLocalResult.marginalRate;
-    return {
-      id,
-      name,
-      source: "reference",
-      income,
-      wages,
-      ordinaryIncome: wages,
-      preferredIncome,
-      investmentIncome: preferredIncome,
-      federalTax,
-      stateTax,
-      localTax,
-      totalTax: scenarioTotalTax,
-      afterTaxIncome: income - scenarioTotalTax,
-      effectiveTaxRate: income > 0 ? scenarioTotalTax / income : 0,
-      marginalTaxRateLabel: formatPercent(scenarioMarginalRate),
-      description,
-    };
-  };
-  const referenceSummaryScenarios: SummaryReportScenario[] = [
-    buildReferenceSummaryScenario({
-      id: "salary-income",
-      name: "Salary income",
-      wages: referenceScenarioIncome,
-      preferredIncome: 0,
-      description: `${formatCurrency(referenceScenarioIncome)} of W-2 wages with no preferred investment income.`,
-    }),
-    buildReferenceSummaryScenario({
-      id: "qualified-dividend-income",
-      name: "Qualified-dividend income",
-      wages: 0,
-      preferredIncome: referenceScenarioIncome,
-      description: `${formatCurrency(referenceScenarioIncome)} of preferred investment income with no W-2 wages.`,
-    }),
-    buildReferenceSummaryScenario({
-      id: "mixed-salary-dividends",
-      name: "80% salary / 20% qualified dividends",
-      wages: referenceScenarioIncome * 0.8,
-      preferredIncome: referenceScenarioIncome * 0.2,
-      description: `${formatCurrency(referenceScenarioIncome * 0.8)} of W-2 wages and ${formatCurrency(referenceScenarioIncome * 0.2)} of preferred investment income.`,
-    }),
-  ];
+  const summaryLandingPageOptions = scenarioLandingPages
+    .map((page) => ({ page, payload: decodeSummaryReportPayload(page.payload) }))
+    .filter((entry): entry is { page: ScenarioLandingPage; payload: SummaryReportPayload } => Boolean(entry.payload));
   const currentSummaryReportPayload: SummaryReportPayload = {
     reportName: "Tax scenario summary",
     generatedAt: new Date().toISOString(),
@@ -7172,31 +7242,107 @@ export default function App() {
     taxTreatmentAllocationRows,
     scenarios: [],
   };
+  const refreshPublicSummaryReports = async () => {
+    if (!authToken) return;
+    setIsSummaryReportListLoading(true);
+    try {
+      const reports = await listPublicSummaryReports(authToken);
+      const publishedPages: ScenarioLandingPage[] = reports.map((report) => ({
+        id: report.id,
+        name: report.name,
+        slug: report.slug,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
+        payload: encodeSummaryReportPayload(report.payload),
+      }));
+      setScenarioLandingPages(publishedPages.slice(0, SCENARIO_LANDING_PAGE_LIMIT));
+      setSummaryReportRenameDrafts((current) => ({
+        ...current,
+        ...Object.fromEntries(publishedPages.map((page) => [page.id, page.name])),
+      }));
+    } catch (error) {
+      setSummaryReportDialogError(error instanceof Error ? error.message : "Public reports could not be loaded.");
+    } finally {
+      setIsSummaryReportListLoading(false);
+    }
+  };
   const openSummaryReportDialog = () => {
     setIsTopbarMenuOpen(false);
-    setSummaryReportName(`${selectedStateCode} income and tax scenarios`);
+    setSummaryReportDestination("new");
+    setSummaryReportName(`${selectedStateCode} tax scenarios`);
     setSummaryScenarioName("Current workbook");
-    setIncludeCurrentSummaryScenario(true);
+    setSelectedSummaryLandingPageId(summaryLandingPageOptions[0]?.page.id || "");
+    setSummaryReportRenameDrafts(Object.fromEntries(summaryLandingPageOptions.map(({ page }) => [page.id, page.name])));
     setSummaryReportDialogError("");
     setIsSummaryReportDialogOpen(true);
+    void refreshPublicSummaryReports();
+  };
+  const renameSummaryReport = async (pageId: string) => {
+    if (!authToken) {
+      setSummaryReportDialogError("Sign in to rename and publish scenario reports.");
+      return;
+    }
+    const entry = summaryLandingPageOptions.find(({ page }) => page.id === pageId);
+    const name = String(summaryReportRenameDrafts[pageId] || "").trim();
+    if (!entry || !name) {
+      setSummaryReportDialogError("Enter a report name.");
+      return;
+    }
+    if (name.length > 80) {
+      setSummaryReportDialogError("Report names can contain up to 80 characters.");
+      return;
+    }
+    if (summaryLandingPageOptions.some(({ page }) => page.id !== pageId && normalizeLookupKey(page.name) === normalizeLookupKey(name))) {
+      setSummaryReportDialogError("A scenario report with this name already exists.");
+      return;
+    }
+    const slug = normalizePublicReportSlug(name);
+    if (!slug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
+      setSummaryReportDialogError("Choose a report name that creates a valid public URL.");
+      return;
+    }
+    const renamedPayload = { ...entry.payload, reportName: name, generatedAt: new Date().toISOString() };
+    setSummaryReportBusyId(pageId);
+    setSummaryReportDialogError("");
+    try {
+      const saved = await upsertPublicSummaryReport({ id: pageId, name, slug, previousSlug: entry.page.slug, payload: renamedPayload }, authToken);
+      const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
+      setScenarioLandingPages((current) => current.map((page) => page.id === pageId
+        ? { ...page, name: saved.report.name, slug: saved.report.slug, updatedAt: saved.report.updatedAt, payload: encodedPayload }
+        : page));
+      setSummaryReportRenameDrafts((current) => ({ ...current, [pageId]: saved.report.name }));
+      setMcpTokenMessage(`Scenario report renamed. Public link: ${saved.publicUrl}`);
+    } catch (error) {
+      setSummaryReportDialogError(error instanceof Error ? error.message : "Scenario report could not be renamed.");
+    } finally {
+      setSummaryReportBusyId("");
+    }
   };
   const createSummaryReport = async () => {
     const reportName = summaryReportName.trim();
     const currentScenarioName = summaryScenarioName.trim();
-    if (!reportName) {
+    if (!authToken) {
+      setSummaryReportDialogError("Sign in to create a public scenario report.");
+      return;
+    }
+    if (summaryReportDestination === "new" && !reportName) {
       setSummaryReportDialogError("Enter a report name.");
       return;
     }
-    if (includeCurrentSummaryScenario && !currentScenarioName) {
-      setSummaryReportDialogError("Enter a name for the current workbook scenario.");
+    if (!currentScenarioName) {
+      setSummaryReportDialogError("Enter a scenario name.");
       return;
     }
-    if (includeCurrentSummaryScenario && referenceSummaryScenarios.some((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(currentScenarioName))) {
-      setSummaryReportDialogError("Use a scenario name that differs from the three reference scenarios.");
+    if (summaryReportDestination === "new" && scenarioLandingPages.some((page) => normalizeLookupKey(page.name) === normalizeLookupKey(reportName))) {
+      setSummaryReportDialogError("A scenario landing page with this name already exists.");
+      return;
+    }
+    if (summaryReportDestination === "new" && scenarioLandingPages.length >= SCENARIO_LANDING_PAGE_LIMIT) {
+      setSummaryReportDialogError(`You can save up to ${SCENARIO_LANDING_PAGE_LIMIT} scenario landing pages.`);
       return;
     }
     const currentScenario: SummaryReportScenario = {
-      id: "current-workbook",
+      id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `scenario-${Date.now()}`,
       name: currentScenarioName,
       source: "current",
       income: currentSummaryReportPayload.income,
@@ -7211,25 +7357,82 @@ export default function App() {
       afterTaxIncome: currentSummaryReportPayload.afterTaxIncome,
       effectiveTaxRate: currentSummaryReportPayload.effectiveTaxRate,
       marginalTaxRateLabel: currentSummaryReportPayload.marginalTaxRateLabel,
-      description: `${formatCurrency(effectiveW2Income)} of W-2 wages, ${formatCurrency(preferredBeforeDeductions)} of preferred income, and ${formatCurrency(flows.investmentIncome)} of investment income in the current workbook.`,
+      description: `${formatCurrency(flows.displayIncome)} annual income, including ${formatCurrency(effectiveW2Income)} of W-2 wages, ${formatCurrency(preferredBeforeDeductions)} of preferred income, and ${formatCurrency(flows.investmentIncome)} of investment income.`,
+      stateCode: selectedStateCode,
+      stateName: selectedStateName,
+      localityName: currentSummaryReportPayload.localityName,
+      filingStatus: federalSettings.filingStatus,
     };
-    const reportPayload: SummaryReportPayload = {
-      ...currentSummaryReportPayload,
-      reportName,
-      generatedAt: new Date().toISOString(),
-      scenarios: [
-        ...(includeCurrentSummaryScenario ? [currentScenario] : []),
-        ...referenceSummaryScenarios,
-      ],
-    };
-    const summaryReportUrl = buildSummaryReportUrl(reportPayload);
-    setIsSummaryReportDialogOpen(false);
-    window.open(summaryReportUrl, "_blank", "noopener,noreferrer");
+    const now = new Date().toISOString();
+    let landingPageId = selectedSummaryLandingPageId;
+    let previousSlug: string | undefined;
+    let reportSlug: string;
+    let reportPayload: SummaryReportPayload;
+    if (summaryReportDestination === "existing") {
+      const existingEntry = summaryLandingPageOptions.find((entry) => entry.page.id === selectedSummaryLandingPageId);
+      if (!existingEntry) {
+        setSummaryReportDialogError("Select an existing scenario landing page.");
+        return;
+      }
+      if (existingEntry.payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT) {
+        setSummaryReportDialogError(`This landing page already has ${SCENARIOS_PER_LANDING_PAGE_LIMIT} scenarios.`);
+        return;
+      }
+      if (existingEntry.payload.scenarios.some((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(currentScenarioName))) {
+        setSummaryReportDialogError("Use a scenario name that is not already on this landing page.");
+        return;
+      }
+      reportPayload = {
+        ...existingEntry.payload,
+        generatedAt: now,
+        scenarios: [...existingEntry.payload.scenarios, currentScenario],
+      };
+      previousSlug = existingEntry.page.slug;
+      reportSlug = existingEntry.page.slug || normalizePublicReportSlug(existingEntry.payload.reportName);
+    } else {
+      landingPageId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `scenario-page-${Date.now()}`;
+      reportSlug = normalizePublicReportSlug(reportName);
+      if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
+        setSummaryReportDialogError("Choose a report name that creates a valid public URL.");
+        return;
+      }
+      reportPayload = {
+        ...currentSummaryReportPayload,
+        reportName,
+        generatedAt: now,
+        scenarios: [currentScenario],
+      };
+    }
+    if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
+      setSummaryReportDialogError("This report needs a valid public URL before a scenario can be added.");
+      return;
+    }
+    setSummaryReportBusyId("create");
+    setSummaryReportDialogError("");
     try {
-      await navigator.clipboard.writeText(summaryReportUrl);
-      setMcpTokenMessage("Summary report opened and link copied.");
-    } catch {
-      setMcpTokenMessage("Summary report opened.");
+      const saved = await upsertPublicSummaryReport({ id: landingPageId, name: reportPayload.reportName, slug: reportSlug, previousSlug, payload: reportPayload }, authToken);
+      const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
+      setScenarioLandingPages((current) => {
+        if (summaryReportDestination === "existing") {
+          return current.map((page) => page.id === landingPageId
+            ? { ...page, name: saved.report.name, slug: saved.report.slug, updatedAt: saved.report.updatedAt, payload: encodedPayload }
+            : page);
+        }
+        return [{ id: landingPageId, name: saved.report.name, slug: saved.report.slug, createdAt: saved.report.createdAt, updatedAt: saved.report.updatedAt, payload: encodedPayload }, ...current];
+      });
+      setSummaryReportRenameDrafts((current) => ({ ...current, [landingPageId]: saved.report.name }));
+      setIsSummaryReportDialogOpen(false);
+      window.open(saved.publicUrl, "_blank", "noopener,noreferrer");
+      try {
+        await navigator.clipboard.writeText(saved.publicUrl);
+        setMcpTokenMessage(summaryReportDestination === "existing" ? "Scenario added and public link copied." : "Public scenario report created and link copied.");
+      } catch {
+        setMcpTokenMessage(summaryReportDestination === "existing" ? "Scenario added and public report opened." : "Public scenario report created and opened.");
+      }
+    } catch (error) {
+      setSummaryReportDialogError(error instanceof Error ? error.message : "Public scenario report could not be saved.");
+    } finally {
+      setSummaryReportBusyId("");
     }
   };
   const actionMenu = (
@@ -7285,7 +7488,7 @@ export default function App() {
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSummaryReportDialog}>
             <TopbarActionIcon name="report" />
-            <span>Create Scenario Report</span>
+            <span>Create/Manage Scenario Reports</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -8138,6 +8341,18 @@ export default function App() {
 
     return { ok: false, message: `Rejected action: ${actionType || "(missing)"} is not allowed.` };
   }
+  if (publicReportLoadState === "loading") {
+    return <AppSplash message="Loading public scenario report..." />;
+  }
+
+  if (publicReportLoadState === "error") {
+    return <PublicReportStatus title="Report unavailable" message={publicReportLoadError} />;
+  }
+
+  if (summaryReportPayload) {
+    return <SummaryReportStandalone payload={summaryReportPayload} />;
+  }
+
   const splashMessage =
     authEnabled && authState.status === "loading"
       ? "Opening your private AfterTax US workspace..."
@@ -8149,9 +8364,7 @@ export default function App() {
     return <AppSplash message={splashMessage} />;
   }
 
-  return summaryReportPayload ? (
-    <SummaryReportStandalone payload={summaryReportPayload} />
-  ) : (
+  return (
     <div className={`app-shell ${uiSettings.darkMode ? "app-shell--dark" : ""}`}>
       {isCameraFlashing && (
         <div
@@ -8168,41 +8381,88 @@ export default function App() {
             <div className="summary-report-dialog__header">
               <div>
                 <p className="eyebrow">Scenario Report</p>
-                <h3 id="summary-report-dialog-title">Create a named scenario report</h3>
+                <h3 id="summary-report-dialog-title">Create/manage scenario reports</h3>
               </div>
               <button className="summary-report-dialog__close" type="button" onClick={() => setIsSummaryReportDialogOpen(false)} aria-label="Close scenario report dialog">×</button>
             </div>
-            <p className="summary-report-dialog__copy">The report compares the same annual income across salary, qualified-dividend, and mixed-income cases. You can also include the current workbook as a separate scenario.</p>
-            <label className="summary-report-dialog__field">
-              <span>Report name</span>
-              <input value={summaryReportName} maxLength={80} onChange={(event) => { setSummaryReportName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: 2025 income mix comparison" autoFocus />
-            </label>
-            <div className="summary-report-dialog__reference">
-              <div>
-                <span>Reference scenarios</span>
-                <strong>{formatCurrencyDetailed(referenceScenarioIncome)} annual income</strong>
+            <p className="summary-report-dialog__copy">Manage your existing public reports, or save the current workbook summary as a scenario on a new or existing landing page.</p>
+            <section className="summary-report-dialog__management" aria-labelledby="summary-report-management-title">
+              <div className="summary-report-dialog__management-heading">
+                <div>
+                  <span>Previously created reports</span>
+                  <strong id="summary-report-management-title">{summaryLandingPageOptions.length} saved {summaryLandingPageOptions.length === 1 ? "report" : "reports"}</strong>
+                </div>
+                {isSummaryReportListLoading && <small>Refreshing…</small>}
               </div>
-              <ol>
-                {referenceSummaryScenarios.map((scenario) => <li key={scenario.id}>{scenario.name}</li>)}
-              </ol>
+              {summaryLandingPageOptions.length === 0 ? (
+                <p className="summary-report-dialog__empty">No scenario reports have been created yet.</p>
+              ) : (
+                <div className="summary-report-dialog__report-list">
+                  {summaryLandingPageOptions.map(({ page, payload }) => {
+                    const draftName = summaryReportRenameDrafts[page.id] ?? page.name;
+                    const draftSlug = normalizePublicReportSlug(draftName);
+                    const publicUrl = page.slug ? buildPublicSummaryReportUrl(page.slug) : "";
+                    return (
+                      <div className="summary-report-dialog__report-row" key={page.id}>
+                        <div className="summary-report-dialog__report-name">
+                          <input aria-label={`Report name for ${page.name}`} value={draftName} maxLength={80} onChange={(event) => { const value = event.target.value; setSummaryReportRenameDrafts((current) => ({ ...current, [page.id]: value })); setSummaryReportDialogError(""); }} />
+                          <small>{page.slug ? publicUrl : `${PUBLIC_SITE_ORIGIN}/${draftSlug || "report-name"}`} · {payload.scenarios.length} {payload.scenarios.length === 1 ? "scenario" : "scenarios"}</small>
+                        </div>
+                        <div className="summary-report-dialog__report-actions">
+                          {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
+                          <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void renameSummaryReport(page.id); }}>{summaryReportBusyId === page.id ? "Saving…" : page.slug ? "Save name" : "Publish"}</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+            <div className="summary-report-dialog__section-heading">
+              <span>Add current summary</span>
+              <small>The current workbook values become one scenario.</small>
             </div>
-            <label className="summary-report-dialog__include">
-              <input type="checkbox" checked={includeCurrentSummaryScenario} onChange={(event) => { setIncludeCurrentSummaryScenario(event.target.checked); setSummaryReportDialogError(""); }} />
-              <span>
-                <strong>Add the current workbook as a scenario</strong>
-                <small>Uses the income composition and tax results currently shown in AfterTax US.</small>
-              </span>
-            </label>
-            {includeCurrentSummaryScenario && (
+            <div className="summary-report-dialog__destinations" role="radiogroup" aria-label="Scenario landing page destination">
+              <label className={summaryReportDestination === "new" ? "is-selected" : ""}>
+                <input type="radio" name="summary-report-destination" value="new" checked={summaryReportDestination === "new"} onChange={() => { setSummaryReportDestination("new"); setSummaryScenarioName("Current workbook"); setSummaryReportDialogError(""); }} />
+                <span><strong>New landing page</strong><small>Create a page containing this scenario.</small></span>
+              </label>
+              <label className={`${summaryReportDestination === "existing" ? "is-selected" : ""} ${summaryLandingPageOptions.length === 0 ? "is-disabled" : ""}`}>
+                <input type="radio" name="summary-report-destination" value="existing" checked={summaryReportDestination === "existing"} disabled={summaryLandingPageOptions.length === 0} onChange={() => { const firstPage = summaryLandingPageOptions[0]; setSummaryReportDestination("existing"); setSelectedSummaryLandingPageId(firstPage?.page.id || ""); setSummaryScenarioName(`Scenario ${(firstPage?.payload.scenarios.length || 0) + 1}`); setSummaryReportDialogError(""); }} />
+                <span><strong>Existing landing page</strong><small>{summaryLandingPageOptions.length ? `Add to one of ${summaryLandingPageOptions.length} saved pages.` : "No saved landing pages yet."}</small></span>
+              </label>
+            </div>
+            {summaryReportDestination === "new" ? (
               <label className="summary-report-dialog__field">
-                <span>Current scenario name</span>
-                <input value={summaryScenarioName} maxLength={60} onChange={(event) => { setSummaryScenarioName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: Current portfolio" />
+                <span>Landing page name</span>
+                <input value={summaryReportName} maxLength={80} onChange={(event) => { setSummaryReportName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: 2025 income scenarios" autoFocus />
+                <small className="summary-report-dialog__url-preview">Public URL: {PUBLIC_SITE_ORIGIN}/{normalizePublicReportSlug(summaryReportName) || "report-name"}</small>
+              </label>
+            ) : (
+              <label className="summary-report-dialog__field">
+                <span>Existing landing page</span>
+                <select value={selectedSummaryLandingPageId} onChange={(event) => { const pageId = event.target.value; const page = summaryLandingPageOptions.find((entry) => entry.page.id === pageId); setSelectedSummaryLandingPageId(pageId); setSummaryScenarioName(`Scenario ${(page?.payload.scenarios.length || 0) + 1}`); setSummaryReportDialogError(""); }}>
+                  {summaryLandingPageOptions.map(({ page, payload }) => <option key={page.id} value={page.id}>{page.name} ({payload.scenarios.length} {payload.scenarios.length === 1 ? "scenario" : "scenarios"})</option>)}
+                </select>
               </label>
             )}
+            <div className="summary-report-dialog__current">
+              <div><span>Current summary</span><strong>{formatCurrencyDetailed(flows.displayIncome)} annual income</strong></div>
+              <dl>
+                <div><dt>W-2 wages</dt><dd>{formatCurrencyDetailed(effectiveW2Income)}</dd></div>
+                <div><dt>Investment income</dt><dd>{formatCurrencyDetailed(flows.investmentIncome)}</dd></div>
+                <div><dt>Total estimated tax</dt><dd>{formatCurrencyDetailed(totalTax)}</dd></div>
+                <div><dt>After-tax income</dt><dd>{formatCurrencyDetailed(afterTaxIncome)}</dd></div>
+              </dl>
+            </div>
+            <label className="summary-report-dialog__field">
+              <span>Scenario name</span>
+              <input value={summaryScenarioName} maxLength={60} onChange={(event) => { setSummaryScenarioName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: Salary and dividend mix" />
+            </label>
             {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
             <div className="summary-report-dialog__actions">
               <button className="ghost-button" type="button" onClick={() => setIsSummaryReportDialogOpen(false)}>Cancel</button>
-              <button className="primary-button" type="button" onClick={() => { void createSummaryReport(); }}>Create report</button>
+              <button className="primary-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void createSummaryReport(); }}>{summaryReportBusyId === "create" ? "Publishing…" : summaryReportDestination === "existing" ? "Add scenario" : "Create page and add"}</button>
             </div>
           </section>
         </div>,

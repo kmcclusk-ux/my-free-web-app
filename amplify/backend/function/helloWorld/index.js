@@ -65,7 +65,7 @@ Action schemas:
 - setView payload: {"viewName":"Investments"|"Tickers"|"Accounts"|"Federal Tax"|"State Tax"|"Tax Calculator"|"focus_grid"|"analytics"}.
 Investment row fields: description, account, category, totalInvestment, yearlyIncome, includeIncome, overrideProposal, symbol, newSymbol, newPercent.
 When the user pastes spreadsheet investment rows, map columns like DESC/description -> description, ACCNT/account -> account, total inv. -> totalInvestment, yr inc. -> yearlyIncome, Inc/use checkbox -> includeIncome, override -> overrideProposal, symbol/ticker -> symbol, new symbol -> newSymbol, and new % -> newPercent. Ignore calculated downstream columns such as monthly income, tax status, ordinary, preferred, state, non taxable, cash/stocks/bonds rollups, filtered, and total.
-Ticker row fields: symbol, percentReturn (shown as Dividend % in the UI; user-facing values are entered as percentages), category, taxTreatment, incomeItem, extraData, description, exDividend, divPayout.
+Ticker row fields: symbol, percentReturn, category, taxTreatment, incomeItem, extraData, description, exDividend, divPayout.
 Account row fields: account, taxStatus, dividendAccrued, includeInFreeCashflow.
 Category row fields: name. Tax treatment row fields: label. Account tax type row fields: taxStatus. Investment type row fields: name.
 For bulk updates to tickers, accounts, categories, taxTreatment, accountTaxType, or investmentType, prefer upsertRows. Use replaceRows only when the user clearly wants the whole table replaced.
@@ -79,12 +79,51 @@ Do not request placing trades, transferring money, connecting brokerage accounts
 function isFilingStatus(x) {
     return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
 }
+function isOrdinary2025FilingStatus(x) {
+    return x === "single" || x === "mfj";
+}
 function readNonNegativeNumber(value, fieldName) {
     const num = Number(value);
     if (!Number.isFinite(num) || num < 0) {
         return { error: `${fieldName} must be a number >= 0` };
     }
     return { value: num };
+}
+const RESERVED_PUBLIC_REPORT_SLUGS = new Set([
+    "api",
+    "assets",
+    "auth",
+    "hello",
+    "login",
+    "logout",
+    "mcp-v5",
+    "reports",
+    "signin",
+    "signup",
+]);
+function normalizePublicReportSlug(value) {
+    return String(value || "")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80)
+        .replace(/-+$/g, "");
+}
+function readPublicReportPayload(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return { error: "payload must be a report object" };
+    }
+    const payload = value;
+    if (!Array.isArray(payload.scenarios) || payload.scenarios.length < 1 || payload.scenarios.length > 20) {
+        return { error: "payload.scenarios must contain between 1 and 20 scenarios" };
+    }
+    const serialized = JSON.stringify(payload);
+    if (Buffer.byteLength(serialized, "utf8") > 300000) {
+        return { error: "Public report payload exceeds the 300 KB limit" };
+    }
+    return { value: payload };
 }
 function getProxySegments(event) {
     const pathParameters = (event.pathParameters ?? {});
@@ -140,6 +179,38 @@ function getCognitoConfig() {
 }
 function authIsConfigured() {
     return Boolean(getCognitoConfig() || process.env.PORTFOLIO_SYNC_TOKEN);
+}
+function publicPortfolioAccessAllowed() {
+    return parseBooleanEnv(process.env.ALLOW_PUBLIC_PORTFOLIO_ACCESS);
+}
+function getAllowedCorsOrigins() {
+    const configured = String(process.env.ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((value) => value.trim().replace(/\/+$/, ""))
+        .filter(Boolean);
+    const defaults = [
+        "https://aftertaxus.com",
+        "https://www.aftertaxus.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4178",
+        "http://127.0.0.1:4178",
+    ];
+    const openRouterSiteUrl = String(process.env.OPENROUTER_SITE_URL || "").trim().replace(/\/+$/, "");
+    if (openRouterSiteUrl) {
+        defaults.push(openRouterSiteUrl);
+    }
+    return [...new Set([...configured, ...defaults])];
+}
+function resolveCorsOrigin(event, restricted) {
+    if (!restricted)
+        return "*";
+    const requestOrigin = getHeader(event, "origin").trim().replace(/\/+$/, "");
+    const allowedOrigins = getAllowedCorsOrigins();
+    if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+        return requestOrigin;
+    }
+    return allowedOrigins[0] || "https://www.aftertaxus.com";
 }
 function base64UrlToBuffer(value) {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -270,6 +341,14 @@ async function verifyMcpToken(event) {
 }
 async function authenticatePortfolioRequest(event, origin) {
     if (!authIsConfigured()) {
+        if (publicPortfolioAccessAllowed()) {
+            return { auth: null };
+        }
+        return {
+            response: jsonResponse(503, { error: "Portfolio access is disabled until Cognito or a sync token is configured." }, origin),
+        };
+    }
+    if (publicPortfolioAccessAllowed()) {
         return { auth: null };
     }
     const syncAuth = verifySyncToken(event);
@@ -322,7 +401,7 @@ function workbookResponseForClient(result, requestedWorkspaceId, auth) {
     return {
         ...result,
         workspaceId: sanitizeWorkspacePart(requestedWorkspaceId || "default"),
-        ...(auth ? { owner: { email: auth.email, authType: auth.authType } } : {}),
+        ...(auth ? { owner: { authType: auth.authType } } : {}),
     };
 }
 function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
@@ -592,6 +671,74 @@ function buildCompactExternalLookupContext(snapshot, userContent) {
         matchingHoldings: holdings,
         matchingTickers: tickers,
         metrics: source.metrics || {},
+    };
+}
+function buildAssistantPortfolioContext(snapshot, userContent) {
+    if (!snapshot || typeof snapshot !== "object") {
+        return { querySymbols: extractTickerSymbolsFromText(userContent) };
+    }
+    const source = snapshot;
+    return {
+        generatedAt: source.generatedAt,
+        querySymbols: extractTickerSymbolsFromText(userContent),
+        view: source.view
+            ? {
+                activeTab: source.view.activeTab,
+                filters: source.view.filters,
+                sort: source.view.sort,
+                selectedAssetIds: source.view.selectedAssetIds,
+            }
+            : undefined,
+        holdings: Array.isArray(source.holdings)
+            ? source.holdings.map((holding) => ({
+                id: holding?.id,
+                description: holding?.description,
+                account: holding?.account,
+                category: holding?.category,
+                symbol: holding?.symbol,
+                effectiveSymbol: holding?.effectiveSymbol,
+                totalInvestment: holding?.totalInvestment,
+                yearlyIncome: holding?.yearlyIncome,
+                allocationPercent: holding?.allocationPercent,
+                includeIncome: holding?.includeIncome,
+                overrideProposal: holding?.overrideProposal,
+                taxTreatment: holding?.taxTreatment,
+                investmentType: holding?.investmentType,
+            }))
+            : [],
+        accounts: Array.isArray(source.accounts)
+            ? source.accounts.map((account) => ({
+                id: account?.id,
+                account: account?.account,
+                taxStatus: account?.taxStatus,
+            }))
+            : [],
+        referenceTables: {
+            tickers: Array.isArray(source.referenceTables?.tickers)
+                ? source.referenceTables.tickers.map((ticker) => ({
+                    symbol: ticker?.symbol,
+                    category: ticker?.category,
+                    taxTreatment: ticker?.taxTreatment,
+                    description: ticker?.description,
+                }))
+                : [],
+            categories: Array.isArray(source.referenceTables?.categories)
+                ? source.referenceTables.categories.map((row) => ({ name: row?.name }))
+                : [],
+            taxTreatment: Array.isArray(source.referenceTables?.taxTreatment)
+                ? source.referenceTables.taxTreatment.map((row) => ({ label: row?.label }))
+                : [],
+            accountTaxType: Array.isArray(source.referenceTables?.accountTaxType)
+                ? source.referenceTables.accountTaxType.map((row) => ({ taxStatus: row?.taxStatus }))
+                : [],
+            investmentType: Array.isArray(source.referenceTables?.investmentType)
+                ? source.referenceTables.investmentType.map((row) => ({ name: row?.name }))
+                : [],
+        },
+        editableTables: source.editableTables,
+        assetClasses: source.assetClasses || {},
+        metrics: source.metrics || {},
+        concentration: source.concentration || {},
     };
 }
 function formatSnapshotCurrency(value) {
@@ -1104,9 +1251,10 @@ async function handlePortfolioChatRoute(event, origin) {
         max_total_results: webSearchMaxResults,
         search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
     };
+    const assistantContext = buildAssistantPortfolioContext(body.portfolioSnapshot, lastUserMessage);
     const portfolioContext = JSON.stringify(shouldAttachWebSearch
         ? buildCompactExternalLookupContext(body.portfolioSnapshot, lastUserMessage)
-        : body.portfolioSnapshot || {});
+        : assistantContext);
     const requestPayload = {
         model,
         temperature: 0.2,
@@ -1317,12 +1465,129 @@ async function handleMcpTokenRequest(event, origin, body) {
         return jsonResponse(400, { error: message }, origin);
     }
 }
+async function handlePublicReportRequest(event, body) {
+    const calc = body.calc;
+    const origin = resolveCorsOrigin(event, calc !== "PUBLIC_REPORT_GET");
+    if (calc === "PUBLIC_REPORT_GET") {
+        const requestedSlug = String(body.slug || "").trim().toLowerCase();
+        const slug = normalizePublicReportSlug(requestedSlug);
+        if (!slug || slug !== requestedSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
+            return jsonResponse(400, { error: "Invalid public report slug." }, origin);
+        }
+        try {
+            const store = new workbookStore_1.WorkbookStore();
+            const report = await store.getPublicReport(slug);
+            if (!report)
+                return jsonResponse(404, { error: "Public report not found." }, origin);
+            return jsonResponse(200, {
+                report: {
+                    id: report.reportId,
+                    slug: report.slug,
+                    name: report.name,
+                    payload: report.payload,
+                    createdAt: report.createdAt,
+                    updatedAt: report.updatedAt,
+                },
+            }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to load public report.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    const authResult = await authenticateCognitoRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    let store;
+    try {
+        store = new workbookStore_1.WorkbookStore();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Public report storage is unavailable.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+    if (calc === "PUBLIC_REPORT_LIST") {
+        try {
+            const reports = await store.listPublicReportsForUser(authResult.auth.sub);
+            return jsonResponse(200, {
+                reports: reports.map((report) => ({
+                    id: report.reportId,
+                    slug: report.slug,
+                    name: report.name,
+                    payload: report.payload,
+                    createdAt: report.createdAt,
+                    updatedAt: report.updatedAt,
+                })),
+            }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to list public reports.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    const reportId = String(body.reportId || "").trim();
+    const name = String(body.name || "").trim();
+    const requestedSlug = String(body.slug || "").trim().toLowerCase();
+    const slug = normalizePublicReportSlug(requestedSlug);
+    const previousSlugValue = String(body.previousSlug || "").trim().toLowerCase();
+    const previousSlug = previousSlugValue ? normalizePublicReportSlug(previousSlugValue) : undefined;
+    if (!/^[a-zA-Z0-9-]{1,100}$/.test(reportId)) {
+        return jsonResponse(400, { error: "Invalid public report id." }, origin);
+    }
+    if (!name || name.length > 80) {
+        return jsonResponse(400, { error: "Report name must contain between 1 and 80 characters." }, origin);
+    }
+    if (!slug || slug !== requestedSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
+        return jsonResponse(400, { error: "Invalid or reserved public report slug." }, origin);
+    }
+    if (previousSlugValue && previousSlug !== previousSlugValue) {
+        return jsonResponse(400, { error: "Invalid previous public report slug." }, origin);
+    }
+    const payloadResult = readPublicReportPayload(body.payload);
+    if ("error" in payloadResult) {
+        return jsonResponse(400, { error: payloadResult.error }, origin);
+    }
+    const now = new Date().toISOString();
+    const payload = { ...payloadResult.value, reportName: name, generatedAt: now };
+    const record = {
+        reportId,
+        slug,
+        name,
+        ownerSub: authResult.auth.sub,
+        payload,
+        createdAt: now,
+        updatedAt: now,
+    };
+    try {
+        const saved = await store.putPublicReport(record, previousSlug);
+        return jsonResponse(200, {
+            report: {
+                id: saved.reportId,
+                slug: saved.slug,
+                name: saved.name,
+                payload: saved.payload,
+                createdAt: saved.createdAt,
+                updatedAt: saved.updatedAt,
+            },
+            publicUrl: `https://aftertaxus.com/${saved.slug}`,
+        }, origin);
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+            return jsonResponse(409, { error: "That public report URL is already in use. Choose a different report name." }, origin);
+        }
+        const message = error instanceof Error ? error.message : "Unable to publish public report.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+}
 const handler = async (event) => {
-    const origin = "*";
+    const segments = getProxySegments(event);
+    const restrictCors = segments[0] === "workbook" ||
+        (segments[0] === "api" && segments[1] === "portfolio-chat");
+    const origin = resolveCorsOrigin(event, restrictCors);
     if (event.httpMethod === "OPTIONS") {
         return corsPreflight(origin);
     }
-    const segments = getProxySegments(event);
     if (segments[0] === "workbook") {
         return handleWorkbookRoute(event, origin);
     }
@@ -1358,7 +1623,10 @@ const handler = async (event) => {
         }, origin);
     }
     if (calc === "MCP_TOKEN_CREATE" || calc === "MCP_TOKEN_LIST" || calc === "MCP_TOKEN_REVOKE") {
-        return handleMcpTokenRequest(event, origin, body);
+        return handleMcpTokenRequest(event, resolveCorsOrigin(event, true), body);
+    }
+    if (calc === "PUBLIC_REPORT_GET" || calc === "PUBLIC_REPORT_LIST" || calc === "PUBLIC_REPORT_UPSERT") {
+        return handlePublicReportRequest(event, body);
     }
     if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
         const authResult = await authenticatePortfolioRequest(event, origin);
@@ -1423,6 +1691,9 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
+        if (!isOrdinary2025FilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "FED_TAX_2025_ORDINARY currently supports filingStatus=single or mfj" }, origin);
+        }
         const tax = (0, taxCalcs_1.fedTax2025Ordinary)(taxableIncome.value, filingStatus);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, filingStatus, tax }, origin);
     }
@@ -1432,19 +1703,7 @@ const handler = async (event) => {
             return jsonResponse(400, { error: taxableIncome.error }, origin);
         }
         const tax = (0, taxCalcs_1.caTax2025Mfj)(taxableIncome.value);
-        return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, state: "CA", stateName: "California", tax }, origin);
-    }
-    if (calc === "STATE_TAX_2025") {
-        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
-        if ("error" in taxableIncome) {
-            return jsonResponse(400, { error: taxableIncome.error }, origin);
-        }
-        const filingStatus = String(body.filingStatus || "single").toLowerCase();
-        if (!isFilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
-        }
-        const result = (0, taxCalcs_1.stateTax2025)(taxableIncome.value, String(body.state || "CA"), filingStatus);
-        return jsonResponse(200, { calc, ...result }, origin);
+        return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
     }
     if (calc === "FED_PREF_TAX_2024") {
         const ordinaryTaxable = readNonNegativeNumber(body.ordinaryTaxable, "ordinaryTaxable");
@@ -1481,6 +1740,9 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
+        if (!isOrdinary2025FilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "FED_TAX_2025_COMBINED currently supports filingStatus=single or mfj" }, origin);
+        }
         const magi = readNonNegativeNumber(body.magi, "magi");
         if ("error" in magi) {
             return jsonResponse(400, { error: magi.error }, origin);
@@ -1515,7 +1777,6 @@ const handler = async (event) => {
             "FED_TAX_2025_COMBINED",
             "CA_TAX_2025_MFJ",
             "STATE_TAX_2025_CA_MFJ",
-            "STATE_TAX_2025",
             "PORTFOLIO_CHAT",
         ],
     }, origin);

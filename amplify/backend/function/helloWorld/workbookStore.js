@@ -64,6 +64,12 @@ function mcpTokenLookupWorkspaceId(tokenHash) {
 function mcpTokenUserWorkspaceId(ownerSub) {
     return `mcpTokens#user#${ownerSub}`;
 }
+function publicReportLookupWorkspaceId(slug) {
+    return `publicReport#${slug}`;
+}
+function publicReportUserWorkspaceId(ownerSub) {
+    return `publicReports#user#${ownerSub}`;
+}
 class WorkbookStore {
     constructor() {
         this.tableName = getRequiredEnv("WORKBOOK_TABLE_NAME");
@@ -259,6 +265,104 @@ class WorkbookStore {
             workspaceId: revoked.workspaceId,
             revokedAt: revoked.revokedAt,
         };
+    }
+    async getPublicReport(slug) {
+        const readLookup = async (lookupSlug) => {
+            const response = await this.client.send(new lib_dynamodb_1.GetCommand({
+                TableName: this.tableName,
+                Key: {
+                    workspaceId: publicReportLookupWorkspaceId(lookupSlug),
+                    entityKey: "report#public",
+                },
+            }));
+            return response.Item?.data;
+        };
+        const first = await readLookup(slug);
+        if (!first)
+            return null;
+        if ("redirectSlug" in first) {
+            const redirected = await readLookup(first.redirectSlug);
+            return redirected && !("redirectSlug" in redirected) ? redirected : null;
+        }
+        return first;
+    }
+    async listPublicReportsForUser(ownerSub) {
+        const response = await this.client.send(new lib_dynamodb_1.QueryCommand({
+            TableName: this.tableName,
+            KeyConditionExpression: "workspaceId = :workspaceId",
+            ExpressionAttributeValues: {
+                ":workspaceId": publicReportUserWorkspaceId(ownerSub),
+            },
+        }));
+        return (response.Items ?? [])
+            .map((item) => item.data)
+            .filter((record) => Boolean(record?.reportId && record?.payload))
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    }
+    async putPublicReport(record, previousSlug) {
+        const ownerKey = {
+            workspaceId: publicReportUserWorkspaceId(record.ownerSub),
+            entityKey: `report#${record.reportId}`,
+        };
+        const existingResponse = await this.client.send(new lib_dynamodb_1.GetCommand({ TableName: this.tableName, Key: ownerKey }));
+        const existing = existingResponse.Item?.data;
+        const savedRecord = {
+            ...record,
+            createdAt: existing?.createdAt || record.createdAt,
+        };
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: publicReportLookupWorkspaceId(savedRecord.slug),
+                entityKey: "report#public",
+                reportId: savedRecord.reportId,
+                ownerSub: savedRecord.ownerSub,
+                data: savedRecord,
+                updatedAt: savedRecord.updatedAt,
+            },
+            ConditionExpression: "attribute_not_exists(workspaceId) OR (reportId = :reportId AND ownerSub = :ownerSub)",
+            ExpressionAttributeValues: {
+                ":reportId": savedRecord.reportId,
+                ":ownerSub": savedRecord.ownerSub,
+            },
+        }));
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                ...ownerKey,
+                reportId: savedRecord.reportId,
+                ownerSub: savedRecord.ownerSub,
+                data: savedRecord,
+                updatedAt: savedRecord.updatedAt,
+            },
+        }));
+        if (previousSlug && previousSlug !== savedRecord.slug) {
+            const alias = {
+                reportId: savedRecord.reportId,
+                slug: previousSlug,
+                redirectSlug: savedRecord.slug,
+                ownerSub: savedRecord.ownerSub,
+                createdAt: savedRecord.createdAt,
+                updatedAt: savedRecord.updatedAt,
+            };
+            await this.client.send(new lib_dynamodb_1.PutCommand({
+                TableName: this.tableName,
+                Item: {
+                    workspaceId: publicReportLookupWorkspaceId(previousSlug),
+                    entityKey: "report#public",
+                    reportId: savedRecord.reportId,
+                    ownerSub: savedRecord.ownerSub,
+                    data: alias,
+                    updatedAt: savedRecord.updatedAt,
+                },
+                ConditionExpression: "reportId = :reportId AND ownerSub = :ownerSub",
+                ExpressionAttributeValues: {
+                    ":reportId": savedRecord.reportId,
+                    ":ownerSub": savedRecord.ownerSub,
+                },
+            }));
+        }
+        return savedRecord;
     }
 }
 exports.WorkbookStore = WorkbookStore;

@@ -45,6 +45,25 @@ export type McpTokenRecord = {
   revokedAt?: string;
 };
 
+export type PublicReportRecord = {
+  reportId: string;
+  slug: string;
+  name: string;
+  ownerSub: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type PublicReportAlias = {
+  reportId: string;
+  slug: string;
+  redirectSlug: string;
+  ownerSub: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const ENTITY_KEYS: WorkbookEntityKey[] = [
   "tab#investments",
   "tab#tickers",
@@ -112,6 +131,14 @@ function mcpTokenLookupWorkspaceId(tokenHash: string) {
 
 function mcpTokenUserWorkspaceId(ownerSub: string) {
   return `mcpTokens#user#${ownerSub}`;
+}
+
+function publicReportLookupWorkspaceId(slug: string) {
+  return `publicReport#${slug}`;
+}
+
+function publicReportUserWorkspaceId(ownerSub: string) {
+  return `publicReports#user#${ownerSub}`;
 }
 
 export class WorkbookStore {
@@ -357,5 +384,121 @@ export class WorkbookStore {
       workspaceId: revoked.workspaceId,
       revokedAt: revoked.revokedAt,
     };
+  }
+
+  async getPublicReport(slug: string): Promise<PublicReportRecord | null> {
+    const readLookup = async (lookupSlug: string) => {
+      const response = await this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: {
+            workspaceId: publicReportLookupWorkspaceId(lookupSlug),
+            entityKey: "report#public",
+          },
+        })
+      );
+      return response.Item?.data as PublicReportRecord | PublicReportAlias | undefined;
+    };
+
+    const first = await readLookup(slug);
+    if (!first) return null;
+    if ("redirectSlug" in first) {
+      const redirected = await readLookup(first.redirectSlug);
+      return redirected && !("redirectSlug" in redirected) ? redirected : null;
+    }
+    return first;
+  }
+
+  async listPublicReportsForUser(ownerSub: string): Promise<PublicReportRecord[]> {
+    const response = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "workspaceId = :workspaceId",
+        ExpressionAttributeValues: {
+          ":workspaceId": publicReportUserWorkspaceId(ownerSub),
+        },
+      })
+    );
+
+    return (response.Items ?? [])
+      .map((item) => item.data as PublicReportRecord | undefined)
+      .filter((record): record is PublicReportRecord => Boolean(record?.reportId && record?.payload))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  async putPublicReport(record: PublicReportRecord, previousSlug?: string): Promise<PublicReportRecord> {
+    const ownerKey = {
+      workspaceId: publicReportUserWorkspaceId(record.ownerSub),
+      entityKey: `report#${record.reportId}`,
+    };
+    const existingResponse = await this.client.send(new GetCommand({ TableName: this.tableName, Key: ownerKey }));
+    const existing = existingResponse.Item?.data as PublicReportRecord | undefined;
+    const savedRecord: PublicReportRecord = {
+      ...record,
+      createdAt: existing?.createdAt || record.createdAt,
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: publicReportLookupWorkspaceId(savedRecord.slug),
+          entityKey: "report#public",
+          reportId: savedRecord.reportId,
+          ownerSub: savedRecord.ownerSub,
+          data: savedRecord,
+          updatedAt: savedRecord.updatedAt,
+        },
+        ConditionExpression: "attribute_not_exists(workspaceId) OR (reportId = :reportId AND ownerSub = :ownerSub)",
+        ExpressionAttributeValues: {
+          ":reportId": savedRecord.reportId,
+          ":ownerSub": savedRecord.ownerSub,
+        },
+      })
+    );
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          ...ownerKey,
+          reportId: savedRecord.reportId,
+          ownerSub: savedRecord.ownerSub,
+          data: savedRecord,
+          updatedAt: savedRecord.updatedAt,
+        },
+      })
+    );
+
+    if (previousSlug && previousSlug !== savedRecord.slug) {
+      const alias: PublicReportAlias = {
+        reportId: savedRecord.reportId,
+        slug: previousSlug,
+        redirectSlug: savedRecord.slug,
+        ownerSub: savedRecord.ownerSub,
+        createdAt: savedRecord.createdAt,
+        updatedAt: savedRecord.updatedAt,
+      };
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: {
+            workspaceId: publicReportLookupWorkspaceId(previousSlug),
+            entityKey: "report#public",
+            reportId: savedRecord.reportId,
+            ownerSub: savedRecord.ownerSub,
+            data: alias,
+            updatedAt: savedRecord.updatedAt,
+          },
+          ConditionExpression: "reportId = :reportId AND ownerSub = :ownerSub",
+          ExpressionAttributeValues: {
+            ":reportId": savedRecord.reportId,
+            ":ownerSub": savedRecord.ownerSub,
+          },
+        })
+      );
+    }
+
+    return savedRecord;
   }
 }
