@@ -7353,21 +7353,6 @@ export default function App() {
         ...current,
         ...Object.fromEntries(publishedPages.map((page) => [page.id, page.name])),
       }));
-      const publishedScenarios = publishedPages.flatMap((page) => decodeSummaryReportPayload(page.payload)?.scenarios || []);
-      setUiSettings((current) => {
-        if (current.scenarioLibraryMigrated) return current;
-        const existingIds = new Set(current.savedScenarios.map((scenario) => scenario.id));
-        const imported = publishedScenarios.filter((scenario) => !existingIds.has(scenario.id));
-        return {
-          ...current,
-          savedScenarios: [...current.savedScenarios, ...imported].slice(0, SAVED_SCENARIO_LIMIT),
-          scenarioLibraryMigrated: true,
-        };
-      });
-      setSummaryScenarioDrafts((current) => ({
-        ...current,
-        ...Object.fromEntries(publishedScenarios.map((scenario) => [scenario.id, { name: scenario.name, description: scenario.description }])),
-      }));
     } catch (error) {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Public reports could not be loaded.");
     } finally {
