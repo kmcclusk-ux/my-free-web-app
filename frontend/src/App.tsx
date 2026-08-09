@@ -126,7 +126,7 @@ type ModelDataSnapshot = {
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type ScenarioLandingPage = { id: string; name: string; slug?: string; createdAt: string; updatedAt: string; payload: string };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
+type UiSettings = ModelUiSnapshot & { savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string };
@@ -369,8 +369,9 @@ const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
 const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
 const WORKBOOK_HISTORY_LIMIT = 100;
 const MODEL_VERSION_LIMIT = 10;
+const SAVED_SCENARIO_LIMIT = 50;
 const SCENARIO_LANDING_PAGE_LIMIT = 20;
-const SCENARIOS_PER_LANDING_PAGE_LIMIT = 20;
+const PUBLISHED_SCENARIO_LIMIT = 4;
 const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
@@ -592,24 +593,6 @@ function decodeSummaryReportPayload(value: string): SummaryReportPayload | null 
   } catch {
     return null;
   }
-}
-
-function summaryScenarioDraftKey(reportId: string, scenarioId: string) {
-  return `${reportId}:${scenarioId}`;
-}
-
-function buildSummaryScenarioDrafts(pages: ScenarioLandingPage[]) {
-  const drafts: Record<string, SummaryScenarioDraft> = {};
-  pages.forEach((page) => {
-    const payload = decodeSummaryReportPayload(page.payload);
-    payload?.scenarios.forEach((scenario) => {
-      drafts[summaryScenarioDraftKey(page.id, scenario.id)] = {
-        name: scenario.name,
-        description: scenario.description,
-      };
-    });
-  });
-  return drafts;
 }
 
 function readSummaryReportFromUrl() {
@@ -1199,7 +1182,7 @@ const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deduction
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, deductionMode: "itemized", deductionItems: [newDeductionItem("Mortgage interest", 26500), newDeductionItem("Property tax", 19000)], mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialLocalTaxSettings: LocalTaxSettings = { enabled: false, localityId: "none", localityName: "", residency: "resident", rate: 0, nonresidentRate: 0, taxableBase: noLocalTaxBase() };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
+const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], savedScenarios: [], scenarioLibraryMigrated: false, modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1855,6 +1838,19 @@ function normalizeSelectedAssetIds(raw: unknown): number[] {
   return [...new Set(raw.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0))];
 }
 
+function normalizeSavedScenarios(raw: unknown): SummaryReportScenario[] {
+  if (!Array.isArray(raw)) return [];
+  const scenarios: SummaryReportScenario[] = [];
+  const seenIds = new Set<string>();
+  raw.forEach((entry, index) => {
+    const scenario = decodeSummaryReportScenario(entry, index);
+    if (!scenario || seenIds.has(scenario.id)) return;
+    seenIds.add(scenario.id);
+    scenarios.push(scenario);
+  });
+  return scenarios.slice(0, SAVED_SCENARIO_LIMIT);
+}
+
 function normalizeModelVersions(raw: unknown): ModelVersion[] {
   if (!Array.isArray(raw)) return [];
   const versions: ModelVersion[] = [];
@@ -2291,6 +2287,8 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
   return {
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     selectedAssetIds: normalizeSelectedAssetIds(sectionObj.selectedAssetIds),
+    savedScenarios: normalizeSavedScenarios(sectionObj.savedScenarios),
+    scenarioLibraryMigrated: sectionObj.scenarioLibraryMigrated === true,
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
     incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
     darkMode: sectionObj.darkMode === true,
@@ -2316,6 +2314,8 @@ function parseWorkbookSettings(settings: unknown) {
         ? ui.investmentFavorites
         : legacyFavorites,
       selectedAssetIds: ui.selectedAssetIds || [],
+      savedScenarios: ui.savedScenarios || [],
+      scenarioLibraryMigrated: ui.scenarioLibraryMigrated === true,
       modelVersions: ui.modelVersions || [],
       incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
       darkMode: ui.darkMode === true,
@@ -5882,11 +5882,14 @@ export default function App() {
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
-  const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | null>(null);
+  const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | "publish" | null>(null);
   const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
   const [summaryReportName, setSummaryReportName] = useState("");
   const [summaryScenarioName, setSummaryScenarioName] = useState("Current workbook");
+  const [summaryScenarioDescription, setSummaryScenarioDescription] = useState("");
   const [selectedSummaryLandingPageId, setSelectedSummaryLandingPageId] = useState("");
+  const [summaryPublishScenarioIds, setSummaryPublishScenarioIds] = useState<string[]>([]);
+  const [summaryPublishDescriptions, setSummaryPublishDescriptions] = useState<Record<string, string>>({});
   const [summaryReportDialogError, setSummaryReportDialogError] = useState("");
   const [summaryReportRenameDrafts, setSummaryReportRenameDrafts] = useState<Record<string, string>>({});
   const [summaryScenarioDrafts, setSummaryScenarioDrafts] = useState<Record<string, SummaryScenarioDraft>>({});
@@ -5984,10 +5987,13 @@ export default function App() {
     setUiSettings((current) => ({
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
       selectedAssetIds: normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds),
+      savedScenarios: current.savedScenarios,
+      scenarioLibraryMigrated: current.scenarioLibraryMigrated,
       modelVersions: current.modelVersions,
       incomePrimaryPeriod: current.incomePrimaryPeriod,
       darkMode: current.darkMode,
       investmentWhatIfOpen: current.investmentWhatIfOpen,
+      mcpRefresh: current.mcpRefresh,
     }));
     setSelectedInvestmentIds(normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds));
     setIsWhatIfActive(snapshot.isWhatIfActive);
@@ -6670,6 +6676,8 @@ export default function App() {
     setUiSettings({
       investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
       selectedAssetIds: workbookSettings.ui?.selectedAssetIds || [],
+      savedScenarios: workbookSettings.ui?.savedScenarios || [],
+      scenarioLibraryMigrated: workbookSettings.ui?.scenarioLibraryMigrated === true,
       modelVersions: workbookSettings.ui?.modelVersions || [],
       incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
       darkMode: workbookSettings.ui?.darkMode === true,
@@ -7234,7 +7242,7 @@ export default function App() {
   const summaryLandingPageOptions = scenarioLandingPages
     .map((page) => ({ page, payload: decodeSummaryReportPayload(page.payload) }))
     .filter((entry): entry is { page: ScenarioLandingPage; payload: SummaryReportPayload } => Boolean(entry.payload));
-  const managedScenarioCount = summaryLandingPageOptions.reduce((total, entry) => total + entry.payload.scenarios.length, 0);
+  const currentScenarioDescription = `${formatCurrency(flows.displayIncome)} annual income, including ${formatCurrency(effectiveW2Income)} of W-2 wages, ${formatCurrency(preferredBeforeDeductions)} of preferred income, and ${formatCurrency(flows.investmentIncome)} of investment income.`;
   const currentSummaryReportPayload: SummaryReportPayload = {
     reportName: "Tax scenario summary",
     generatedAt: new Date().toISOString(),
@@ -7264,6 +7272,28 @@ export default function App() {
     taxTreatmentAllocationRows,
     scenarios: [],
   };
+  const buildCurrentScenario = (name: string, description: string): SummaryReportScenario => ({
+    id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `scenario-${Date.now()}`,
+    name,
+    source: "current",
+    income: currentSummaryReportPayload.income,
+    wages: effectiveW2Income,
+    ordinaryIncome: ordinaryBeforeDeductions,
+    preferredIncome: preferredBeforeDeductions,
+    investmentIncome: flows.investmentIncome,
+    federalTax: currentSummaryReportPayload.federalTax,
+    stateTax: currentSummaryReportPayload.stateTax,
+    localTax: currentSummaryReportPayload.localTax,
+    totalTax: currentSummaryReportPayload.totalTax,
+    afterTaxIncome: currentSummaryReportPayload.afterTaxIncome,
+    effectiveTaxRate: currentSummaryReportPayload.effectiveTaxRate,
+    marginalTaxRateLabel: currentSummaryReportPayload.marginalTaxRateLabel,
+    description,
+    stateCode: selectedStateCode,
+    stateName: selectedStateName,
+    localityName: currentSummaryReportPayload.localityName,
+    filingStatus: federalSettings.filingStatus,
+  });
   const refreshPublicSummaryReports = async () => {
     if (!authToken) return;
     setIsSummaryReportListLoading(true);
@@ -7278,29 +7308,47 @@ export default function App() {
         payload: encodeSummaryReportPayload(report.payload),
       }));
       setScenarioLandingPages(publishedPages.slice(0, SCENARIO_LANDING_PAGE_LIMIT));
+      setSelectedSummaryLandingPageId((current) => current || publishedPages[0]?.id || "");
       setSummaryReportRenameDrafts((current) => ({
         ...current,
         ...Object.fromEntries(publishedPages.map((page) => [page.id, page.name])),
       }));
-      setSummaryScenarioDrafts(buildSummaryScenarioDrafts(publishedPages));
+      const publishedScenarios = publishedPages.flatMap((page) => decodeSummaryReportPayload(page.payload)?.scenarios || []);
+      setUiSettings((current) => {
+        if (current.scenarioLibraryMigrated) return current;
+        const existingIds = new Set(current.savedScenarios.map((scenario) => scenario.id));
+        const imported = publishedScenarios.filter((scenario) => !existingIds.has(scenario.id));
+        return {
+          ...current,
+          savedScenarios: [...current.savedScenarios, ...imported].slice(0, SAVED_SCENARIO_LIMIT),
+          scenarioLibraryMigrated: true,
+        };
+      });
+      setSummaryScenarioDrafts((current) => ({
+        ...current,
+        ...Object.fromEntries(publishedScenarios.map((scenario) => [scenario.id, { name: scenario.name, description: scenario.description }])),
+      }));
     } catch (error) {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Public reports could not be loaded.");
     } finally {
       setIsSummaryReportListLoading(false);
     }
   };
-  const openSummaryReportDialog = (mode: "create" | "manage") => {
+  const openSummaryReportDialog = (mode: "create" | "manage" | "publish") => {
     setIsTopbarMenuOpen(false);
     setSummaryReportDestination("new");
     setSummaryReportName(`${selectedStateCode} tax scenarios`);
-    setSummaryScenarioName("Current workbook");
+    setSummaryScenarioName(`Scenario ${uiSettings.savedScenarios.length + 1}`);
+    setSummaryScenarioDescription(currentScenarioDescription);
     setSelectedSummaryLandingPageId(summaryLandingPageOptions[0]?.page.id || "");
     setSummaryReportRenameDrafts(Object.fromEntries(summaryLandingPageOptions.map(({ page }) => [page.id, page.name])));
-    setSummaryScenarioDrafts(buildSummaryScenarioDrafts(scenarioLandingPages));
+    setSummaryScenarioDrafts(Object.fromEntries(uiSettings.savedScenarios.map((scenario) => [scenario.id, { name: scenario.name, description: scenario.description }])));
+    setSummaryPublishScenarioIds([]);
+    setSummaryPublishDescriptions(Object.fromEntries(uiSettings.savedScenarios.map((scenario) => [scenario.id, scenario.description])));
     setSummaryScenarioPendingDeleteKey("");
     setSummaryReportDialogError("");
     setSummaryReportDialogMode(mode);
-    void refreshPublicSummaryReports();
+    if (mode !== "create") void refreshPublicSummaryReports();
   };
   const renameSummaryReport = async (pageId: string) => {
     if (!authToken) {
@@ -7343,38 +7391,46 @@ export default function App() {
       setSummaryReportBusyId("");
     }
   };
-  const prepareCurrentScenarioForReport = (pageId?: string) => {
-    const entry = pageId ? summaryLandingPageOptions.find(({ page }) => page.id === pageId) : undefined;
-    if (entry) {
-      setSummaryReportDestination("existing");
-      setSelectedSummaryLandingPageId(entry.page.id);
-      setSummaryScenarioName(`Scenario ${entry.payload.scenarios.length + 1}`);
-    } else {
-      setSummaryReportDestination("new");
-      setSummaryReportName((current) => current || `${selectedStateCode} tax scenarios`);
-      setSummaryScenarioName("Current workbook");
+  const saveCurrentScenario = () => {
+    const name = summaryScenarioName.trim();
+    const description = summaryScenarioDescription.trim();
+    if (authEnabled && !authToken) {
+      setSummaryReportDialogError("Sign in to save scenarios.");
+      return;
     }
-    setSummaryScenarioPendingDeleteKey("");
-    setSummaryReportDialogError("");
-    setSummaryReportDialogMode("create");
+    if (!name) {
+      setSummaryReportDialogError("Enter a scenario name.");
+      return;
+    }
+    if (name.length > 60) {
+      setSummaryReportDialogError("Scenario names can contain up to 60 characters.");
+      return;
+    }
+    if (description.length > 300) {
+      setSummaryReportDialogError("Scenario descriptions can contain up to 300 characters.");
+      return;
+    }
+    if (uiSettings.savedScenarios.some((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(name))) {
+      setSummaryReportDialogError("A scenario with this name already exists.");
+      return;
+    }
+    if (uiSettings.savedScenarios.length >= SAVED_SCENARIO_LIMIT) {
+      setSummaryReportDialogError(`You can save up to ${SAVED_SCENARIO_LIMIT} scenarios.`);
+      return;
+    }
+    const scenario = buildCurrentScenario(name, description);
+    setUiSettings((current) => ({ ...current, savedScenarios: [scenario, ...current.savedScenarios] }));
+    setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { name: scenario.name, description: scenario.description } }));
+    setSummaryReportDialogMode(null);
+    setMcpTokenMessage("Scenario saved to your private scenario library.");
   };
-  const saveManagedScenario = async (pageId: string, scenarioId: string, remove = false) => {
-    if (!authToken) {
-      setSummaryReportDialogError("Sign in to manage scenarios.");
+  const saveManagedScenario = (scenarioId: string, remove = false) => {
+    const scenario = uiSettings.savedScenarios.find((candidate) => candidate.id === scenarioId);
+    if (!scenario) {
+      setSummaryReportDialogError("This scenario could not be found.");
       return;
     }
-    const entry = summaryLandingPageOptions.find(({ page }) => page.id === pageId);
-    const scenario = entry?.payload.scenarios.find((candidate) => candidate.id === scenarioId);
-    if (!entry || !scenario) {
-      setSummaryReportDialogError("This scenario could not be found. Refresh the report list and try again.");
-      return;
-    }
-    if (remove && entry.payload.scenarios.length === 1) {
-      setSummaryReportDialogError("A public report must contain at least one scenario. Add another scenario before removing this one.");
-      return;
-    }
-    const draftKey = summaryScenarioDraftKey(pageId, scenarioId);
-    const draft = summaryScenarioDrafts[draftKey] || { name: scenario.name, description: scenario.description };
+    const draft = summaryScenarioDrafts[scenarioId] || { name: scenario.name, description: scenario.description };
     const scenarioName = draft.name.trim();
     const scenarioDescription = draft.description.trim();
     if (!remove && !scenarioName) {
@@ -7389,148 +7445,122 @@ export default function App() {
       setSummaryReportDialogError("Scenario descriptions can contain up to 300 characters.");
       return;
     }
-    if (!remove && entry.payload.scenarios.some((candidate) => candidate.id !== scenarioId && normalizeLookupKey(candidate.name) === normalizeLookupKey(scenarioName))) {
-      setSummaryReportDialogError("Use a scenario name that is not already on this landing page.");
+    if (!remove && uiSettings.savedScenarios.some((candidate) => candidate.id !== scenarioId && normalizeLookupKey(candidate.name) === normalizeLookupKey(scenarioName))) {
+      setSummaryReportDialogError("Use a scenario name that is not already in your library.");
       return;
     }
-    const reportSlug = entry.page.slug || normalizePublicReportSlug(entry.page.name);
-    if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
-      setSummaryReportDialogError("This report needs a valid public URL before its scenarios can be changed.");
-      return;
-    }
-    const updatedPayload: SummaryReportPayload = {
-      ...entry.payload,
-      generatedAt: new Date().toISOString(),
-      scenarios: remove
-        ? entry.payload.scenarios.filter((candidate) => candidate.id !== scenarioId)
-        : entry.payload.scenarios.map((candidate) => candidate.id === scenarioId
+    setUiSettings((current) => ({
+      ...current,
+      savedScenarios: remove
+        ? current.savedScenarios.filter((candidate) => candidate.id !== scenarioId)
+        : current.savedScenarios.map((candidate) => candidate.id === scenarioId
           ? { ...candidate, name: scenarioName, description: scenarioDescription }
           : candidate),
-    };
-    const busyId = `${remove ? "remove" : "save"}:${draftKey}`;
-    setSummaryReportBusyId(busyId);
+    }));
+    setSummaryScenarioDrafts((current) => {
+      if (!remove) return { ...current, [scenarioId]: { name: scenarioName, description: scenarioDescription } };
+      const next = { ...current };
+      delete next[scenarioId];
+      return next;
+    });
+    setSummaryPublishScenarioIds((current) => current.filter((id) => id !== scenarioId));
+    setSummaryScenarioPendingDeleteKey("");
     setSummaryReportDialogError("");
-    try {
-      const saved = await upsertPublicSummaryReport({
-        id: pageId,
-        name: entry.page.name,
-        slug: reportSlug,
-        previousSlug: entry.page.slug,
-        payload: updatedPayload,
-      }, authToken);
-      const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
-      setScenarioLandingPages((current) => current.map((page) => page.id === pageId
-        ? { ...page, name: saved.report.name, slug: saved.report.slug, updatedAt: saved.report.updatedAt, payload: encodedPayload }
-        : page));
-      setSummaryScenarioDrafts((current) => {
-        if (remove) {
-          const next = { ...current };
-          delete next[draftKey];
-          return next;
-        }
-        return { ...current, [draftKey]: { name: scenarioName, description: scenarioDescription } };
-      });
-      setSummaryScenarioPendingDeleteKey("");
-      setMcpTokenMessage(remove ? "Scenario removed from the public report." : "Scenario changes published.");
-    } catch (error) {
-      setSummaryReportDialogError(error instanceof Error ? error.message : remove ? "Scenario could not be removed." : "Scenario changes could not be saved.");
-    } finally {
-      setSummaryReportBusyId("");
-    }
+    setMcpTokenMessage(remove ? "Scenario removed from your library." : "Scenario changes saved.");
   };
-  const createSummaryReport = async () => {
-    const reportName = summaryReportName.trim();
-    const currentScenarioName = summaryScenarioName.trim();
+  const togglePublishedScenario = (scenarioId: string) => {
+    if (summaryPublishScenarioIds.includes(scenarioId)) {
+      setSummaryPublishScenarioIds((current) => current.filter((id) => id !== scenarioId));
+      setSummaryReportDialogError("");
+      return;
+    }
+    if (summaryPublishScenarioIds.length >= PUBLISHED_SCENARIO_LIMIT) {
+      setSummaryReportDialogError(`Select up to ${PUBLISHED_SCENARIO_LIMIT} scenarios for one landing page.`);
+      return;
+    }
+    const scenario = uiSettings.savedScenarios.find((candidate) => candidate.id === scenarioId);
+    setSummaryPublishScenarioIds((current) => [...current, scenarioId]);
+    if (scenario) {
+      setSummaryPublishDescriptions((current) => ({ ...current, [scenarioId]: current[scenarioId] ?? scenario.description }));
+    }
+    setSummaryReportDialogError("");
+  };
+  const publishSelectedScenarios = async () => {
     if (!authToken) {
-      setSummaryReportDialogError("Sign in to create a public scenario report.");
+      setSummaryReportDialogError("Sign in to publish scenarios.");
       return;
     }
-    if (summaryReportDestination === "new" && !reportName) {
-      setSummaryReportDialogError("Enter a report name.");
+    const selectedScenarios = summaryPublishScenarioIds
+      .map((scenarioId) => uiSettings.savedScenarios.find((scenario) => scenario.id === scenarioId))
+      .filter((scenario): scenario is SummaryReportScenario => Boolean(scenario));
+    if (selectedScenarios.length < 1 || selectedScenarios.length > PUBLISHED_SCENARIO_LIMIT) {
+      setSummaryReportDialogError(`Select between 1 and ${PUBLISHED_SCENARIO_LIMIT} scenarios.`);
       return;
     }
-    if (!currentScenarioName) {
-      setSummaryReportDialogError("Enter a scenario name.");
+    const scenarios = selectedScenarios.map((scenario) => ({
+      ...scenario,
+      description: String(summaryPublishDescriptions[scenario.id] ?? scenario.description).trim(),
+    }));
+    if (scenarios.some((scenario) => scenario.description.length > 300)) {
+      setSummaryReportDialogError("Published scenario descriptions can contain up to 300 characters.");
       return;
     }
-    if (summaryReportDestination === "new" && scenarioLandingPages.some((page) => normalizeLookupKey(page.name) === normalizeLookupKey(reportName))) {
-      setSummaryReportDialogError("A scenario landing page with this name already exists.");
-      return;
-    }
-    if (summaryReportDestination === "new" && scenarioLandingPages.length >= SCENARIO_LANDING_PAGE_LIMIT) {
-      setSummaryReportDialogError(`You can save up to ${SCENARIO_LANDING_PAGE_LIMIT} scenario landing pages.`);
-      return;
-    }
-    const currentScenario: SummaryReportScenario = {
-      id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `scenario-${Date.now()}`,
-      name: currentScenarioName,
-      source: "current",
-      income: currentSummaryReportPayload.income,
-      wages: effectiveW2Income,
-      ordinaryIncome: ordinaryBeforeDeductions,
-      preferredIncome: preferredBeforeDeductions,
-      investmentIncome: flows.investmentIncome,
-      federalTax: currentSummaryReportPayload.federalTax,
-      stateTax: currentSummaryReportPayload.stateTax,
-      localTax: currentSummaryReportPayload.localTax,
-      totalTax: currentSummaryReportPayload.totalTax,
-      afterTaxIncome: currentSummaryReportPayload.afterTaxIncome,
-      effectiveTaxRate: currentSummaryReportPayload.effectiveTaxRate,
-      marginalTaxRateLabel: currentSummaryReportPayload.marginalTaxRateLabel,
-      description: `${formatCurrency(flows.displayIncome)} annual income, including ${formatCurrency(effectiveW2Income)} of W-2 wages, ${formatCurrency(preferredBeforeDeductions)} of preferred income, and ${formatCurrency(flows.investmentIncome)} of investment income.`,
-      stateCode: selectedStateCode,
-      stateName: selectedStateName,
-      localityName: currentSummaryReportPayload.localityName,
-      filingStatus: federalSettings.filingStatus,
-    };
-    const now = new Date().toISOString();
     let landingPageId = selectedSummaryLandingPageId;
     let previousSlug: string | undefined;
+    let reportName = summaryReportName.trim();
     let reportSlug: string;
-    let reportPayload: SummaryReportPayload;
     if (summaryReportDestination === "existing") {
       const existingEntry = summaryLandingPageOptions.find((entry) => entry.page.id === selectedSummaryLandingPageId);
       if (!existingEntry) {
-        setSummaryReportDialogError("Select an existing scenario landing page.");
+        setSummaryReportDialogError("Select an existing landing page.");
         return;
       }
-      if (existingEntry.payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT) {
-        setSummaryReportDialogError(`This landing page already has ${SCENARIOS_PER_LANDING_PAGE_LIMIT} scenarios.`);
-        return;
-      }
-      if (existingEntry.payload.scenarios.some((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(currentScenarioName))) {
-        setSummaryReportDialogError("Use a scenario name that is not already on this landing page.");
-        return;
-      }
-      reportPayload = {
-        ...existingEntry.payload,
-        generatedAt: now,
-        scenarios: [...existingEntry.payload.scenarios, currentScenario],
-      };
+      reportName = existingEntry.page.name;
+      reportSlug = existingEntry.page.slug || normalizePublicReportSlug(existingEntry.page.name);
       previousSlug = existingEntry.page.slug;
-      reportSlug = existingEntry.page.slug || normalizePublicReportSlug(existingEntry.payload.reportName);
     } else {
+      if (!reportName) {
+        setSummaryReportDialogError("Enter a landing page name.");
+        return;
+      }
+      if (scenarioLandingPages.some((page) => normalizeLookupKey(page.name) === normalizeLookupKey(reportName))) {
+        setSummaryReportDialogError("A published landing page with this name already exists.");
+        return;
+      }
+      if (scenarioLandingPages.length >= SCENARIO_LANDING_PAGE_LIMIT) {
+        setSummaryReportDialogError(`You can publish up to ${SCENARIO_LANDING_PAGE_LIMIT} landing pages.`);
+        return;
+      }
       landingPageId = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `scenario-page-${Date.now()}`;
       reportSlug = normalizePublicReportSlug(reportName);
-      if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
-        setSummaryReportDialogError("Choose a report name that creates a valid public URL.");
-        return;
-      }
-      reportPayload = {
-        ...currentSummaryReportPayload,
-        reportName,
-        generatedAt: now,
-        scenarios: [currentScenario],
-      };
     }
     if (!reportSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(reportSlug)) {
-      setSummaryReportDialogError("This report needs a valid public URL before a scenario can be added.");
+      setSummaryReportDialogError("Choose a landing page name that creates a valid public URL.");
       return;
     }
-    setSummaryReportBusyId("create");
+    const firstScenario = scenarios[0];
+    const reportPayload: SummaryReportPayload = {
+      ...currentSummaryReportPayload,
+      reportName,
+      generatedAt: new Date().toISOString(),
+      income: firstScenario.income,
+      afterTaxIncome: firstScenario.afterTaxIncome,
+      marginalTaxRateLabel: firstScenario.marginalTaxRateLabel,
+      effectiveTaxRate: firstScenario.effectiveTaxRate,
+      federalTax: firstScenario.federalTax,
+      stateTax: firstScenario.stateTax,
+      localTax: firstScenario.localTax,
+      totalTax: firstScenario.totalTax,
+      stateCode: firstScenario.stateCode || currentSummaryReportPayload.stateCode,
+      stateName: firstScenario.stateName || currentSummaryReportPayload.stateName,
+      localityName: firstScenario.localityName || currentSummaryReportPayload.localityName,
+      filingStatus: firstScenario.filingStatus || currentSummaryReportPayload.filingStatus,
+      scenarios,
+    };
+    setSummaryReportBusyId("publish");
     setSummaryReportDialogError("");
     try {
-      const saved = await upsertPublicSummaryReport({ id: landingPageId, name: reportPayload.reportName, slug: reportSlug, previousSlug, payload: reportPayload }, authToken);
+      const saved = await upsertPublicSummaryReport({ id: landingPageId, name: reportName, slug: reportSlug, previousSlug, payload: reportPayload }, authToken);
       const encodedPayload = encodeSummaryReportPayload(saved.report.payload);
       setScenarioLandingPages((current) => {
         if (summaryReportDestination === "existing") {
@@ -7545,12 +7575,12 @@ export default function App() {
       window.open(saved.publicUrl, "_blank", "noopener,noreferrer");
       try {
         await navigator.clipboard.writeText(saved.publicUrl);
-        setMcpTokenMessage(summaryReportDestination === "existing" ? "Scenario added and public link copied." : "Public scenario report created and link copied.");
+        setMcpTokenMessage("Scenarios published and public link copied.");
       } catch {
-        setMcpTokenMessage(summaryReportDestination === "existing" ? "Scenario added and public report opened." : "Public scenario report created and opened.");
+        setMcpTokenMessage("Scenarios published and landing page opened.");
       }
     } catch (error) {
-      setSummaryReportDialogError(error instanceof Error ? error.message : "Public scenario report could not be saved.");
+      setSummaryReportDialogError(error instanceof Error ? error.message : "Scenarios could not be published.");
     } finally {
       setSummaryReportBusyId("");
     }
@@ -7608,11 +7638,15 @@ export default function App() {
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
             <TopbarActionIcon name="report" />
-            <span>Create Scenario Report</span>
+            <span>Create Scenario</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
             <TopbarActionIcon name="report" />
-            <span>Manage Scenario Reports</span>
+            <span>Manage Scenarios</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("publish")}>
+            <TopbarActionIcon name="report" />
+            <span>Publish Scenarios</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -8504,152 +8538,195 @@ export default function App() {
           <section className="summary-report-dialog" role="dialog" aria-modal="true" aria-labelledby="summary-report-dialog-title">
             <div className="summary-report-dialog__header">
               <div>
-                <p className="eyebrow">Scenario Report</p>
-                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "manage" ? "Manage scenario reports" : "Create scenario report"}</h3>
+                <p className="eyebrow">{summaryReportDialogMode === "publish" ? "Public Landing Page" : "Scenario Library"}</p>
+                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "create" ? "Create scenario" : summaryReportDialogMode === "manage" ? "Manage scenarios" : "Publish scenarios"}</h3>
               </div>
-              <button className="summary-report-dialog__close" type="button" onClick={() => setSummaryReportDialogMode(null)} aria-label="Close scenario report dialog">×</button>
+              <button className="summary-report-dialog__close" type="button" onClick={() => setSummaryReportDialogMode(null)} aria-label="Close scenario dialog">×</button>
             </div>
-            <p className="summary-report-dialog__copy">{summaryReportDialogMode === "manage"
-              ? "Edit your saved scenarios and manage the names and public links for existing reports."
-              : "Save the current workbook summary as a scenario on a new or existing public report."}</p>
-            {summaryReportDialogMode === "manage" ? (
+            <p className="summary-report-dialog__copy">{summaryReportDialogMode === "create"
+              ? "Save the current workbook values as a private scenario. Nothing is published from this step."
+              : summaryReportDialogMode === "manage"
+                ? "Add, rename, describe, or remove scenarios in your private scenario library."
+                : `Select up to ${PUBLISHED_SCENARIO_LIMIT} saved scenarios, tailor their descriptions, and publish them on one landing page.`}</p>
+
+            {summaryReportDialogMode === "create" ? (
               <>
-            <section className="summary-report-dialog__scenarios" aria-labelledby="summary-scenario-management-title">
-              <div className="summary-report-dialog__management-heading">
-                <div>
-                  <span>Existing scenarios</span>
-                  <strong id="summary-scenario-management-title">{managedScenarioCount} saved {managedScenarioCount === 1 ? "scenario" : "scenarios"}</strong>
+                <div className="summary-report-dialog__section-heading">
+                  <span>Current workbook snapshot</span>
+                  <small>Private until you choose Publish Scenarios.</small>
                 </div>
-                <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => prepareCurrentScenarioForReport()}>Create report</button>
-              </div>
-              {isSummaryReportListLoading && summaryLandingPageOptions.length === 0 ? (
-                <p className="summary-report-dialog__empty">Loading saved scenarios…</p>
-              ) : summaryLandingPageOptions.length === 0 ? (
-                <p className="summary-report-dialog__empty">No scenarios have been created yet. Add the current summary to create the first one.</p>
-              ) : (
-                <div className="summary-report-dialog__scenario-list">
-                  {summaryLandingPageOptions.map(({ page, payload }) => (
-                    <section className="summary-report-dialog__scenario-group" key={page.id} aria-label={`${page.name} scenarios`}>
-                      <div className="summary-report-dialog__scenario-group-heading">
-                        <div>
-                          <strong>{page.name}</strong>
-                          <small>{payload.scenarios.length} of {SCENARIOS_PER_LANDING_PAGE_LIMIT} scenarios</small>
-                        </div>
-                        <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId) || payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT} onClick={() => prepareCurrentScenarioForReport(page.id)} title={payload.scenarios.length >= SCENARIOS_PER_LANDING_PAGE_LIMIT ? "This report has reached its scenario limit." : "Add the current workbook summary to this report"}>Add scenario</button>
-                      </div>
+                <div className="summary-report-dialog__current">
+                  <div><span>Current summary</span><strong>{formatCurrencyDetailed(flows.displayIncome)} annual income</strong></div>
+                  <dl>
+                    <div><dt>W-2 wages</dt><dd>{formatCurrencyDetailed(effectiveW2Income)}</dd></div>
+                    <div><dt>Investment income</dt><dd>{formatCurrencyDetailed(flows.investmentIncome)}</dd></div>
+                    <div><dt>Total estimated tax</dt><dd>{formatCurrencyDetailed(totalTax)}</dd></div>
+                    <div><dt>After-tax income</dt><dd>{formatCurrencyDetailed(afterTaxIncome)}</dd></div>
+                  </dl>
+                </div>
+                <label className="summary-report-dialog__field">
+                  <span>Scenario name</span>
+                  <input value={summaryScenarioName} maxLength={60} onChange={(event) => { setSummaryScenarioName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: Salary and dividend mix" autoFocus />
+                </label>
+                <label className="summary-report-dialog__field">
+                  <span>Scenario description</span>
+                  <textarea value={summaryScenarioDescription} maxLength={300} rows={3} onChange={(event) => { setSummaryScenarioDescription(event.target.value); setSummaryReportDialogError(""); }} placeholder="Matter-of-fact summary of the income and tax assumptions" />
+                  <small>{summaryScenarioDescription.length} of 300 characters</small>
+                </label>
+                {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
+                <div className="summary-report-dialog__actions">
+                  <button className="ghost-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Cancel</button>
+                  <button className="primary-button" type="button" onClick={saveCurrentScenario}>Save scenario</button>
+                </div>
+              </>
+            ) : summaryReportDialogMode === "manage" ? (
+              <>
+                <section className="summary-report-dialog__scenarios" aria-labelledby="summary-scenario-management-title">
+                  <div className="summary-report-dialog__management-heading">
+                    <div>
+                      <span>Scenario library</span>
+                      <strong id="summary-scenario-management-title">{uiSettings.savedScenarios.length} of {SAVED_SCENARIO_LIMIT} saved scenarios</strong>
+                    </div>
+                    <button className="ghost-button" type="button" onClick={() => openSummaryReportDialog("create")}>Add scenario</button>
+                  </div>
+                  {uiSettings.savedScenarios.length === 0 ? (
+                    <p className="summary-report-dialog__empty">No scenarios have been saved yet. Add the current workbook as your first scenario.</p>
+                  ) : (
+                    <div className="summary-report-dialog__scenario-list">
                       <div className="summary-report-dialog__scenario-rows">
-                        {payload.scenarios.map((scenario, index) => {
-                          const draftKey = summaryScenarioDraftKey(page.id, scenario.id);
-                          const draft = summaryScenarioDrafts[draftKey] || { name: scenario.name, description: scenario.description };
-                          const saveBusyId = `save:${draftKey}`;
-                          const removeBusyId = `remove:${draftKey}`;
-                          const isPendingRemoval = summaryScenarioPendingDeleteKey === draftKey;
+                        {uiSettings.savedScenarios.map((scenario, index) => {
+                          const draft = summaryScenarioDrafts[scenario.id] || { name: scenario.name, description: scenario.description };
+                          const isPendingRemoval = summaryScenarioPendingDeleteKey === scenario.id;
                           return (
                             <article className="summary-report-dialog__scenario-row" key={scenario.id}>
                               <div className="summary-report-dialog__scenario-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
                               <div className="summary-report-dialog__scenario-fields">
-                                <input aria-label={`Scenario name for ${scenario.name}`} value={draft.name} maxLength={60} onChange={(event) => { const name = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [draftKey]: { ...draft, name } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
-                                <textarea aria-label={`Scenario description for ${scenario.name}`} value={draft.description} maxLength={300} rows={2} onChange={(event) => { const description = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [draftKey]: { ...draft, description } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
-                                <small>{scenario.stateCode || payload.stateCode} · {filingStatusLabels[scenario.filingStatus || payload.filingStatus]} · {formatCurrencyDetailed(scenario.income)} income · {formatCurrencyDetailed(scenario.totalTax)} tax</small>
+                                <input aria-label={`Scenario name for ${scenario.name}`} value={draft.name} maxLength={60} onChange={(event) => { const name = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { ...draft, name } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
+                                <textarea aria-label={`Scenario description for ${scenario.name}`} value={draft.description} maxLength={300} rows={2} onChange={(event) => { const description = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { ...draft, description } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
+                                <small>{scenario.stateCode || currentSummaryReportPayload.stateCode} · {filingStatusLabels[scenario.filingStatus || currentSummaryReportPayload.filingStatus]} · {formatCurrencyDetailed(scenario.income)} income · {formatCurrencyDetailed(scenario.totalTax)} tax</small>
                               </div>
                               <div className="summary-report-dialog__scenario-actions">
-                                <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void saveManagedScenario(page.id, scenario.id); }}>{summaryReportBusyId === saveBusyId ? "Saving…" : "Save"}</button>
-                                <button className={`ghost-button summary-report-dialog__remove${isPendingRemoval ? " is-confirming" : ""}`} type="button" disabled={Boolean(summaryReportBusyId) || payload.scenarios.length === 1} onClick={() => { if (isPendingRemoval) { void saveManagedScenario(page.id, scenario.id, true); } else { setSummaryScenarioPendingDeleteKey(draftKey); setSummaryReportDialogError(""); } }} title={payload.scenarios.length === 1 ? "Add another scenario before removing this one." : isPendingRemoval ? "Confirm removal from this public report" : "Remove this scenario"}>{summaryReportBusyId === removeBusyId ? "Removing…" : isPendingRemoval ? "Confirm remove" : "Remove"}</button>
+                                <button className="ghost-button" type="button" onClick={() => saveManagedScenario(scenario.id)}>Save</button>
+                                <button className={`ghost-button summary-report-dialog__remove${isPendingRemoval ? " is-confirming" : ""}`} type="button" onClick={() => { if (isPendingRemoval) { saveManagedScenario(scenario.id, true); } else { setSummaryScenarioPendingDeleteKey(scenario.id); setSummaryReportDialogError(""); } }}>{isPendingRemoval ? "Confirm remove" : "Remove"}</button>
                               </div>
                             </article>
                           );
                         })}
                       </div>
-                    </section>
-                  ))}
+                    </div>
+                  )}
+                </section>
+                {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
+                <div className="summary-report-dialog__actions">
+                  <button className="primary-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Done</button>
                 </div>
-              )}
-            </section>
-            <section className="summary-report-dialog__management" aria-labelledby="summary-report-management-title">
-              <div className="summary-report-dialog__management-heading">
-                <div>
-                  <span>Previously created reports</span>
-                  <strong id="summary-report-management-title">{summaryLandingPageOptions.length} saved {summaryLandingPageOptions.length === 1 ? "report" : "reports"}</strong>
-                </div>
-                {isSummaryReportListLoading && <small>Refreshing…</small>}
-              </div>
-              {summaryLandingPageOptions.length === 0 ? (
-                <p className="summary-report-dialog__empty">No scenario reports have been created yet.</p>
-              ) : (
-                <div className="summary-report-dialog__report-list">
-                  {summaryLandingPageOptions.map(({ page, payload }) => {
-                    const draftName = summaryReportRenameDrafts[page.id] ?? page.name;
-                    const draftSlug = normalizePublicReportSlug(draftName);
-                    const publicUrl = page.slug ? buildPublicSummaryReportUrl(page.slug) : "";
-                    return (
-                      <div className="summary-report-dialog__report-row" key={page.id}>
-                        <div className="summary-report-dialog__report-name">
-                          <input aria-label={`Report name for ${page.name}`} value={draftName} maxLength={80} onChange={(event) => { const value = event.target.value; setSummaryReportRenameDrafts((current) => ({ ...current, [page.id]: value })); setSummaryReportDialogError(""); }} />
-                          <small>{page.slug ? publicUrl : `${PUBLIC_SITE_ORIGIN}/${draftSlug || "report-name"}`} · {payload.scenarios.length} {payload.scenarios.length === 1 ? "scenario" : "scenarios"}</small>
-                        </div>
-                        <div className="summary-report-dialog__report-actions">
-                          {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
-                          <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void renameSummaryReport(page.id); }}>{summaryReportBusyId === page.id ? "Saving…" : page.slug ? "Save name" : "Publish"}</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-            {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
-            <div className="summary-report-dialog__actions">
-              <button className="primary-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Done</button>
-            </div>
               </>
             ) : (
               <>
-            <div className="summary-report-dialog__section-heading" id="summary-report-add-current">
-              <span>Add current summary</span>
-              <small>The current workbook values become one scenario.</small>
-            </div>
-            <div className="summary-report-dialog__destinations" role="radiogroup" aria-label="Scenario landing page destination">
-              <label className={summaryReportDestination === "new" ? "is-selected" : ""}>
-                <input type="radio" name="summary-report-destination" value="new" checked={summaryReportDestination === "new"} onChange={() => { setSummaryReportDestination("new"); setSummaryScenarioName("Current workbook"); setSummaryReportDialogError(""); }} />
-                <span><strong>New landing page</strong><small>Create a page containing this scenario.</small></span>
-              </label>
-              <label className={`${summaryReportDestination === "existing" ? "is-selected" : ""} ${summaryLandingPageOptions.length === 0 ? "is-disabled" : ""}`}>
-                <input type="radio" name="summary-report-destination" value="existing" checked={summaryReportDestination === "existing"} disabled={summaryLandingPageOptions.length === 0} onChange={() => { const firstPage = summaryLandingPageOptions[0]; setSummaryReportDestination("existing"); setSelectedSummaryLandingPageId(firstPage?.page.id || ""); setSummaryScenarioName(`Scenario ${(firstPage?.payload.scenarios.length || 0) + 1}`); setSummaryReportDialogError(""); }} />
-                <span><strong>Existing landing page</strong><small>{summaryLandingPageOptions.length ? `Add to one of ${summaryLandingPageOptions.length} saved pages.` : "No saved landing pages yet."}</small></span>
-              </label>
-            </div>
-            {summaryReportDestination === "new" ? (
-              <label className="summary-report-dialog__field">
-                <span>Landing page name</span>
-                <input value={summaryReportName} maxLength={80} onChange={(event) => { setSummaryReportName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: 2025 income scenarios" autoFocus />
-                <small className="summary-report-dialog__url-preview">Public URL: {PUBLIC_SITE_ORIGIN}/{normalizePublicReportSlug(summaryReportName) || "report-name"}</small>
-              </label>
-            ) : (
-              <label className="summary-report-dialog__field">
-                <span>Existing landing page</span>
-                <select value={selectedSummaryLandingPageId} onChange={(event) => { const pageId = event.target.value; const page = summaryLandingPageOptions.find((entry) => entry.page.id === pageId); setSelectedSummaryLandingPageId(pageId); setSummaryScenarioName(`Scenario ${(page?.payload.scenarios.length || 0) + 1}`); setSummaryReportDialogError(""); }}>
-                  {summaryLandingPageOptions.map(({ page, payload }) => <option key={page.id} value={page.id}>{page.name} ({payload.scenarios.length} {payload.scenarios.length === 1 ? "scenario" : "scenarios"})</option>)}
-                </select>
-              </label>
-            )}
-            <div className="summary-report-dialog__current">
-              <div><span>Current summary</span><strong>{formatCurrencyDetailed(flows.displayIncome)} annual income</strong></div>
-              <dl>
-                <div><dt>W-2 wages</dt><dd>{formatCurrencyDetailed(effectiveW2Income)}</dd></div>
-                <div><dt>Investment income</dt><dd>{formatCurrencyDetailed(flows.investmentIncome)}</dd></div>
-                <div><dt>Total estimated tax</dt><dd>{formatCurrencyDetailed(totalTax)}</dd></div>
-                <div><dt>After-tax income</dt><dd>{formatCurrencyDetailed(afterTaxIncome)}</dd></div>
-              </dl>
-            </div>
-            <label className="summary-report-dialog__field">
-              <span>Scenario name</span>
-              <input value={summaryScenarioName} maxLength={60} onChange={(event) => { setSummaryScenarioName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: Salary and dividend mix" />
-            </label>
-            {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
-            <div className="summary-report-dialog__actions">
-              <button className="ghost-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Cancel</button>
-              <button className="primary-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void createSummaryReport(); }}>{summaryReportBusyId === "create" ? "Publishing…" : summaryReportDestination === "existing" ? "Add scenario" : "Create page and add"}</button>
-            </div>
+                <section className="summary-report-dialog__scenarios" aria-labelledby="summary-publish-scenarios-title">
+                  <div className="summary-report-dialog__management-heading">
+                    <div>
+                      <span>Scenarios to publish</span>
+                      <strong id="summary-publish-scenarios-title">{summaryPublishScenarioIds.length} of {PUBLISHED_SCENARIO_LIMIT} selected</strong>
+                    </div>
+                    <button className="ghost-button" type="button" onClick={() => openSummaryReportDialog("create")}>Create scenario</button>
+                  </div>
+                  {uiSettings.savedScenarios.length === 0 ? (
+                    <p className="summary-report-dialog__empty">Create at least one scenario before publishing a landing page.</p>
+                  ) : (
+                    <div className="summary-report-dialog__publish-list">
+                      {uiSettings.savedScenarios.map((scenario) => {
+                        const isSelected = summaryPublishScenarioIds.includes(scenario.id);
+                        return (
+                          <div className={`summary-report-dialog__publish-row${isSelected ? " is-selected" : ""}`} key={scenario.id}>
+                            <label className="summary-report-dialog__publish-selector">
+                              <input type="checkbox" checked={isSelected} onChange={() => togglePublishedScenario(scenario.id)} />
+                              <span>
+                                <strong>{scenario.name}</strong>
+                                <small>{scenario.stateCode || currentSummaryReportPayload.stateCode} · {formatCurrencyDetailed(scenario.income)} income · {formatCurrencyDetailed(scenario.totalTax)} tax</small>
+                              </span>
+                            </label>
+                            {isSelected && (
+                              <label className="summary-report-dialog__publish-description">
+                                <span>Landing page description</span>
+                                <textarea value={summaryPublishDescriptions[scenario.id] ?? scenario.description} maxLength={300} rows={2} onChange={(event) => { const description = event.target.value; setSummaryPublishDescriptions((current) => ({ ...current, [scenario.id]: description })); setSummaryReportDialogError(""); }} />
+                                <small>{String(summaryPublishDescriptions[scenario.id] ?? scenario.description).length} of 300 characters</small>
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                <div className="summary-report-dialog__section-heading">
+                  <span>Landing page</span>
+                  <small>Publish a new page or replace the scenarios on an existing page.</small>
+                </div>
+                <div className="summary-report-dialog__destinations" role="radiogroup" aria-label="Published landing page destination">
+                  <label className={summaryReportDestination === "new" ? "is-selected" : ""}>
+                    <input type="radio" name="summary-report-destination" value="new" checked={summaryReportDestination === "new"} onChange={() => { setSummaryReportDestination("new"); setSummaryReportDialogError(""); }} />
+                    <span><strong>New landing page</strong><small>Create a public page with the selected scenarios.</small></span>
+                  </label>
+                  <label className={`${summaryReportDestination === "existing" ? "is-selected" : ""} ${summaryLandingPageOptions.length === 0 ? "is-disabled" : ""}`}>
+                    <input type="radio" name="summary-report-destination" value="existing" checked={summaryReportDestination === "existing"} disabled={summaryLandingPageOptions.length === 0} onChange={() => { setSummaryReportDestination("existing"); setSelectedSummaryLandingPageId(summaryLandingPageOptions[0]?.page.id || ""); setSummaryReportDialogError(""); }} />
+                    <span><strong>Existing landing page</strong><small>{summaryLandingPageOptions.length ? "Replace its published scenarios with this selection." : "No published landing pages yet."}</small></span>
+                  </label>
+                </div>
+                {summaryReportDestination === "new" ? (
+                  <label className="summary-report-dialog__field">
+                    <span>Landing page name</span>
+                    <input value={summaryReportName} maxLength={80} onChange={(event) => { setSummaryReportName(event.target.value); setSummaryReportDialogError(""); }} placeholder="Example: 2025 income scenarios" />
+                    <small className="summary-report-dialog__url-preview">Public URL: {PUBLIC_SITE_ORIGIN}/{normalizePublicReportSlug(summaryReportName) || "report-name"}</small>
+                  </label>
+                ) : (
+                  <label className="summary-report-dialog__field">
+                    <span>Existing landing page</span>
+                    <select value={selectedSummaryLandingPageId} onChange={(event) => { setSelectedSummaryLandingPageId(event.target.value); setSummaryReportDialogError(""); }}>
+                      {summaryLandingPageOptions.map(({ page, payload }) => <option key={page.id} value={page.id}>{page.name} ({payload.scenarios.length} published)</option>)}
+                    </select>
+                  </label>
+                )}
+
+                <section className="summary-report-dialog__management summary-report-dialog__published" aria-labelledby="summary-published-pages-title">
+                  <div className="summary-report-dialog__management-heading">
+                    <div>
+                      <span>Published landing pages</span>
+                      <strong id="summary-published-pages-title">{summaryLandingPageOptions.length} saved {summaryLandingPageOptions.length === 1 ? "page" : "pages"}</strong>
+                    </div>
+                    {isSummaryReportListLoading && <small>Refreshing…</small>}
+                  </div>
+                  {summaryLandingPageOptions.length === 0 ? (
+                    <p className="summary-report-dialog__empty">No landing pages have been published yet.</p>
+                  ) : (
+                    <div className="summary-report-dialog__report-list">
+                      {summaryLandingPageOptions.map(({ page, payload }) => {
+                        const draftName = summaryReportRenameDrafts[page.id] ?? page.name;
+                        const draftSlug = normalizePublicReportSlug(draftName);
+                        const publicUrl = page.slug ? buildPublicSummaryReportUrl(page.slug) : "";
+                        return (
+                          <div className="summary-report-dialog__report-row" key={page.id}>
+                            <div className="summary-report-dialog__report-name">
+                              <input aria-label={`Landing page name for ${page.name}`} value={draftName} maxLength={80} onChange={(event) => { const value = event.target.value; setSummaryReportRenameDrafts((current) => ({ ...current, [page.id]: value })); setSummaryReportDialogError(""); }} />
+                              <small>{page.slug ? publicUrl : `${PUBLIC_SITE_ORIGIN}/${draftSlug || "report-name"}`} · {payload.scenarios.length} published {payload.scenarios.length === 1 ? "scenario" : "scenarios"}</small>
+                            </div>
+                            <div className="summary-report-dialog__report-actions">
+                              {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
+                              <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void renameSummaryReport(page.id); }}>{summaryReportBusyId === page.id ? "Saving…" : "Save name"}</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
+                <div className="summary-report-dialog__actions">
+                  <button className="ghost-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Cancel</button>
+                  <button className="primary-button" type="button" disabled={Boolean(summaryReportBusyId) || summaryPublishScenarioIds.length === 0} onClick={() => { void publishSelectedScenarios(); }}>{summaryReportBusyId === "publish" ? "Publishing…" : summaryReportDestination === "existing" ? "Update landing page" : "Publish landing page"}</button>
+                </div>
               </>
             )}
           </section>
