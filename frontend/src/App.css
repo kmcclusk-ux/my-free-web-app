@@ -6908,6 +6908,17 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
   font-size: .62rem;
 }
 
+.summary-report-dialog__scenario-public-links.is-unpublished {
+  border-color: #e3e7ec;
+  background: #f8fafc;
+}
+
+.summary-report-dialog__scenario-public-link small {
+  color: #667085;
+  font-size: .63rem;
+  font-weight: 650;
+}
+
 .summary-report-dialog__scenario-fields input,
 .summary-report-dialog__scenario-fields textarea {
   width: 100%;
@@ -7346,6 +7357,15 @@ html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-link .summary-
   color: #93c5fd;
 }
 
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-links.is-unpublished {
+  border-color: rgba(148, 163, 184, .2);
+  background: rgba(15, 23, 42, .55);
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-link small {
+  color: #cbd5e1;
+}
+
 html.aftertaxus-dark-mode .summary-report-dialog__publish-row {
   border-color: rgba(148, 163, 184, .18);
   background: transparent;
@@ -7501,6 +7521,7 @@ html.aftertaxus-dark-mode .summary-report-dialog__remove.is-confirming {
 .summary-scenario-card {
   display: grid;
   grid-template-columns: 70px minmax(0, 1fr);
+  scroll-margin-top: 24px;
   overflow: hidden;
   border: 1px solid #d8dfe8;
   border-radius: 18px;

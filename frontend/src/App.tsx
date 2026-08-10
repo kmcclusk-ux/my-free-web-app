@@ -5855,7 +5855,7 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
             const scenarioLocalityName = scenario.localityName || payload.localityName || "Local tax";
             const scenarioFilingStatus = scenario.filingStatus || payload.filingStatus;
             return (
-              <article className="summary-scenario-card" key={scenario.id}>
+              <article className="summary-scenario-card" id={`scenario-${scenario.id}`} key={scenario.id}>
                 <div className="summary-scenario-card__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
                 <div className="summary-scenario-card__content">
                   <div className="summary-scenario-card__heading">
@@ -6064,6 +6064,20 @@ export default function App() {
   void historyVersion;
   const canUndo = historyRef.current.past.length > 0;
   const canRedo = historyRef.current.future.length > 0;
+
+  useEffect(() => {
+    if (!summaryReportPayload || !window.location.hash.startsWith("#scenario-")) return;
+    let targetId = "";
+    try {
+      targetId = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [summaryReportPayload]);
 
   useEffect(() => {
     if (!authEnabled) return;
@@ -8624,9 +8638,13 @@ export default function App() {
                         {uiSettings.savedScenarios.map((scenario, index) => {
                           const draft = summaryScenarioDrafts[scenario.id] || { name: scenario.name, description: scenario.description };
                           const isPendingRemoval = summaryScenarioPendingDeleteKey === scenario.id;
-                          const publishedUrls = summaryLandingPageOptions
-                            .filter(({ payload }) => payload.scenarios.some((publishedScenario) => publishedScenario.id === scenario.id))
-                            .map(({ page }) => buildPublicSummaryReportUrl(page.slug || namespacedPublicReportSlug(publicUsername, page.name), publicUsername));
+                          const publishedUrls = [...new Set(summaryLandingPageOptions.flatMap(({ page, payload }) => {
+                            const publishedScenario = payload.scenarios.find((candidate) => candidate.id === scenario.id)
+                              || payload.scenarios.find((candidate) => normalizeLookupKey(candidate.name) === normalizeLookupKey(scenario.name));
+                            if (!publishedScenario) return [];
+                            const reportUrl = buildPublicSummaryReportUrl(page.slug || namespacedPublicReportSlug(publicUsername, page.name), publicUsername);
+                            return [`${reportUrl}#scenario-${encodeURIComponent(publishedScenario.id)}`];
+                          }))];
                           return (
                             <article className="summary-report-dialog__scenario-row" key={scenario.id}>
                               <div className="summary-report-dialog__scenario-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
@@ -8634,17 +8652,22 @@ export default function App() {
                                 <input aria-label={`Scenario name for ${scenario.name}`} value={draft.name} maxLength={60} onChange={(event) => { const name = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { ...draft, name } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
                                 <textarea aria-label={`Scenario description for ${scenario.name}`} value={draft.description} maxLength={300} rows={2} onChange={(event) => { const description = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { ...draft, description } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
                                 <small>{scenario.stateCode || currentSummaryReportPayload.stateCode} · {filingStatusLabels[scenario.filingStatus || currentSummaryReportPayload.filingStatus]} · {formatCurrencyDetailed(scenario.income)} income · {formatCurrencyDetailed(scenario.totalTax)} tax</small>
-                                {publishedUrls.length > 0 && (
-                                  <div className="summary-report-dialog__scenario-public-links">
-                                    <span>Public {publishedUrls.length === 1 ? "URL" : "URLs"}</span>
-                                    {publishedUrls.map((url) => (
+                                <div className={`summary-report-dialog__scenario-public-links${publishedUrls.length === 0 ? " is-unpublished" : ""}`}>
+                                  <span>{publishedUrls.length === 0 ? "Scenario URL" : `Public ${publishedUrls.length === 1 ? "URL" : "URLs"}`}</span>
+                                  {publishedUrls.length > 0 ? (
+                                    publishedUrls.map((url) => (
                                       <div className="summary-report-dialog__scenario-public-link" key={url}>
                                         <a className="summary-report-dialog__scenario-url" href={url} target="_blank" rel="noreferrer">{url}</a>
                                         <a className="ghost-button ghost-button--compact" href={url} target="_blank" rel="noreferrer">Launch</a>
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
+                                    ))
+                                  ) : (
+                                    <div className="summary-report-dialog__scenario-public-link">
+                                      <small>Not published yet. Publish this scenario to create its URL.</small>
+                                      <button className="ghost-button ghost-button--compact" type="button" onClick={() => { openSummaryReportDialog("publish"); setSummaryPublishScenarioIds([scenario.id]); setSummaryPublishDescriptions((current) => ({ ...current, [scenario.id]: scenario.description })); }}>Publish</button>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                               <div className="summary-report-dialog__scenario-actions">
                                 <button className="ghost-button" type="button" onClick={() => saveManagedScenario(scenario.id)}>Save</button>
