@@ -8624,6 +8624,9 @@ export default function App() {
                         {uiSettings.savedScenarios.map((scenario, index) => {
                           const draft = summaryScenarioDrafts[scenario.id] || { name: scenario.name, description: scenario.description };
                           const isPendingRemoval = summaryScenarioPendingDeleteKey === scenario.id;
+                          const publishedUrls = summaryLandingPageOptions
+                            .filter(({ payload }) => payload.scenarios.some((publishedScenario) => publishedScenario.id === scenario.id))
+                            .map(({ page }) => buildPublicSummaryReportUrl(page.slug || namespacedPublicReportSlug(publicUsername, page.name), publicUsername));
                           return (
                             <article className="summary-report-dialog__scenario-row" key={scenario.id}>
                               <div className="summary-report-dialog__scenario-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</div>
@@ -8631,6 +8634,12 @@ export default function App() {
                                 <input aria-label={`Scenario name for ${scenario.name}`} value={draft.name} maxLength={60} onChange={(event) => { const name = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { ...draft, name } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
                                 <textarea aria-label={`Scenario description for ${scenario.name}`} value={draft.description} maxLength={300} rows={2} onChange={(event) => { const description = event.target.value; setSummaryScenarioDrafts((current) => ({ ...current, [scenario.id]: { ...draft, description } })); setSummaryScenarioPendingDeleteKey(""); setSummaryReportDialogError(""); }} />
                                 <small>{scenario.stateCode || currentSummaryReportPayload.stateCode} · {filingStatusLabels[scenario.filingStatus || currentSummaryReportPayload.filingStatus]} · {formatCurrencyDetailed(scenario.income)} income · {formatCurrencyDetailed(scenario.totalTax)} tax</small>
+                                {publishedUrls.length > 0 && (
+                                  <div className="summary-report-dialog__scenario-public-links">
+                                    <span>Public {publishedUrls.length === 1 ? "URL" : "URLs"}</span>
+                                    {publishedUrls.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer">{url}</a>)}
+                                  </div>
+                                )}
                               </div>
                               <div className="summary-report-dialog__scenario-actions">
                                 <button className="ghost-button" type="button" onClick={() => saveManagedScenario(scenario.id)}>Save</button>

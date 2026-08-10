@@ -6868,6 +6868,33 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
   gap: 6px;
 }
 
+.summary-report-dialog__scenario-public-links {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #dbe7f5;
+  border-radius: 8px;
+  background: #f6faff;
+}
+
+.summary-report-dialog__scenario-public-links span {
+  color: #52606d;
+  font-size: .58rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.summary-report-dialog__scenario-public-links a {
+  overflow: hidden;
+  color: #175cd3;
+  font-size: .65rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+}
+
 .summary-report-dialog__scenario-fields input,
 .summary-report-dialog__scenario-fields textarea {
   width: 100%;
@@ -7290,6 +7317,19 @@ html.aftertaxus-dark-mode .summary-report-dialog__scenario-row {
 
 html.aftertaxus-dark-mode .summary-report-dialog__scenario-index {
   background: rgba(37, 99, 235, .2);
+  color: #93c5fd;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-links {
+  border-color: rgba(96, 165, 250, .24);
+  background: rgba(30, 64, 175, .12);
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-links span {
+  color: #94a3b8;
+}
+
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-links a {
   color: #93c5fd;
 }
 
