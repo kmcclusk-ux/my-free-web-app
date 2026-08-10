@@ -7612,8 +7612,7 @@ export default function App() {
         return [{ id: landingPageId, name: saved.report.name, slug: saved.report.slug, createdAt: saved.report.createdAt, updatedAt: saved.report.updatedAt, payload: encodedPayload }, ...current];
       });
       setSummaryReportRenameDrafts((current) => ({ ...current, [landingPageId]: saved.report.name }));
-      setSummaryReportDialogMode(null);
-      window.open(saved.publicUrl, "_blank", "noopener,noreferrer");
+      window.location.assign(saved.publicUrl);
       try {
         await navigator.clipboard.writeText(saved.publicUrl);
         setMcpTokenMessage("Scenarios published and public link copied.");
