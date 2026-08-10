@@ -8637,7 +8637,12 @@ export default function App() {
                                 {publishedUrls.length > 0 && (
                                   <div className="summary-report-dialog__scenario-public-links">
                                     <span>Public {publishedUrls.length === 1 ? "URL" : "URLs"}</span>
-                                    {publishedUrls.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer">{url}</a>)}
+                                    {publishedUrls.map((url) => (
+                                      <div className="summary-report-dialog__scenario-public-link" key={url}>
+                                        <a className="summary-report-dialog__scenario-url" href={url} target="_blank" rel="noreferrer">{url}</a>
+                                        <a className="ghost-button ghost-button--compact" href={url} target="_blank" rel="noreferrer">Launch</a>
+                                      </div>
+                                    ))}
                                   </div>
                                 )}
                               </div>

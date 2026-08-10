@@ -6886,13 +6886,26 @@ html.aftertaxus-dark-mode .tax-summary-trigger {
   text-transform: uppercase;
 }
 
-.summary-report-dialog__scenario-public-links a {
-  overflow: hidden;
+.summary-report-dialog__scenario-public-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.summary-report-dialog__scenario-public-link .summary-report-dialog__scenario-url {
   color: #175cd3;
   font-size: .65rem;
   font-weight: 750;
   overflow-wrap: anywhere;
-  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.summary-report-dialog__scenario-public-link .ghost-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: .62rem;
 }
 
 .summary-report-dialog__scenario-fields input,
@@ -7329,7 +7342,7 @@ html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-links span {
   color: #94a3b8;
 }
 
-html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-links a {
+html.aftertaxus-dark-mode .summary-report-dialog__scenario-public-link .summary-report-dialog__scenario-url {
   color: #93c5fd;
 }
 
@@ -7691,6 +7704,14 @@ html.aftertaxus-dark-mode .summary-report-dialog__remove.is-confirming {
 
   .summary-report-dialog__scenario-actions .ghost-button {
     min-width: 88px;
+  }
+
+  .summary-report-dialog__scenario-public-link {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-report-dialog__scenario-public-link .ghost-button {
+    justify-self: start;
   }
 
   .summary-scenarios-page {
