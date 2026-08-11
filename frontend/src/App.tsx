@@ -1,4 +1,4 @@
-import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type SetStateAction } from "react";
+import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode, type SetStateAction } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
@@ -2877,6 +2877,26 @@ function buildPortfolioSnapshot({
 }
 function MetricCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "accent" | "warning" }) {
   return <div className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function NavigableStatusCard({ children, targetCount = 0, onPrevious, onNext }: { children: ReactNode; targetCount?: number; onPrevious?: () => void; onNext?: () => void }) {
+  const hasNavigation = targetCount > 0 && onPrevious && onNext;
+  return (
+    <div className="status-card status-card--error status-card--navigable" role="alert">
+      <div className="status-card__message">{children}</div>
+      {hasNavigation && (
+        <div className="status-card__nav" aria-label="Error row navigation">
+          <span>{targetCount} {targetCount === 1 ? "row" : "rows"}</span>
+          <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={onPrevious} aria-label="Previous error row" title="Previous error row">
+            <RowActionIcon name="previous" />
+          </button>
+          <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={onNext} aria-label="Next error row" title="Next error row">
+            <RowActionIcon name="next" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function TaxSummaryRow({ label, value, note, emphasis = false, status }: { label: string; value: string; note?: string; emphasis?: boolean; status?: string }) {
@@ -6003,6 +6023,7 @@ export default function App() {
   const [showThermometerRail, setShowThermometerRail] = useState(true);
   const [highlightedAccountRowId, setHighlightedAccountRowId] = useState<number | null>(null);
   const [highlightedAssetRowId, setHighlightedAssetRowId] = useState<number | null>(null);
+  const [highlightedTaxTreatmentRowId, setHighlightedTaxTreatmentRowId] = useState<number | null>(null);
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
@@ -6429,15 +6450,33 @@ export default function App() {
     .filter(([label]) => Boolean(label))), [taxTreatments]);
   const taxTreatmentIssues = useMemo(() => taxTreatments.flatMap((row) => {
     const total = toNumber(row.ordinaryShare) + toNumber(row.preferredShare);
-    const issues: string[] = [];
-    if (!String(row.label || "").trim()) issues.push(`Row ${row.id}: treatment ID is required.`);
-    if (total > 1.000001) issues.push(`${row.label || `Row ${row.id}`}: federal ordinary and preferred shares exceed 100%.`);
-    if (toNumber(row.ordinaryShare) < 0 || toNumber(row.preferredShare) < 0) issues.push(`${row.label || `Row ${row.id}`}: federal shares cannot be negative.`);
+    const issues: Array<{ rowId: number; message: string }> = [];
+    if (!String(row.label || "").trim()) issues.push({ rowId: row.id, message: `Row ${row.id}: treatment ID is required.` });
+    if (total > 1.000001) issues.push({ rowId: row.id, message: `${row.label || `Row ${row.id}`}: federal ordinary and preferred shares exceed 100%.` });
+    if (toNumber(row.ordinaryShare) < 0 || toNumber(row.preferredShare) < 0) issues.push({ rowId: row.id, message: `${row.label || `Row ${row.id}`}: federal shares cannot be negative.` });
     return issues;
   }), [taxTreatments]);
   const assetsWithUnmappedTaxTreatment = useMemo(() => tickers
-    .filter((row) => String(row.symbol || "").trim() && !taxTreatmentMap[normalizeLookupKey(row.taxTreatment)])
-    .map((row) => row.symbol), [tickers, taxTreatmentMap]);
+    .filter((row) => String(row.symbol || "").trim() && !taxTreatmentMap[normalizeLookupKey(row.taxTreatment)]), [tickers, taxTreatmentMap]);
+  const taxTreatmentIssueRowIds = useMemo(() => [...new Set(taxTreatmentIssues.map((issue) => issue.rowId))], [taxTreatmentIssues]);
+  const cycleAssetErrorRow = useCallback((direction: "previous" | "next") => {
+    if (assetsWithUnmappedTaxTreatment.length === 0) return;
+    const currentIndex = assetsWithUnmappedTaxTreatment.findIndex((row) => row.id === highlightedAssetRowId);
+    const nextIndex = direction === "next"
+      ? (currentIndex >= 0 ? currentIndex + 1 : 0) % assetsWithUnmappedTaxTreatment.length
+      : (currentIndex >= 0 ? currentIndex - 1 + assetsWithUnmappedTaxTreatment.length : assetsWithUnmappedTaxTreatment.length - 1) % assetsWithUnmappedTaxTreatment.length;
+    setHighlightedAssetRowId(assetsWithUnmappedTaxTreatment[nextIndex].id);
+    setActiveTab("tickers");
+  }, [assetsWithUnmappedTaxTreatment, highlightedAssetRowId]);
+  const cycleTaxTreatmentErrorRow = useCallback((direction: "previous" | "next") => {
+    if (taxTreatmentIssueRowIds.length === 0) return;
+    const currentIndex = taxTreatmentIssueRowIds.findIndex((id) => id === highlightedTaxTreatmentRowId);
+    const nextIndex = direction === "next"
+      ? (currentIndex >= 0 ? currentIndex + 1 : 0) % taxTreatmentIssueRowIds.length
+      : (currentIndex >= 0 ? currentIndex - 1 + taxTreatmentIssueRowIds.length : taxTreatmentIssueRowIds.length - 1) % taxTreatmentIssueRowIds.length;
+    setHighlightedTaxTreatmentRowId(taxTreatmentIssueRowIds[nextIndex]);
+    setActiveTab("taxTreatment");
+  }, [highlightedTaxTreatmentRowId, taxTreatmentIssueRowIds]);
   const categoryOptions = useMemo(() => {
     const values = categories
       .map((row) => String(row.name || "").trim())
@@ -9547,7 +9586,15 @@ export default function App() {
             />
           </div>
         </div>
-        {activeTab === "tickers" && assetsWithUnmappedTaxTreatment.length > 0 && <div className="status-card status-card--error" role="alert"><strong>Unmapped tax treatment:</strong> {assetsWithUnmappedTaxTreatment.join(", ")}. Add or correct the treatment before relying on tax results.</div>}
+        {activeTab === "tickers" && assetsWithUnmappedTaxTreatment.length > 0 && (
+          <NavigableStatusCard
+            targetCount={assetsWithUnmappedTaxTreatment.length}
+            onPrevious={() => cycleAssetErrorRow("previous")}
+            onNext={() => cycleAssetErrorRow("next")}
+          >
+            <strong>Unmapped tax treatment:</strong> {assetsWithUnmappedTaxTreatment.map((row) => row.symbol).join(", ")}. Add or correct the treatment before relying on tax results.
+          </NavigableStatusCard>
+        )}
         {isAssistantOpen && (
           <AssistantPanel
             portfolioSnapshot={portfolioSnapshot}
@@ -9650,8 +9697,16 @@ export default function App() {
         )}
         {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} duplicateKey="symbol" columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onSplitRow={(id) => setTickers((current) => { const index = current.findIndex((row) => row.id === id); if (index < 0) return current; const nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1)); return [...current.slice(0, index + 1), { ...current[index], id: nextId }, ...current.slice(index + 1)]; })} onPasteRow={(id, values) => setTickers((current) => current.map((row) => row.id === id ? { ...row, ...values, id } : row))} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and portfolio-allocation rollup." rows={categories} columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "", includeInAllocation: true })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
-        {activeTab === "taxTreatment" && taxTreatmentIssues.length > 0 && <div className="status-card status-card--error" role="alert"><strong>Tax treatment rules need attention.</strong> {taxTreatmentIssues.join(" ")}</div>}
-        {activeTab === "taxTreatment" && <LookupTable title="Tax Treatments" subtitle="Structured rules used to divide investment income between federal ordinary and preferred income, determine state/local treatment, and drive the tax-treatment allocation rollup." rows={taxTreatments} duplicateKey="label" columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "label", label: "Treatment ID" }, { key: "ordinaryShare", label: "Federal ordinary", type: "percent" }, { key: "preferredShare", label: "Federal preferred", type: "percent" }, { key: "stateRule", label: "State rule", type: "select", options: ["taxable", "exempt", "treasury-exempt"] }, { key: "niitIncluded", label: "Include in NIIT", type: "checkbox" }, { key: "localCategory", label: "Local category", type: "select", options: localTaxBaseKeys }, { key: "description", label: "Explanation" }]} onChange={updateCollection(setTaxTreatments, ["ordinaryShare", "preferredShare"])} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "", ...defaultTaxTreatmentRule("income"), includeInAllocation: true })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "taxTreatment" && taxTreatmentIssues.length > 0 && (
+          <NavigableStatusCard
+            targetCount={taxTreatmentIssueRowIds.length}
+            onPrevious={() => cycleTaxTreatmentErrorRow("previous")}
+            onNext={() => cycleTaxTreatmentErrorRow("next")}
+          >
+            <strong>Tax treatment rules need attention.</strong> {taxTreatmentIssues.map((issue) => issue.message).join(" ")}
+          </NavigableStatusCard>
+        )}
+        {activeTab === "taxTreatment" && <LookupTable title="Tax Treatments" subtitle="Structured rules used to divide investment income between federal ordinary and preferred income, determine state/local treatment, and drive the tax-treatment allocation rollup." rows={taxTreatments} duplicateKey="label" columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "label", label: "Treatment ID" }, { key: "ordinaryShare", label: "Federal ordinary", type: "percent" }, { key: "preferredShare", label: "Federal preferred", type: "percent" }, { key: "stateRule", label: "State rule", type: "select", options: ["taxable", "exempt", "treasury-exempt"] }, { key: "niitIncluded", label: "Include in NIIT", type: "checkbox" }, { key: "localCategory", label: "Local category", type: "select", options: localTaxBaseKeys }, { key: "description", label: "Explanation" }]} highlightedRowId={highlightedTaxTreatmentRowId} onChange={updateCollection(setTaxTreatments, ["ordinaryShare", "preferredShare"])} onAdd={() => addRow(setTaxTreatments, { id: Date.now(), label: "", ...defaultTaxTreatmentRule("income"), includeInAllocation: true })} onRemove={removeRow(setTaxTreatments)} onReorder={reorderCollection(setTaxTreatments)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accounts" && <LookupTable title="Accounts" subtitle="Workbook account lookup. Account type drives the investment tax status; cashflow inclusion comes directly from this sheet." rows={accounts} columns={[{ key: "account", label: "Account name" }, { key: "accountType", label: "Account type", type: "select", options: accountTypeOptions }, { key: "dividendAccrued", label: "Dividend accrued" }, { key: "includeInFreeCashflow", label: "Exclude from aftertax income", type: "invertedYesNoCheckbox" }]} highlightedRowId={highlightedAccountRowId} onChange={updateCollection(setAccounts)} onAdd={() => addRow(setAccounts, { id: Date.now(), account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" })} onRemove={removeRow(setAccounts)} onRemoveAll={() => setAccounts([])} onReorder={reorderCollection(setAccounts)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountTaxType" && <LookupTable title="Account Tax Category" subtitle="Reference list for allowed account tax statuses and account-tax allocation rollup." rows={accountTaxTypes} columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "taxStatus", label: "Tax status" }]} onChange={updateCollection(setAccountTaxTypes)} onAdd={() => addRow(setAccountTaxTypes, { id: Date.now(), taxStatus: "", includeInAllocation: true })} onRemove={removeRow(setAccountTaxTypes)} onReorder={reorderCollection(setAccountTaxTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "accountType" && <LookupTable title="Account Type" subtitle="Reference list for account kinds, tax statuses, and account-type allocation rollup." rows={accountTypes} columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "name", label: "Account type" }, { key: "taxStatus", label: "Tax status", type: "select", options: accountTaxStatusOptions }]} onChange={updateCollection(setAccountTypes)} onAdd={() => addRow(setAccountTypes, { id: Date.now(), name: "", taxStatus: "", includeInAllocation: true })} onRemove={removeRow(setAccountTypes)} onReorder={reorderCollection(setAccountTypes)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
