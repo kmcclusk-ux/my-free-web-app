@@ -6756,17 +6756,10 @@ export default function App() {
   const marginalFederalMarkers = federalOrdinaryRateMarkers[federalSettings.filingStatus];
   const marginalStateMarkers = getStateTaxRateMarkers(selectedStateCode, federalSettings.filingStatus);
   const marginalStateBaseRateLabel = getStateTaxBaseRateLabel(selectedStateCode, federalSettings.filingStatus);
-  const marginalCombinedBaseRateLabel = formatPercent(0.10 + rateLabelToDecimal(marginalStateBaseRateLabel));
   const marginalCombinedTaxable = Math.max(federalTaxableAfterDeductions, stateTaxableAfterDeductions);
-  const marginalCombinedRateLabel = getReachedTaxRateLabel(
-    buildCombinedTaxRateMarkers(marginalFederalMarkers, marginalStateMarkers, selectedStateCode, selectedStateName, marginalStateBaseRateLabel, federalSettings.filingStatus),
-    marginalCombinedTaxable,
-    marginalCombinedBaseRateLabel
-  );
   const marginalFederalRateLabel = getReachedTaxRateLabel(marginalFederalMarkers, federalTaxableAfterDeductions, "10%");
   const marginalStateRateLabel = marginalStateMarkers.length ? getReachedTaxRateLabel(marginalStateMarkers, stateTaxableAfterDeductions, marginalStateBaseRateLabel) : "0%";
   const marginalNiitRate = marginalCombinedTaxable >= niitThreshold && netInvestmentIncome > 0 ? 0.038 : 0;
-  const marginalCombinedRate = rateLabelToDecimal(marginalCombinedRateLabel);
   const hasRealData = useMemo(
     () => investments.some((row) => row.totalInvestment > 0 || row.yearlyIncome > 0 || row.includeIncome),
     [investments]
@@ -7066,6 +7059,19 @@ export default function App() {
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
   const selectedLocalTaxProfile = getLocalTaxProfile(localTaxSettings.localityId);
+  const marginalFederalRate = rateLabelToDecimal(marginalFederalRateLabel);
+  const marginalStateRate = rateLabelToDecimal(marginalStateRateLabel);
+  const marginalLocalRate = localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" ? localTaxResult.marginalRate : 0;
+  const nextDollarW2PayrollTax = effectiveW2Income > 0
+    ? calculateW2PayrollTax(effectiveW2Income + 1, federalSettings.filingStatus, selectedStateCode)
+    : null;
+  const marginalW2PayrollRate = nextDollarW2PayrollTax
+    ? Math.max((nextDollarW2PayrollTax.federal.total + nextDollarW2PayrollTax.state.total) - (w2PayrollTax.federal.total + w2PayrollTax.state.total), 0)
+    : 0;
+  const allInMarginalTaxRate = marginalFederalRate + marginalStateRate + marginalLocalRate + marginalNiitRate + marginalW2PayrollRate;
+  const allInMarginalTaxRateLabel = formatPercent(allInMarginalTaxRate);
+  const allInEffectiveTaxRate = totalIncome > 0 ? totalTax / totalIncome : 0;
+  const allInEffectiveTaxRateLabel = formatPercent(allInEffectiveTaxRate);
   const selectedStateBrackets = federalSettings.filingStatus === "mfj"
     ? selectedStateTaxProfile.mfj
     : federalSettings.filingStatus === "mfs"
@@ -7212,20 +7218,32 @@ export default function App() {
   const marginalTaxBreakdownDetails = (
     <div className="tax-breakdown-popover">
       <div className="tax-breakdown-popover__header">
-        <strong>Marginal tax rate breakdown</strong>
-        <span>Combined federal + {selectedStateName} marginal bracket for the current taxable income.</span>
+        <strong>Tax rate breakdown</strong>
+        <span>All-in tax rates using federal, {selectedStateName}{localTaxSettings.enabled ? ", local" : ""}, payroll, and NIIT taxes that apply.</span>
       </div>
       <div className="tax-breakdown-popover__section">
-        <h4>Current bracket</h4>
-        <div><span>Federal marginal rate</span><strong>{marginalFederalRateLabel}</strong></div>
-        <div><span>{selectedStateCode} marginal rate</span><strong>{marginalStateRateLabel}</strong></div>
-        <div><span>NIIT marginal rate</span><strong>{formatPercent(marginalNiitRate)}</strong></div>
-        <div className="tax-breakdown-popover__total"><span>Combined marginal rate</span><strong>{marginalCombinedRateLabel}</strong></div>
+        <h4>Marginal rate</h4>
+        <div><span>Federal income marginal</span><strong>{formatPercent(marginalFederalRate)}</strong></div>
+        <div><span>{selectedStateCode} income marginal</span><strong>{formatPercent(marginalStateRate)}</strong></div>
+        {localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" && <div><span>{localSummaryName} marginal</span><strong>{formatPercent(marginalLocalRate)}</strong></div>}
+        {effectiveW2Income > 0 && <div><span>W2 payroll marginal</span><strong>{formatPercent(marginalW2PayrollRate)}</strong></div>}
+        {marginalNiitRate > 0 && <div><span>NIIT marginal</span><strong>{formatPercent(marginalNiitRate)}</strong></div>}
+        <div className="tax-breakdown-popover__total"><span>All-in marginal rate</span><strong>{allInMarginalTaxRateLabel}</strong></div>
+      </div>
+      <div className="tax-breakdown-popover__section">
+        <h4>Effective rate</h4>
+        <div><span>Federal tax and payroll</span><strong>{formatCurrencyDetailed(federalTaxWithPayroll)}</strong></div>
+        <div><span>{selectedStateCode} tax and payroll</span><strong>{formatCurrencyDetailed(stateTaxWithPayroll)}</strong></div>
+        {localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" && <div><span>{localSummaryName} tax</span><strong>{formatCurrencyDetailed(localTaxTotal)}</strong></div>}
+        <div><span>Total included income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>All-in effective rate</span><strong>{allInEffectiveTaxRateLabel}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Taxable income used</h4>
         <div><span>Federal taxable income</span><strong>{formatCurrencyDetailed(federalTaxableAfterDeductions)}</strong></div>
         <div><span>{selectedStateCode} taxable income</span><strong>{formatCurrencyDetailed(stateTaxableAfterDeductions)}</strong></div>
+        {localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" && <div><span>Local taxable income</span><strong>{formatCurrencyDetailed(localTaxableIncome)}</strong></div>}
         <div><span>Thermometer base</span><strong>{formatCurrencyDetailed(marginalCombinedTaxable)}</strong></div>
       </div>
     </div>
@@ -7421,9 +7439,9 @@ export default function App() {
     income: flows.displayIncome,
     investments: flows.totalInvestmentAmount,
     afterTaxIncome,
-    marginalTaxRate: marginalCombinedRate,
-    marginalTaxRateLabel: marginalCombinedRateLabel,
-    effectiveTaxRate: flows.displayIncome > 0 ? totalTax / flows.displayIncome : 0,
+    marginalTaxRate: allInMarginalTaxRate,
+    marginalTaxRateLabel: allInMarginalTaxRateLabel,
+    effectiveTaxRate: allInEffectiveTaxRate,
     federalTax: federalTaxWithPayroll,
     stateTax: stateTaxWithPayroll,
     localTax: localTaxTotal,
@@ -8063,11 +8081,11 @@ export default function App() {
       details: incomeBreakdownDetails,
     },
     {
-      label: "Marginal tax rate",
-      value: marginalCombinedRateLabel,
+      label: "Tax rate",
+      value: allInMarginalTaxRateLabel,
       valueLabel: "marginal",
-      secondaryValue: `Fed + ${selectedStateCode}`,
-      numericValue: marginalCombinedRate,
+      secondaryValue: `${allInEffectiveTaxRateLabel} effective`,
+      numericValue: allInMarginalTaxRate,
       deltaKind: "percent",
       details: marginalTaxBreakdownDetails,
     },
