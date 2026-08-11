@@ -65,38 +65,39 @@ function callTaxApi(payload) {
 function FED_TAX_ADJUST(amount, taxTreatment, extra, pref) {
   Logger.log('Starting TAX_ADJUST test...');
 
-  switch (taxTreatment.toLowerCase()) {
+  var treatment = String(taxTreatment || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  switch (treatment) {
     case 'hold':
       return 0;
-    case 'tax free':
+    case 'taxfree':
       return 0;
-    case 'state tax free':
+    case 'statetaxfree':
       if (pref) return 0;
       return amount;
-    case 'fed tax free':
+    case 'fedtaxfree':
       return 0;
-    case 'index-60-40':
+    case 'index6040':
       if (pref) return amount * 0.60;
       return amount * 0.40;
     case 'income':
       if (pref) return 0;
       return amount;
-    case 'ss-85-fed':
+    case 'ss85fed':
       if (pref) return 0;
       return amount * 0.85;
-    case 'qualified-div':
+    case 'qualifieddiv':
       if (!pref) return 0;
       return amount;
-    case 'non-qualified-div':
+    case 'nonqualifieddiv':
       if (pref) return 0;
       return amount;
-    case 'short term gain':
+    case 'shorttermgain':
       if (pref) return 0;
       return amount;
-    case 'long term gain':
+    case 'longtermgain':
       if (!pref) return 0;
       return amount;
-    case 'real estate':
+    case 'realestate':
       if (pref) return 0;
       return amount - extra;
     default:
@@ -122,32 +123,32 @@ function STATE_TAX_ADJUST(amount, taxTreatment, extra) {
   var base = Number(extra) || 0;
   if (!isFinite(amt) || amt <= 0) return 0;
 
-  var t = (taxTreatment || '').toString().toLowerCase().trim();
+  var t = (taxTreatment || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
   var stateTaxable = 0;
 
   switch (t) {
     case 'hold':
       return 0;
-    case 'tax free':
-    case 'state tax free':
+    case 'taxfree':
+    case 'statetaxfree':
       stateTaxable = 0;
       break;
-    case 'fed tax free':
+    case 'fedtaxfree':
       stateTaxable = amt;
       break;
-    case 'index-60-40':
+    case 'index6040':
     case 'income':
-    case 'qualified-div':
-    case 'non-qualified-div':
-    case 'short term gain':
-    case 'long term gain':
+    case 'qualifieddiv':
+    case 'nonqualifieddiv':
+    case 'shorttermgain':
+    case 'longtermgain':
       stateTaxable = amt;
       break;
-    case 'ss-85-fed':
+    case 'ss85fed':
       Logger.log('STATE_TAX_ADJUST: Social Security is CA tax free.');
       stateTaxable = 0;
       break;
-    case 'real estate':
+    case 'realestate':
       stateTaxable = amt - base;
       if (stateTaxable < 0) stateTaxable = 0;
       break;

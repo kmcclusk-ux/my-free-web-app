@@ -5,7 +5,7 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.13";
+export const SERVER_VERSION = "1.0.14";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
@@ -29,6 +29,13 @@ type WorkbookResponse = {
 };
 
 type WorkbookRow = Record<string, unknown>;
+type TaxTreatmentRule = {
+  ordinaryShare: number;
+  preferredShare: number;
+  stateRule: string;
+  niitIncluded: boolean;
+  localCategory: string;
+};
 type ReferenceTableName =
   | "tickers"
   | "accounts"
@@ -650,6 +657,10 @@ function normalizeLookupKey(value: unknown) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function normalizeTaxTreatmentKey(value: unknown) {
+  return normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
+}
+
 function normalizeStateCode(value: unknown) {
   return String(value || "CA").trim().toUpperCase() || "CA";
 }
@@ -704,36 +715,49 @@ function isTaxableAccountStatus(value: unknown, forceTaxable = false) {
   return compactKey === "taxable" || compactKey === "partiallytaxable";
 }
 
-function fedTaxAdjust(amount: number, taxTreatment: unknown, pref: boolean) {
-  switch (normalizeLookupKey(taxTreatment)) {
-    case "hold":
-    case "tax free":
-    case "fed tax free":
-      return 0;
-    case "state tax free":
-      return pref ? 0 : amount;
-    case "index-60-40":
-      return pref ? amount * 0.6 : amount * 0.4;
-    case "income":
-    case "non-qualified-div":
-    case "short term gain":
-    case "real estate":
-      return pref ? 0 : amount;
-    case "ss-85-fed":
-      return pref ? 0 : amount * 0.85;
-    case "qualified-div":
-    case "long term gain":
-      return pref ? amount : 0;
-    default:
-      return pref ? 0 : amount;
-  }
+function defaultTaxTreatmentRule(label: unknown): TaxTreatmentRule {
+  const key = normalizeTaxTreatmentKey(label);
+  const base = { ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest" };
+  if (["taxfree", "hold"].includes(key)) return { ...base, ordinaryShare: 0, stateRule: "exempt", niitIncluded: false, localCategory: "" };
+  if (key === "fedtaxfree") return { ...base, ordinaryShare: 0, stateRule: "taxable" };
+  if (key === "statetaxfree") return { ...base, stateRule: "treasury-exempt" };
+  if (key === "index6040") return { ...base, ordinaryShare: 0.4, preferredShare: 0.6, localCategory: "capitalGains" };
+  if (["qualifieddiv", "longtermgain"].includes(key)) return { ...base, ordinaryShare: 0, preferredShare: 1, localCategory: key === "qualifieddiv" ? "dividends" : "capitalGains" };
+  if (key === "ss85fed") return { ...base, ordinaryShare: 0.85, stateRule: "exempt", niitIncluded: false, localCategory: "socialSecurity" };
+  if (key === "realestate") return { ...base, localCategory: "rentalIncome" };
+  if (key === "nonqualifieddiv") return { ...base, localCategory: "dividends" };
+  if (key === "shorttermgain") return { ...base, localCategory: "capitalGains" };
+  return base;
 }
 
-function stateTaxAdjust(amount: number, taxTreatment: unknown, stateCode = "CA") {
-  const treatment = normalizeLookupKey(taxTreatment);
-  if (treatment === "hold" || treatment === "tax free" || treatment === "ss-85-fed") return 0;
-  if (treatment === "state tax free" && normalizeStateCode(stateCode) === "CA") return 0;
-  return amount;
+function buildTaxTreatmentRuleMap(workbook: WorkbookResponse) {
+  return toWorkbookRows(workbook.tabs.taxTreatment).reduce<Record<string, TaxTreatmentRule>>((map, row) => {
+    const label = rowText(row, "label", "taxTreatment", "tax_treatment", "name");
+    const key = normalizeLookupKey(label);
+    if (!key) return map;
+    const defaults = defaultTaxTreatmentRule(label);
+    map[key] = {
+      ordinaryShare: rowValue(row, "ordinaryShare", "ordinary_share") === undefined ? defaults.ordinaryShare : normalizeRate(rowValue(row, "ordinaryShare", "ordinary_share")),
+      preferredShare: rowValue(row, "preferredShare", "preferred_share") === undefined ? defaults.preferredShare : normalizeRate(rowValue(row, "preferredShare", "preferred_share")),
+      stateRule: rowText(row, "stateRule", "state_rule") || defaults.stateRule,
+      niitIncluded: rowValue(row, "niitIncluded", "niit_included") === undefined ? defaults.niitIncluded : normalizeBooleanValue(rowValue(row, "niitIncluded", "niit_included")),
+      localCategory: rowText(row, "localCategory", "local_category") || defaults.localCategory,
+    };
+    return map;
+  }, {});
+}
+
+function fedTaxAdjust(amount: number, taxTreatment: unknown, pref: boolean, rule?: TaxTreatmentRule) {
+  const activeRule = rule ?? defaultTaxTreatmentRule(taxTreatment);
+  const ordinary = Math.max(0, Math.min(1, normalizeNumberValue(activeRule.ordinaryShare)));
+  const preferred = Math.max(0, Math.min(1, normalizeNumberValue(activeRule.preferredShare)));
+  const scale = ordinary + preferred > 1 ? 1 / (ordinary + preferred) : 1;
+  return amount * (pref ? preferred : ordinary) * scale;
+}
+
+function stateTaxAdjust(amount: number, taxTreatment: unknown, _stateCode = "CA", rule?: TaxTreatmentRule) {
+  const stateRule = normalizeTaxTreatmentKey(rule?.stateRule || defaultTaxTreatmentRule(taxTreatment).stateRule);
+  return ["exempt", "treasuryexempt"].includes(stateRule) ? 0 : amount;
 }
 
 function isW2IncomeType(incomeType: unknown) {
@@ -918,6 +942,7 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
   const stateWhatIfOpen = Boolean(options.stateWhatIfOpen);
   const tickerMap = buildTickerMap(workbook);
   const { accountMap, accountTaxStatusByName } = buildAccountMaps(workbook);
+  const taxTreatmentRuleMap = buildTaxTreatmentRuleMap(workbook);
 
   const flowSeed = {
     totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0,
@@ -953,15 +978,16 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
     const taxStatus = String(isW2IncomeAccount ? "taxable" : accountTaxStatusByName[accountKey] || accountTypeTaxStatus || "taxable").toLowerCase();
     const isTaxableAccount = isTaxableAccountStatus(taxStatus, isW2IncomeAccount);
     const taxTreatment = isW2IncomeAccount ? "income" : rowText(effectiveTicker || {}, "taxTreatment", "tax_treatment") || "income";
+    const taxTreatmentRule = taxTreatmentRuleMap[normalizeLookupKey(taxTreatment)] || defaultTaxTreatmentRule(taxTreatment);
     const investmentType = normalizeLookupKey(rowText(effectiveTicker || {}, "category"));
     const taxableMonthlyBase = isTaxableAccount && included ? filteredIncome / 12 : 0;
     const displayTaxableMonthlyBase = isTaxableAccount && included && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
-    const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false);
-    const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true);
-    const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode);
-    const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false);
-    const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true);
-    const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode);
+    const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false, taxTreatmentRule);
+    const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true, taxTreatmentRule);
+    const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode, taxTreatmentRule);
+    const displayOrdinaryMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, false, taxTreatmentRule);
+    const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true, taxTreatmentRule);
+    const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode, taxTreatmentRule);
     return {
       id: row.id,
       description: rowText(row, "description", "desc"),
