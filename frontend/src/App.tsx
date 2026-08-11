@@ -4019,26 +4019,36 @@ function getReachedTaxRateValue(markers: ThermometerMarker[], taxableIncome: num
 
 function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateMarkers: ThermometerMarker[], stateCode: string, stateName: string, stateBaseRateLabel: string, filingStatus: FilingStatus, localMarkers: ThermometerMarker[] = [], localName = "Local", localBaseRateLabel = "0%") {
   const niitThreshold = niitThresholdForStatus(filingStatus);
-  const thresholdRows = [
+  const thresholdRowsByAmount = [
     ...federalMarkers.map((marker) => ({ amount: marker.amount, source: "Federal" })),
     ...stateMarkers.map((marker) => ({ amount: marker.amount, source: stateCode })),
     ...localMarkers.map((marker) => ({ amount: marker.amount, source: localName })),
     { amount: niitThreshold, source: "NIIT" },
   ]
     .filter((row) => row.amount > 0)
+    .reduce<Record<number, string[]>>((groups, row) => {
+      groups[row.amount] = [...(groups[row.amount] || []), row.source];
+      return groups;
+    }, {});
+  const uniqueThresholds = Object.entries(thresholdRowsByAmount)
+    .map(([amount, sources]) => ({ amount: Number(amount), sources }))
     .sort((left, right) => left.amount - right.amount);
-  const uniqueThresholds = thresholdRows.filter((row, index, rows) => index === 0 || row.amount !== rows[index - 1].amount);
 
+  let highestCombinedRate = 0;
   return uniqueThresholds
     .map((row) => {
       const federalRate = getReachedTaxRateValue(federalMarkers, row.amount, "10%");
       const stateRate = getReachedTaxRateValue(stateMarkers, row.amount, stateBaseRateLabel);
       const localRate = getReachedTaxRateValue(localMarkers, row.amount, localBaseRateLabel);
       const niitRate = row.amount >= niitThreshold ? 0.038 : 0;
-      const sourceLabel = row.source === "NIIT" ? "NIIT investment-income threshold" : `${row.source} threshold`;
+      const combinedRate = federalRate + stateRate + localRate + niitRate;
+      highestCombinedRate = Math.max(highestCombinedRate, combinedRate);
+      const sourceLabel = row.sources
+        .map((source) => source === "NIIT" ? "NIIT investment-income threshold" : `${source} threshold`)
+        .join(" + ");
       return {
         amount: row.amount,
-        label: formatPercent(federalRate + stateRate + localRate + niitRate),
+        label: formatPercent(highestCombinedRate),
         detail: `Combined federal + ${stateName}${localRate > 0 ? ` + ${localName}` : ""} marginal rate starts (${sourceLabel})`,
         tone: "tax",
       };
