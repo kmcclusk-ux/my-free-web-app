@@ -697,6 +697,13 @@ function isW2AccountType(value: unknown) {
   return key.includes("w2") || key.includes("wage");
 }
 
+function isTaxableAccountStatus(value: unknown, forceTaxable = false) {
+  if (forceTaxable) return true;
+  const key = normalizeLookupKey(value);
+  const compactKey = key.replace(/[^a-z0-9]/g, "");
+  return compactKey === "taxable" || compactKey === "partiallytaxable";
+}
+
 function fedTaxAdjust(amount: number, taxTreatment: unknown, pref: boolean) {
   switch (normalizeLookupKey(taxTreatment)) {
     case "hold":
@@ -942,8 +949,9 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
     const includeInAfterTaxValue = rowValue(account || {}, "includeInFreeCashflow", "include_in_free_cashflow");
     const includeInAfterTaxIncome = includeInAfterTaxValue === undefined ? true : normalizeYesNo(includeInAfterTaxValue) === "yes";
     const displayFilteredIncome = included && includeInAfterTaxIncome ? yearlyIncome : 0;
-    const taxStatus = String(accountTaxStatusByName[accountKey] || "taxable").toLowerCase();
-    const isTaxableAccount = taxStatus === "taxable" || taxStatus.includes("taxable");
+    const accountTypeTaxStatus = inferAccountTypeTaxStatus(accountType);
+    const taxStatus = String(isW2IncomeAccount ? "taxable" : accountTaxStatusByName[accountKey] || accountTypeTaxStatus || "taxable").toLowerCase();
+    const isTaxableAccount = isTaxableAccountStatus(taxStatus, isW2IncomeAccount);
     const taxTreatment = isW2IncomeAccount ? "income" : rowText(effectiveTicker || {}, "taxTreatment", "tax_treatment") || "income";
     const investmentType = normalizeLookupKey(rowText(effectiveTicker || {}, "category"));
     const taxableMonthlyBase = isTaxableAccount && included ? filteredIncome / 12 : 0;

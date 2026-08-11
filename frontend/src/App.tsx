@@ -1,6 +1,7 @@
 import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
+import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
 import "./App.css";
 
 type TabKey =
@@ -126,14 +127,15 @@ type ModelDataSnapshot = {
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type ScenarioLandingPage = { id: string; name: string; slug?: string; createdAt: string; updatedAt: string; payload: string };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
+type UiSettings = ModelUiSnapshot & { publicUsername?: string; savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string; username?: string };
+type AuthEntryMode = "signIn" | "create";
 type AuthState =
   | { status: "loading"; user: null; tokens: null; error?: string }
   | { status: "signedOut"; user: null; tokens: null; error?: string }
-  | { status: "signedIn"; user: AuthUser; tokens: AuthTokens; error?: string };
+  | { status: "signedIn"; user: AuthUser; tokens: AuthTokens; requestedPublicUsername?: string; error?: string };
 type WorkbookTableId = "investments" | "tickers" | "accounts" | "categories" | "taxTreatment" | "accountTaxType" | "accountType";
 type PortfolioSnapshot = {
   generatedAt: string;
@@ -376,6 +378,7 @@ const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
+const PUBLIC_USERNAME_STORAGE_KEY = "aftertaxus-public-username";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths-compact-v2";
 const INVESTMENT_COLUMN_DEFS = [
   { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 78, minWidth: 76 },
@@ -601,28 +604,6 @@ function readSummaryReportFromUrl() {
   return summaryReport ? decodeSummaryReportPayload(summaryReport) : null;
 }
 
-function normalizePublicReportSlug(value: unknown) {
-  return String(value || "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80)
-    .replace(/-+$/g, "");
-}
-
-function publicUsernameForUser(user: AuthUser | null) {
-  const emailUsername = user?.email?.split("@")[0];
-  return normalizePublicReportSlug(user?.username || user?.name || emailUsername || user?.sub.slice(0, 12) || "user").slice(0, 32) || "user";
-}
-
-function namespacedPublicReportSlug(username: string, scenarioSlug: string) {
-  const cleanUsername = normalizePublicReportSlug(username).slice(0, 32);
-  const cleanScenario = normalizePublicReportSlug(scenarioSlug).slice(0, Math.max(1, 79 - cleanUsername.length));
-  return cleanUsername && cleanScenario ? `${cleanUsername}-${cleanScenario}` : "";
-}
-
 function readPublicReportSlugFromUrl() {
   if (typeof window === "undefined") return "";
   const segments = window.location.pathname.split("/").filter(Boolean);
@@ -664,9 +645,9 @@ function authUserFromIdToken(idToken: string): AuthUser {
     sub: String(payload.sub || ""),
     email: typeof payload.email === "string" ? payload.email : undefined,
     name: typeof payload.name === "string" ? payload.name : undefined,
-    username: typeof payload["cognito:username"] === "string"
-      ? payload["cognito:username"]
-      : typeof payload.preferred_username === "string" ? payload.preferred_username : undefined,
+    username: typeof payload.preferred_username === "string"
+      ? payload.preferred_username
+      : typeof payload["cognito:username"] === "string" ? payload["cognito:username"] : undefined,
   };
 }
 
@@ -691,18 +672,33 @@ function writeStoredAuth(tokens: AuthTokens) {
   window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(tokens));
 }
 
+function readStoredPublicUsername() {
+  if (typeof window === "undefined") return "";
+  return normalizePublicReportSlug(window.localStorage.getItem(PUBLIC_USERNAME_STORAGE_KEY)).slice(0, 32);
+}
+
+function writeStoredPublicUsername(username: string) {
+  if (typeof window === "undefined") return;
+  const normalized = normalizePublicReportSlug(username).slice(0, 32);
+  if (normalized) window.localStorage.setItem(PUBLIC_USERNAME_STORAGE_KEY, normalized);
+}
+
 function clearStoredAuth() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
   window.sessionStorage.removeItem(AUTH_PKCE_STORAGE_KEY);
 }
 
-async function startCognitoSignIn() {
+async function startCognitoSignIn(publicUsername = "", entryMode: AuthEntryMode = "signIn") {
   if (!isCognitoEnabled() || !COGNITO_CLIENT_ID) return;
   const verifier = randomAuthString();
   const state = randomAuthString();
   const challenge = await sha256Base64Url(verifier);
-  window.sessionStorage.setItem(AUTH_PKCE_STORAGE_KEY, JSON.stringify({ verifier, state }));
+  window.sessionStorage.setItem(AUTH_PKCE_STORAGE_KEY, JSON.stringify({
+    verifier,
+    state,
+    publicUsername: normalizePublicReportSlug(publicUsername).slice(0, 32),
+  }));
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -713,7 +709,8 @@ async function startCognitoSignIn() {
     code_challenge: challenge,
     code_challenge_method: "S256",
   });
-  window.location.assign(`${COGNITO_DOMAIN}/oauth2/authorize?${params.toString()}`);
+  const entryPath = entryMode === "create" ? "/signup" : "/oauth2/authorize";
+  window.location.assign(`${COGNITO_DOMAIN}${entryPath}?${params.toString()}`);
 }
 
 async function completeCognitoSignInFromUrl(): Promise<AuthState | null> {
@@ -728,7 +725,7 @@ async function completeCognitoSignInFromUrl(): Promise<AuthState | null> {
     return { status: "signedOut", user: null, tokens: null, error };
   }
 
-  const pkce = JSON.parse(window.sessionStorage.getItem(AUTH_PKCE_STORAGE_KEY) || "null") as { verifier?: string; state?: string } | null;
+  const pkce = JSON.parse(window.sessionStorage.getItem(AUTH_PKCE_STORAGE_KEY) || "null") as { verifier?: string; state?: string; publicUsername?: string } | null;
   if (!pkce?.verifier || pkce.state !== url.searchParams.get("state")) {
     return { status: "signedOut", user: null, tokens: null, error: "Sign-in state did not match. Please try again." };
   }
@@ -758,7 +755,15 @@ async function completeCognitoSignInFromUrl(): Promise<AuthState | null> {
   writeStoredAuth(tokens);
   window.sessionStorage.removeItem(AUTH_PKCE_STORAGE_KEY);
   window.history.replaceState({}, document.title, `${url.origin}${url.pathname}${url.hash}`);
-  return { status: "signedIn", user: authUserFromIdToken(tokens.idToken), tokens };
+  const user = authUserFromIdToken(tokens.idToken);
+  const requestedPublicUsername = typeof pkce.publicUsername === "string" ? pkce.publicUsername : undefined;
+  writeStoredPublicUsername(resolvePublicUsername(user, undefined, requestedPublicUsername));
+  return {
+    status: "signedIn",
+    user,
+    tokens,
+    requestedPublicUsername,
+  };
 }
 
 function signOutCognito() {
@@ -1218,7 +1223,7 @@ const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deduction
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, deductionMode: "itemized", deductionItems: [newDeductionItem("Mortgage interest", 26500), newDeductionItem("Property tax", 19000)], mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialLocalTaxSettings: LocalTaxSettings = { enabled: false, localityId: "none", localityName: "", residency: "resident", rate: 0, nonresidentRate: 0, taxableBase: noLocalTaxBase() };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { investmentFavorites: [], selectedAssetIds: [], savedScenarios: [], scenarioLibraryMigrated: false, modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
+const initialUiSettings: UiSettings = { publicUsername: "", investmentFavorites: [], selectedAssetIds: [], savedScenarios: [], scenarioLibraryMigrated: false, modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1446,6 +1451,12 @@ function inferAccountTypeTaxStatus(typeName: string) {
 function isW2AccountType(value: unknown) {
   const key = normalizeLookupKey(value);
   return key.includes("w2") || key.includes("wage");
+}
+function isTaxableAccountStatus(value: unknown, forceTaxable = false) {
+  if (forceTaxable) return true;
+  const key = normalizeLookupKey(value);
+  const compactKey = key.replace(/[^a-z0-9]/g, "");
+  return compactKey === "taxable" || compactKey === "partiallytaxable";
 }
 function buildAccountTypeTaxStatusMap(rows: AccountTypeRow[]) {
   const map: Record<string, string> = {};
@@ -2321,6 +2332,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
     ? sectionObj.mcpRefresh as UiSettings["mcpRefresh"]
     : undefined;
   return {
+    publicUsername: normalizePublicReportSlug(sectionObj.publicUsername).slice(0, 32),
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     selectedAssetIds: normalizeSelectedAssetIds(sectionObj.selectedAssetIds),
     savedScenarios: normalizeSavedScenarios(sectionObj.savedScenarios),
@@ -2346,6 +2358,7 @@ function parseWorkbookSettings(settings: unknown) {
     local: parseLocalTaxSettingsSection(settingsObj.local),
     planner,
     ui: {
+      publicUsername: ui.publicUsername || "",
       investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
         ? ui.investmentFavorites
         : legacyFavorites,
@@ -2439,14 +2452,56 @@ async function getPublicSummaryReport(slug: string) {
 
 async function upsertPublicSummaryReport(report: { id: string; name: string; slug: string; previousSlug?: string; payload: SummaryReportPayload }, idToken: string | undefined, publicUsername: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const requestBody = JSON.stringify({ calc: "PUBLIC_REPORT_UPSERT", reportId: report.id, name: report.name, slug: report.slug, publicUsername, previousSlug: report.previousSlug, payload: report.payload });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(`${API_BASE_URL}/hello`, {
+      method: "POST",
+      headers: authHeaders(idToken),
+      body: requestBody,
+    });
+    const responseText = await response.text();
+    let json: { report?: PublicSummaryReportRecord; publicUrl?: string; error?: string; message?: string } = {};
+    try {
+      json = JSON.parse(responseText) as typeof json;
+    } catch {
+      // API Gateway may occasionally return a non-JSON proxy error.
+    }
+    if (response.ok && json.report) {
+      return { report: json.report, publicUrl: buildPublicSummaryReportUrl(json.report.slug, publicUsername) };
+    }
+    if (attempt === 0 && (response.status === 429 || response.status >= 500)) continue;
+
+    const detail = json.error || json.message || (responseText.trim().length < 240 ? responseText.trim() : "");
+    const status = response.status ? ` (${response.status})` : "";
+    throw new Error(detail || `Public report could not be saved${status}.`);
+  }
+
+  throw new Error("Public report could not be saved.");
+}
+
+async function checkPublicUsernameAvailability(username: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ calc: "PUBLIC_USERNAME_CHECK", username }),
+  });
+  const json = (await response.json()) as { username?: string; available?: boolean; error?: string };
+  if (!response.ok) throw new Error(json.error || "Username availability could not be checked.");
+  return json.available === true;
+}
+
+async function claimPublicUsername(username: string, idToken: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, {
     method: "POST",
     headers: authHeaders(idToken),
-    body: JSON.stringify({ calc: "PUBLIC_REPORT_UPSERT", reportId: report.id, name: report.name, slug: report.slug, previousSlug: report.previousSlug, payload: report.payload }),
+    body: JSON.stringify({ calc: "PUBLIC_USERNAME_CLAIM", username }),
   });
-  const json = (await response.json()) as { report?: PublicSummaryReportRecord; publicUrl?: string; error?: string };
-  if (!response.ok || !json.report) throw new Error(json.error || "Public report could not be saved.");
-  return { report: json.report, publicUrl: buildPublicSummaryReportUrl(json.report.slug, publicUsername) };
+  const json = (await response.json()) as { username?: string; error?: string };
+  if (!response.ok) throw new Error(json.error || "Username could not be saved.");
+  return String(json.username || username);
 }
 
 async function listPublicSummaryReports(idToken?: string) {
@@ -3670,7 +3725,7 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | 
   );
 }
 
-function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" | "report" }) {
+function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" | "report" | "settings" }) {
   if (name === "menu") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3704,6 +3759,16 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M15.5 3.5a7.5 7.5 0 1 0 5 9.4 6 6 0 0 1-7.4-7.4 7.6 7.6 0 0 1 2.4-2z" />
+      </svg>
+    );
+  }
+
+  if (name === "settings") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" />
+        <circle cx="12" cy="12" r="6.5" />
       </svg>
     );
   }
@@ -5906,6 +5971,18 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
 export default function App() {
   const authEnabled = isCognitoEnabled();
   const [authState, setAuthState] = useState<AuthState>(readStoredAuth);
+  const [authEntryMode, setAuthEntryMode] = useState<AuthEntryMode>("signIn");
+  const [isAuthEntryOpen, setIsAuthEntryOpen] = useState(false);
+  const [signInPublicUsername, setSignInPublicUsername] = useState(readStoredPublicUsername);
+  const [signInPublicUsernameError, setSignInPublicUsernameError] = useState("");
+  const signInUsernameInputRef = useRef<HTMLInputElement>(null);
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [settingsUsernameDraft, setSettingsUsernameDraft] = useState("");
+  const [settingsUsernameError, setSettingsUsernameError] = useState("");
+  const [isUsernameRequestPending, setIsUsernameRequestPending] = useState(false);
+  const settingsUsernameInputRef = useRef<HTMLInputElement>(null);
+  const usernameClaimAttemptRef = useRef("");
+  const summaryReportRefreshRequestRef = useRef(0);
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [focusGrid, setFocusGrid] = useState(false);
   const [showThermometerRail, setShowThermometerRail] = useState(true);
@@ -5931,6 +6008,7 @@ export default function App() {
   const [summaryScenarioDrafts, setSummaryScenarioDrafts] = useState<Record<string, SummaryScenarioDraft>>({});
   const [summaryScenarioPendingDeleteKey, setSummaryScenarioPendingDeleteKey] = useState("");
   const [summaryReportBusyId, setSummaryReportBusyId] = useState("");
+  const [summaryPublishedUrl, setSummaryPublishedUrl] = useState("");
   const [isSummaryReportListLoading, setIsSummaryReportListLoading] = useState(false);
   const [scenarioLandingPages, setScenarioLandingPages] = useState<ScenarioLandingPage[]>([]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
@@ -5981,7 +6059,10 @@ export default function App() {
   const isApplyingHistory = useRef(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
-  const publicUsername = publicUsernameForUser(authState.status === "signedIn" ? authState.user : null);
+  const publicUsername = resolvePublicUsername(
+    authState.status === "signedIn" ? authState.user : null,
+    uiSettings.publicUsername
+  );
   const requiresSignIn = authEnabled && authState.status !== "signedIn";
   const closeTaxSummary = useCallback(() => setTaxSummaryKind(null), []);
   const currentHistorySnapshot = useMemo<PortfolioHistorySnapshot>(() => ({
@@ -6022,6 +6103,7 @@ export default function App() {
     setLocalTaxSettings(normalizeLocalTaxSettings(snapshot.localTaxSettings));
     setPlannerSettings(snapshot.plannerSettings);
     setUiSettings((current) => ({
+      publicUsername: current.publicUsername,
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
       selectedAssetIds: normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds),
       savedScenarios: current.savedScenarios,
@@ -6091,6 +6173,18 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, [authEnabled]);
+
+  useEffect(() => {
+    if (!isAuthEntryOpen && !isSettingsDialogOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsAuthEntryOpen(false);
+        setIsSettingsDialogOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isAuthEntryOpen, isSettingsDialogOpen]);
 
   useEffect(() => {
     let requestVersion = 0;
@@ -6442,11 +6536,9 @@ export default function App() {
     const displayYearlyIncome = includeInAfterTaxIncome ? yearlyIncome : 0;
     const displayMonthlyIncome = displayYearlyIncome / 12;
     const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
-    const taxStatus = String(accountTaxStatusByName[accountKey] || account?.taxStatus || "taxable").toLowerCase();
-    const normalizedTaxStatus = normalizeLookupKey(taxStatus);
-    const isPartiallyTaxableStatus = normalizedTaxStatus === "partiallytaxable";
-    const isTaxableStatus = normalizedTaxStatus === "taxable";
-    const isTaxableAccount = isTaxableStatus || isPartiallyTaxableStatus;
+    const accountTypeTaxStatus = inferAccountTypeTaxStatus(account?.accountType || inferAccountTypeFromAccountName(row.account));
+    const taxStatus = String(isW2IncomeAccount ? "taxable" : accountTaxStatusByName[accountKey] || accountTypeTaxStatus || account?.taxStatus || "taxable").toLowerCase();
+    const isTaxableAccount = isTaxableAccountStatus(taxStatus, isW2IncomeAccount);
     const currentTaxTreatment = String(currentTicker?.taxTreatment || "income").toLowerCase();
     const proposedTaxTreatment = String(proposedTicker?.taxTreatment || "income").toLowerCase();
     const taxTreatment = isW2IncomeAccount ? "income" : String(effectiveTicker?.taxTreatment || "income").toLowerCase();
@@ -6727,7 +6819,14 @@ export default function App() {
         activeInvestments.some((row) => row.id === id)
       )
     );
+    const publicUsername = resolvePublicUsername(
+      authState.status === "signedIn" ? authState.user : null,
+      workbookSettings.ui?.publicUsername,
+      authState.status === "signedIn" ? authState.requestedPublicUsername : undefined
+    );
+    writeStoredPublicUsername(publicUsername);
     setUiSettings({
+      publicUsername,
       investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
       selectedAssetIds: workbookSettings.ui?.selectedAssetIds || [],
       savedScenarios: workbookSettings.ui?.savedScenarios || [],
@@ -6738,7 +6837,7 @@ export default function App() {
       investmentWhatIfOpen: workbookSettings.ui?.investmentWhatIfOpen === true,
       mcpRefresh: workbookSettings.ui?.mcpRefresh,
     });
-  }, [authEnabled, authState.status, resetHistoryTracking]);
+  }, [authEnabled, authState, resetHistoryTracking]);
 
   useEffect(() => {
     if (authEnabled && authState.status !== "signedIn") {
@@ -6800,6 +6899,25 @@ export default function App() {
       window.clearInterval(intervalId);
     };
   }, [authEnabled, authState.status, authToken, applyWorkbookResponse, storageState]);
+
+  useEffect(() => {
+    if (authState.status !== "signedIn" || !authToken || !hasLoadedStorage.current || storageState === "loading") return;
+    const claimKey = `${authState.user.sub}:${publicUsername}`;
+    if (!publicUsername || usernameClaimAttemptRef.current === claimKey) return;
+    usernameClaimAttemptRef.current = claimKey;
+    let cancelled = false;
+    claimPublicUsername(publicUsername, authToken).catch((error: Error) => {
+      if (cancelled) return;
+      if (/already used by another account/i.test(error.message)) {
+        setSettingsUsernameDraft(publicUsername);
+        setSettingsUsernameError(`@${publicUsername} is already used by another account. Choose a different username.`);
+        setIsSettingsDialogOpen(true);
+        return;
+      }
+      console.warn("Public username claim failed", error);
+    });
+    return () => { cancelled = true; };
+  }, [authState, authToken, publicUsername, storageState]);
 
   useEffect(() => {
     if (!hasLoadedStorage.current) return;
@@ -7348,12 +7466,37 @@ export default function App() {
     localityName: currentSummaryReportPayload.localityName,
     filingStatus: federalSettings.filingStatus,
   });
-  const refreshPublicSummaryReports = async () => {
+  const refreshPublicSummaryReports = useCallback(async (surfaceErrors = true) => {
     if (!authToken) return;
+    const requestId = ++summaryReportRefreshRequestRef.current;
     setIsSummaryReportListLoading(true);
+    if (surfaceErrors) setSummaryReportDialogError("");
     try {
       const reports = await listPublicSummaryReports(authToken);
-      const publishedPages: ScenarioLandingPage[] = reports.map((report) => ({
+      const canonicalReports: PublicSummaryReportRecord[] = [];
+      let migrationError: Error | null = null;
+      for (const report of reports) {
+        const canonicalSlug = namespacedPublicReportSlug(publicUsername, report.name);
+        if (!canonicalSlug || report.slug === canonicalSlug) {
+          canonicalReports.push(report);
+          continue;
+        }
+        try {
+          const migrated = await upsertPublicSummaryReport({
+            id: report.id,
+            name: report.name,
+            slug: canonicalSlug,
+            previousSlug: report.slug,
+            payload: report.payload,
+          }, authToken, publicUsername);
+          canonicalReports.push(migrated.report);
+        } catch (error) {
+          migrationError = error instanceof Error ? error : new Error("A public report URL could not be updated.");
+          canonicalReports.push(report);
+        }
+      }
+      if (requestId !== summaryReportRefreshRequestRef.current) return;
+      const publishedPages: ScenarioLandingPage[] = canonicalReports.map((report) => ({
         id: report.id,
         name: report.name,
         slug: report.slug,
@@ -7367,12 +7510,20 @@ export default function App() {
         ...current,
         ...Object.fromEntries(publishedPages.map((page) => [page.id, page.name])),
       }));
+      if (migrationError && surfaceErrors) {
+        setSummaryReportDialogError(migrationError.message);
+      }
     } catch (error) {
-      setSummaryReportDialogError(error instanceof Error ? error.message : "Public reports could not be loaded.");
+      if (requestId !== summaryReportRefreshRequestRef.current) return;
+      if (surfaceErrors) setSummaryReportDialogError(error instanceof Error ? error.message : "Public reports could not be loaded.");
+      else console.warn("Public reports could not be refreshed", error);
     } finally {
-      setIsSummaryReportListLoading(false);
+      if (requestId === summaryReportRefreshRequestRef.current) setIsSummaryReportListLoading(false);
     }
-  };
+  }, [authToken, publicUsername]);
+  useEffect(() => {
+    if (authToken && hasLoadedStorage.current && storageState === "ready") void refreshPublicSummaryReports(false);
+  }, [authToken, refreshPublicSummaryReports, storageState]);
   const openSummaryReportDialog = (mode: "create" | "manage" | "publish") => {
     setIsTopbarMenuOpen(false);
     setSummaryReportDestination("new");
@@ -7385,6 +7536,7 @@ export default function App() {
     setSummaryPublishScenarioIds([]);
     setSummaryPublishDescriptions(Object.fromEntries(uiSettings.savedScenarios.map((scenario) => [scenario.id, scenario.description])));
     setSummaryScenarioPendingDeleteKey("");
+    setSummaryPublishedUrl("");
     setSummaryReportDialogError("");
     setSummaryReportDialogMode(mode);
     if (mode !== "create") void refreshPublicSummaryReports();
@@ -7429,6 +7581,14 @@ export default function App() {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Scenario report could not be renamed.");
     } finally {
       setSummaryReportBusyId("");
+    }
+  };
+  const copySummaryPublishedUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setMcpTokenMessage("Public summary report URL copied.");
+    } catch {
+      setMcpTokenMessage("Could not copy the public summary report URL.");
     }
   };
   const saveCurrentScenario = () => {
@@ -7612,19 +7772,217 @@ export default function App() {
         return [{ id: landingPageId, name: saved.report.name, slug: saved.report.slug, createdAt: saved.report.createdAt, updatedAt: saved.report.updatedAt, payload: encodedPayload }, ...current];
       });
       setSummaryReportRenameDrafts((current) => ({ ...current, [landingPageId]: saved.report.name }));
-      window.location.assign(saved.publicUrl);
+      setSummaryPublishedUrl(saved.publicUrl);
       try {
         await navigator.clipboard.writeText(saved.publicUrl);
-        setMcpTokenMessage("Scenarios published and public link copied.");
+        setMcpTokenMessage("Summary report published and public link copied.");
       } catch {
-        setMcpTokenMessage("Scenarios published and landing page opened.");
+        setMcpTokenMessage("Summary report published.");
       }
+      window.location.assign(saved.publicUrl);
     } catch (error) {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Scenarios could not be published.");
     } finally {
       setSummaryReportBusyId("");
     }
   };
+  const signInUsernamePreview = normalizePublicReportSlug(signInPublicUsername).slice(0, 32);
+  const beginCognitoSignIn = async () => {
+    if (authEntryMode === "create" && signInPublicUsername.trim() && (!signInUsernamePreview || RESERVED_PUBLIC_REPORT_SLUGS.has(signInUsernamePreview))) {
+      setSignInPublicUsernameError("Choose a username containing letters or numbers that is not reserved by AfterTax US.");
+      return;
+    }
+    setSignInPublicUsernameError("");
+    if (authEntryMode === "create" && signInUsernamePreview) {
+      setIsUsernameRequestPending(true);
+      try {
+        const available = await checkPublicUsernameAvailability(signInUsernamePreview);
+        if (!available) {
+          setSignInPublicUsernameError("That username is already used by another account. Choose a different username.");
+          return;
+        }
+      } catch (error) {
+        setSignInPublicUsernameError(error instanceof Error ? error.message : "Username availability could not be checked.");
+        return;
+      } finally {
+        setIsUsernameRequestPending(false);
+      }
+    }
+    await startCognitoSignIn(signInUsernamePreview, authEntryMode);
+  };
+  const openAuthEntry = (mode: AuthEntryMode) => {
+    setIsTopbarMenuOpen(false);
+    setAuthEntryMode(mode);
+    setSignInPublicUsernameError("");
+    setIsAuthEntryOpen(true);
+    if (mode === "create") window.requestAnimationFrame(() => signInUsernameInputRef.current?.focus());
+  };
+  const openSettingsDialog = () => {
+    setIsTopbarMenuOpen(false);
+    setSettingsUsernameDraft(publicUsername);
+    setSettingsUsernameError("");
+    setIsSettingsDialogOpen(true);
+    window.requestAnimationFrame(() => {
+      settingsUsernameInputRef.current?.focus();
+      settingsUsernameInputRef.current?.select();
+    });
+  };
+  const savePublicUsername = async () => {
+    const normalized = normalizePublicReportSlug(settingsUsernameDraft).slice(0, 32);
+    if (settingsUsernameDraft.trim() && (!normalized || RESERVED_PUBLIC_REPORT_SLUGS.has(normalized))) {
+      setSettingsUsernameError("Choose a username containing letters or numbers that is not reserved by AfterTax US.");
+      return;
+    }
+    const nextUsername = resolvePublicUsername(
+      authState.status === "signedIn" ? authState.user : null,
+      undefined,
+      normalized
+    );
+    if (!nextUsername || RESERVED_PUBLIC_REPORT_SLUGS.has(nextUsername)) {
+      setSettingsUsernameError("Enter a different public username.");
+      return;
+    }
+    if (authState.status !== "signedIn") {
+      setSettingsUsernameError("Sign in before changing your public username.");
+      return;
+    }
+    setIsUsernameRequestPending(true);
+    setSettingsUsernameError("");
+    try {
+      await claimPublicUsername(nextUsername, authState.tokens.idToken);
+      usernameClaimAttemptRef.current = `${authState.user.sub}:${nextUsername}`;
+      writeStoredPublicUsername(nextUsername);
+      setSignInPublicUsername(nextUsername);
+      setUiSettings((current) => ({ ...current, publicUsername: nextUsername }));
+      setStorageState("ready");
+      setIsSettingsDialogOpen(false);
+    } catch (error) {
+      setSettingsUsernameError(error instanceof Error ? error.message : "Username could not be saved.");
+    } finally {
+      setIsUsernameRequestPending(false);
+    }
+  };
+  const authEntryDialog = isAuthEntryOpen ? createPortal(
+    <div className="auth-entry-dialog__backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setIsAuthEntryOpen(false);
+    }}>
+      <section className="auth-entry-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-entry-dialog-title">
+        <header className="auth-entry-dialog__header">
+          <div>
+            <p className="eyebrow">AfterTax US account</p>
+            <h3 id="auth-entry-dialog-title">{authEntryMode === "create" ? "Create your account" : "Sign in to your account"}</h3>
+          </div>
+          <button type="button" onClick={() => setIsAuthEntryOpen(false)} aria-label="Close account dialog">×</button>
+        </header>
+        <p className="auth-entry-dialog__copy">
+          {authEntryMode === "create"
+            ? "Choose your public username while creating your account. It is saved and used in published scenario URLs."
+            : "Continue to the secure sign-in page. Your saved public username will be used automatically."}
+        </p>
+        <div className="auth-required-panel__form">
+          <div className="auth-required-panel__tabs" role="tablist" aria-label="Account access">
+            <button
+              className={authEntryMode === "signIn" ? "is-active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={authEntryMode === "signIn"}
+              onClick={() => {
+                setAuthEntryMode("signIn");
+                setSignInPublicUsernameError("");
+              }}
+            >Sign in</button>
+            <button
+              className={authEntryMode === "create" ? "is-active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={authEntryMode === "create"}
+              onClick={() => {
+                setAuthEntryMode("create");
+                window.requestAnimationFrame(() => signInUsernameInputRef.current?.focus());
+              }}
+            >Create account</button>
+          </div>
+          {authEntryMode === "create" && (
+            <>
+              <label className="auth-required-panel__username">
+                <span>Public username <small>Optional</small></span>
+                <input
+                  ref={signInUsernameInputRef}
+                  value={signInPublicUsername}
+                  maxLength={32}
+                  autoComplete="username"
+                  placeholder="Example: kevin"
+                  onChange={(event) => {
+                    setSignInPublicUsername(event.target.value);
+                    setSignInPublicUsernameError("");
+                  }}
+                  onKeyDown={(event) => { if (event.key === "Enter") void beginCognitoSignIn(); }}
+                />
+                <small>Leave blank to use the part of your email before @.</small>
+              </label>
+              <div className="auth-required-panel__preview">
+                {PUBLIC_SITE_ORIGIN}/{signInUsernamePreview || "email-username"}/ca-tax-scenarios
+              </div>
+              {signInPublicUsernameError && <div className="auth-required-panel__error" role="alert">{signInPublicUsernameError}</div>}
+            </>
+          )}
+          <button className="primary-button" type="button" onClick={() => { void beginCognitoSignIn(); }} disabled={authState.status === "loading" || isUsernameRequestPending}>
+            {isUsernameRequestPending
+              ? "Checking username..."
+              : authState.status === "loading"
+              ? "Completing sign in..."
+              : authEntryMode === "create" ? "Continue to Create Account" : "Continue to Sign In"}
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body
+  ) : null;
+  const settingsDialog = isSettingsDialogOpen ? createPortal(
+    <div className="auth-entry-dialog__backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) setIsSettingsDialogOpen(false);
+    }}>
+      <section className="auth-entry-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+        <header className="auth-entry-dialog__header">
+          <div>
+            <p className="eyebrow">Account settings</p>
+            <h3 id="settings-dialog-title">Edit public username</h3>
+          </div>
+          <button type="button" onClick={() => setIsSettingsDialogOpen(false)} aria-label="Close settings dialog">&times;</button>
+        </header>
+        <p className="auth-entry-dialog__copy">Your username appears in published scenario URLs. Changing it updates the URLs used for your reports.</p>
+        <div className="auth-required-panel__form">
+          <label className="auth-required-panel__username">
+            <span>Public username</span>
+            <input
+              ref={settingsUsernameInputRef}
+              value={settingsUsernameDraft}
+              maxLength={32}
+              autoComplete="username"
+              placeholder="Example: kevin"
+              onChange={(event) => {
+                setSettingsUsernameDraft(event.target.value);
+                setSettingsUsernameError("");
+              }}
+              onKeyDown={(event) => { if (event.key === "Enter") void savePublicUsername(); }}
+            />
+            <small>Leave blank to use the part of your email before @.</small>
+          </label>
+          <div className="auth-required-panel__preview">
+            {PUBLIC_SITE_ORIGIN}/{normalizePublicReportSlug(settingsUsernameDraft).slice(0, 32) || resolvePublicUsername(authState.status === "signedIn" ? authState.user : null)}/ca-tax-scenarios
+          </div>
+          {settingsUsernameError && <div className="auth-required-panel__error" role="alert">{settingsUsernameError}</div>}
+          <div className="settings-dialog__actions">
+            <button className="ghost-button" type="button" onClick={() => setIsSettingsDialogOpen(false)}>Cancel</button>
+            <button className="primary-button" type="button" onClick={() => { void savePublicUsername(); }} disabled={isUsernameRequestPending}>
+              {isUsernameRequestPending ? "Checking..." : "Save Username"}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>,
+    document.body
+  ) : null;
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
       <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
@@ -7648,6 +8006,13 @@ export default function App() {
                     <small>{authState.user.email || authState.user.sub.slice(0, 8)}</small>
                   </span>
                 </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSettingsDialog}>
+                  <TopbarActionIcon name="settings" />
+                  <span className="topbar-menu__label">
+                    <span>Settings</span>
+                    <small>@{publicUsername}</small>
+                  </span>
+                </button>
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void copyChatGptConnectorUrl(); }} disabled={isCreatingMcpToken}>
                   <TopbarActionIcon name="copy" />
                   <span>{isCreatingMcpToken ? "Creating token..." : "Copy ChatGPT URL"}</span>
@@ -7658,7 +8023,7 @@ export default function App() {
                 </button>
               </>
             ) : (
-              <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); void startCognitoSignIn(); }} disabled={authState.status === "loading"}>
+              <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openAuthEntry("signIn")} disabled={authState.status === "loading"}>
                 <TopbarActionIcon name="signIn" />
                 <span>{authState.status === "loading" ? "Signing in..." : "Sign in"}</span>
               </button>
@@ -7678,15 +8043,15 @@ export default function App() {
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
             <TopbarActionIcon name="report" />
-            <span>Create Scenario</span>
+            <span>Create Summary Report</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
             <TopbarActionIcon name="report" />
-            <span>Manage Scenarios</span>
+            <span>Manage Summary Reports</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("publish")}>
             <TopbarActionIcon name="report" />
-            <span>Publish Scenarios</span>
+            <span>Publish Summary Report</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -8579,7 +8944,7 @@ export default function App() {
             <div className="summary-report-dialog__header">
               <div>
                 <p className="eyebrow">{summaryReportDialogMode === "publish" ? "Public Landing Page" : "Scenario Library"}</p>
-                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "create" ? "Create scenario" : summaryReportDialogMode === "manage" ? "Manage scenarios" : "Publish scenarios"}</h3>
+                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "create" ? "Create summary report" : summaryReportDialogMode === "manage" ? "Manage summary reports" : "Publish summary report"}</h3>
               </div>
               <button className="summary-report-dialog__close" type="button" onClick={() => setSummaryReportDialogMode(null)} aria-label="Close scenario dialog">×</button>
             </div>
@@ -8587,7 +8952,7 @@ export default function App() {
               ? "Save the current workbook values as a private scenario. Nothing is published from this step."
               : summaryReportDialogMode === "manage"
                 ? "Add, rename, describe, or remove scenarios in your private scenario library."
-                : `Select up to ${PUBLISHED_SCENARIO_LIMIT} saved scenarios, tailor their descriptions, and publish them on one landing page.`}</p>
+                : `Select up to ${PUBLISHED_SCENARIO_LIMIT} saved scenarios, tailor their descriptions, and publish them on one landing page with a visible public URL.`}</p>
 
             {summaryReportDialogMode === "create" ? (
               <>
@@ -8658,6 +9023,7 @@ export default function App() {
                                       <div className="summary-report-dialog__scenario-public-link" key={url}>
                                         <a className="summary-report-dialog__scenario-url" href={url} target="_blank" rel="noreferrer">{url}</a>
                                         <a className="ghost-button ghost-button--compact" href={url} target="_blank" rel="noreferrer">Launch</a>
+                                        <button className="ghost-button ghost-button--compact" type="button" onClick={() => { void copySummaryPublishedUrl(url); }}>Copy</button>
                                       </div>
                                     ))
                                   ) : (
@@ -8752,6 +9118,17 @@ export default function App() {
                   </label>
                 )}
 
+                {summaryPublishedUrl && (
+                  <div className="summary-report-dialog__published-url" role="status" aria-live="polite">
+                    <span>Published URL</span>
+                    <a className="summary-report-dialog__published-url-link" href={summaryPublishedUrl} target="_blank" rel="noreferrer">{summaryPublishedUrl}</a>
+                    <div className="summary-report-dialog__published-url-actions">
+                      <a className="ghost-button" href={summaryPublishedUrl} target="_blank" rel="noreferrer">Open URL</a>
+                      <button className="ghost-button" type="button" onClick={() => { void copySummaryPublishedUrl(summaryPublishedUrl); }}>Copy URL</button>
+                    </div>
+                  </div>
+                )}
+
                 <section className="summary-report-dialog__management summary-report-dialog__published" aria-labelledby="summary-published-pages-title">
                   <div className="summary-report-dialog__management-heading">
                     <div>
@@ -8776,6 +9153,7 @@ export default function App() {
                             </div>
                             <div className="summary-report-dialog__report-actions">
                               {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
+                              {publicUrl && <button className="ghost-button" type="button" onClick={() => { void copySummaryPublishedUrl(publicUrl); }}>Copy</button>}
                               <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void renameSummaryReport(page.id); }}>{summaryReportBusyId === page.id ? "Saving…" : "Save name"}</button>
                             </div>
                           </div>
@@ -8788,7 +9166,7 @@ export default function App() {
                 {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
                 <div className="summary-report-dialog__actions">
                   <button className="ghost-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Cancel</button>
-                  <button className="primary-button" type="button" disabled={Boolean(summaryReportBusyId) || summaryPublishScenarioIds.length === 0} onClick={() => { void publishSelectedScenarios(); }}>{summaryReportBusyId === "publish" ? "Publishing…" : summaryReportDestination === "existing" ? "Update landing page" : "Publish landing page"}</button>
+                  <button className="primary-button" type="button" disabled={isSummaryReportListLoading || Boolean(summaryReportBusyId) || summaryPublishScenarioIds.length === 0} onClick={() => { void publishSelectedScenarios(); }}>{summaryReportBusyId === "publish" ? "Publishing…" : summaryReportDestination === "existing" ? "Update landing page" : "Publish landing page"}</button>
                 </div>
               </>
             )}
@@ -9061,6 +9439,8 @@ export default function App() {
         </div>,
         document.body
       )}
+      {authEntryDialog}
+      {settingsDialog}
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
           {actionMenu}
@@ -9157,12 +9537,17 @@ export default function App() {
               <div>
                 <p className="eyebrow">Private Portfolio Workspace</p>
                 <h3>Sign in or create an account</h3>
-                <p>Your holdings, reference tabs, saved row selections, and assistant context are scoped to your account after login.</p>
+                <p>Your holdings, saved scenarios, and publishing profile are scoped to your account.</p>
                 {authState.error && <div className="status-card status-card--error">{authState.error}</div>}
               </div>
-              <button className="primary-button" type="button" onClick={() => void startCognitoSignIn()} disabled={authState.status === "loading"}>
-                {authState.status === "loading" ? "Completing sign in..." : "Sign In"}
-              </button>
+              <div className="auth-required-panel__actions">
+                <button className="primary-button" type="button" onClick={() => openAuthEntry("signIn")} disabled={authState.status === "loading"}>
+                  {authState.status === "loading" ? "Completing sign in..." : "Sign In"}
+                </button>
+                <button className="ghost-button" type="button" onClick={() => openAuthEntry("create")} disabled={authState.status === "loading"}>
+                  Create Account
+                </button>
+              </div>
             </div>
           </Section>
         ) : (
