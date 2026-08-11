@@ -4000,7 +4000,7 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
 
 function getReachedTaxRateLabel(markers: ThermometerMarker[], taxableIncome: number, fallback: string) {
   let reached = fallback;
-  markers.forEach((marker) => {
+  [...markers].sort((first, second) => first.amount - second.amount).forEach((marker) => {
     if (marker.amount <= taxableIncome && marker.label.includes("%") && !marker.label.startsWith("+")) {
       reached = marker.label;
     }
@@ -4133,7 +4133,10 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const federalEffectiveRate = federalTaxable > 0 ? federalTax / federalTaxable : 0;
   const stateEffectiveRate = stateTaxable > 0 ? stateTax / stateTaxable : 0;
   const combinedTaxable = Math.max(federalTaxable, stateTaxable, localEnabled ? localTaxable : 0);
-  const combinedEffectiveRate = federalEffectiveRate + stateEffectiveRate + (localEnabled ? localEffectiveRate : 0);
+  const federalMarginalRate = getReachedTaxRateValue(federalMarkers, federalTaxable, "10%");
+  const stateMarginalRate = getReachedTaxRateValue(stateMarkers, stateTaxable, stateBaseRateLabel);
+  const niitMarginalRate = combinedTaxable >= niitThresholdForStatus(filingStatus) ? 0.038 : 0;
+  const combinedMarginalRate = federalMarginalRate + stateMarginalRate + (localEnabled ? localMarginalRate : 0) + niitMarginalRate;
   const combinedBaseRateLabel = formatPercent(0.10 + rateLabelToDecimal(stateBaseRateLabel) + localBaseRateValue);
   const activeAllocationRows = thermometerMode === "accountTax" ? accountTaxAllocationRows : thermometerMode === "accountType" ? accountTypeAllocationRows : thermometerMode === "taxTreatment" ? taxTreatmentAllocationRows : allocationRows;
   const allocationTotal = activeAllocationRows.reduce((sum, row) => sum + row.amount, 0);
@@ -4258,7 +4261,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
           footerLabel: "",
           footerValue: "",
           baseRateLabel: combinedBaseRateLabel,
-          currentRateLabel: formatPercent(combinedEffectiveRate),
+          currentRateLabel: formatPercent(combinedMarginalRate),
           total: totalTax,
           noTaxStamp: undefined,
         };
