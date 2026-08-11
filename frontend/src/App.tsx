@@ -1527,6 +1527,25 @@ function AccountFavicon({ accountName }: { accountName: string }) {
   return <img className="account-favicon" src={src} alt="" aria-hidden="true" loading="lazy" onError={() => setHasImageError(true)} />;
 }
 
+function floatingPickerMenuStyle(trigger: HTMLElement | null, minimumWidth: number, preferredMaxHeight: number): CSSProperties {
+  const rect = trigger?.getBoundingClientRect();
+  if (!rect) return {};
+  const viewportPadding = 8;
+  const gap = 4;
+  const width = Math.max(rect.width, minimumWidth);
+  const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const opensUp = spaceBelow < preferredMaxHeight && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(120, Math.min(preferredMaxHeight, (opensUp ? spaceAbove : spaceBelow) - gap));
+  const left = Math.min(Math.max(viewportPadding, rect.left), Math.max(viewportPadding, window.innerWidth - width - viewportPadding));
+  return {
+    left,
+    top: opensUp ? Math.max(viewportPadding, rect.top - maxHeight - gap) : rect.bottom + gap,
+    width,
+    maxHeight,
+  };
+}
+
 function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onChange, onJumpToAccount, ariaLabel }: { value: string; options: string[]; excludedFromAfterTaxIncome?: boolean; onChange: (value: string) => void; onJumpToAccount?: (accountName: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
@@ -1534,13 +1553,7 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const updateMenuPosition = () => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setMenuStyle({
-      left: rect.left,
-      top: rect.bottom + 4,
-      width: Math.max(rect.width, 240),
-    });
+    setMenuStyle(floatingPickerMenuStyle(triggerRef.current, 240, 260));
   };
 
   useEffect(() => {
@@ -1688,9 +1701,7 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, taxTreatment
   const resetAssetName = String(resetToValue || "").trim();
   const showResetOption = resetAssetName !== "" && normalizeLookupKey(resetAssetName) !== normalizeLookupKey(value);
   const updateMenuPosition = () => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setMenuStyle({ left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 230) });
+    setMenuStyle(floatingPickerMenuStyle(triggerRef.current, 230, 320));
   };
 
   useEffect(() => {
