@@ -7787,13 +7787,13 @@ export default function App() {
     }
   };
   const signInUsernamePreview = normalizePublicReportSlug(signInPublicUsername).slice(0, 32);
-  const beginCognitoSignIn = async () => {
-    if (authEntryMode === "create" && signInPublicUsername.trim() && (!signInUsernamePreview || RESERVED_PUBLIC_REPORT_SLUGS.has(signInUsernamePreview))) {
+  const beginCognitoSignIn = async (entryMode: AuthEntryMode = authEntryMode) => {
+    if (entryMode === "create" && signInPublicUsername.trim() && (!signInUsernamePreview || RESERVED_PUBLIC_REPORT_SLUGS.has(signInUsernamePreview))) {
       setSignInPublicUsernameError("Choose a username containing letters or numbers that is not reserved by AfterTax US.");
       return;
     }
     setSignInPublicUsernameError("");
-    if (authEntryMode === "create" && signInUsernamePreview) {
+    if (entryMode === "create" && signInUsernamePreview) {
       setIsUsernameRequestPending(true);
       try {
         const available = await checkPublicUsernameAvailability(signInUsernamePreview);
@@ -7808,7 +7808,7 @@ export default function App() {
         setIsUsernameRequestPending(false);
       }
     }
-    await startCognitoSignIn(signInUsernamePreview, authEntryMode);
+    await startCognitoSignIn(entryMode === "create" ? signInUsernamePreview : "", entryMode);
   };
   const openAuthEntry = (mode: AuthEntryMode) => {
     setIsTopbarMenuOpen(false);
@@ -7870,69 +7870,42 @@ export default function App() {
         <header className="auth-entry-dialog__header">
           <div>
             <p className="eyebrow">AfterTax US account</p>
-            <h3 id="auth-entry-dialog-title">{authEntryMode === "create" ? "Create your account" : "Sign in to your account"}</h3>
+            <h3 id="auth-entry-dialog-title">Sign in or create account</h3>
           </div>
           <button type="button" onClick={() => setIsAuthEntryOpen(false)} aria-label="Close account dialog">×</button>
         </header>
         <p className="auth-entry-dialog__copy">
-          {authEntryMode === "create"
-            ? "Choose your public username while creating your account. It is saved and used in published scenario URLs."
-            : "Continue to the secure sign-in page. Your saved public username will be used automatically."}
+          Sign in to your saved workbook, or create a new account. If you create an account, the optional public username is used in published scenario URLs.
         </p>
         <div className="auth-required-panel__form">
-          <div className="auth-required-panel__tabs" role="tablist" aria-label="Account access">
-            <button
-              className={authEntryMode === "signIn" ? "is-active" : ""}
-              type="button"
-              role="tab"
-              aria-selected={authEntryMode === "signIn"}
-              onClick={() => {
-                setAuthEntryMode("signIn");
+          <label className="auth-required-panel__username">
+            <span>Public username <small>Optional for new accounts</small></span>
+            <input
+              ref={signInUsernameInputRef}
+              value={signInPublicUsername}
+              maxLength={32}
+              autoComplete="username"
+              placeholder="Example: kevin"
+              onChange={(event) => {
+                setSignInPublicUsername(event.target.value);
                 setSignInPublicUsernameError("");
               }}
-            >Sign in</button>
-            <button
-              className={authEntryMode === "create" ? "is-active" : ""}
-              type="button"
-              role="tab"
-              aria-selected={authEntryMode === "create"}
-              onClick={() => {
-                setAuthEntryMode("create");
-                window.requestAnimationFrame(() => signInUsernameInputRef.current?.focus());
-              }}
-            >Create account</button>
+              onKeyDown={(event) => { if (event.key === "Enter") void beginCognitoSignIn("create"); }}
+            />
+            <small>Used only when creating an account. Leave blank to use the part of your email before @.</small>
+          </label>
+          <div className="auth-required-panel__preview">
+            {PUBLIC_SITE_ORIGIN}/{signInUsernamePreview || "email-username"}/ca-tax-scenarios
           </div>
-          {authEntryMode === "create" && (
-            <>
-              <label className="auth-required-panel__username">
-                <span>Public username <small>Optional</small></span>
-                <input
-                  ref={signInUsernameInputRef}
-                  value={signInPublicUsername}
-                  maxLength={32}
-                  autoComplete="username"
-                  placeholder="Example: kevin"
-                  onChange={(event) => {
-                    setSignInPublicUsername(event.target.value);
-                    setSignInPublicUsernameError("");
-                  }}
-                  onKeyDown={(event) => { if (event.key === "Enter") void beginCognitoSignIn(); }}
-                />
-                <small>Leave blank to use the part of your email before @.</small>
-              </label>
-              <div className="auth-required-panel__preview">
-                {PUBLIC_SITE_ORIGIN}/{signInUsernamePreview || "email-username"}/ca-tax-scenarios
-              </div>
-              {signInPublicUsernameError && <div className="auth-required-panel__error" role="alert">{signInPublicUsernameError}</div>}
-            </>
-          )}
-          <button className="primary-button" type="button" onClick={() => { void beginCognitoSignIn(); }} disabled={authState.status === "loading" || isUsernameRequestPending}>
-            {isUsernameRequestPending
-              ? "Checking username..."
-              : authState.status === "loading"
-              ? "Completing sign in..."
-              : authEntryMode === "create" ? "Continue to Create Account" : "Continue to Sign In"}
-          </button>
+          {signInPublicUsernameError && <div className="auth-required-panel__error" role="alert">{signInPublicUsernameError}</div>}
+          <div className="auth-required-panel__actions">
+            <button className="primary-button" type="button" onClick={() => { void beginCognitoSignIn("signIn"); }} disabled={authState.status === "loading" || isUsernameRequestPending}>
+              {authState.status === "loading" ? "Signing in..." : "Sign in"}
+            </button>
+            <button className="ghost-button" type="button" onClick={() => { void beginCognitoSignIn("create"); }} disabled={authState.status === "loading" || isUsernameRequestPending}>
+              {isUsernameRequestPending ? "Checking username..." : "Create account"}
+            </button>
+          </div>
         </div>
       </section>
     </div>,
