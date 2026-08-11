@@ -1,4 +1,4 @@
-import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type SetStateAction } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
@@ -6057,6 +6057,7 @@ export default function App() {
   const historyRef = useRef<{ past: string[]; present: string; future: string[] }>({ past: [], present: "", future: [] });
   const historyInitialized = useRef(false);
   const isApplyingHistory = useRef(false);
+  const skipNextHistoryRecord = useRef(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
   const publicUsername = resolvePublicUsername(
@@ -6081,11 +6082,42 @@ export default function App() {
     isWhatIfActive,
   }), [investments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, localTaxSettings, plannerSettings, uiSettings.investmentFavorites, selectedInvestmentIds, isWhatIfActive]);
   const currentHistorySerialized = useMemo(() => JSON.stringify(currentHistorySnapshot), [currentHistorySnapshot]);
+  const recordUndoCheckpoint = useCallback(() => {
+    if (!hasLoadedStorage.current || isApplyingHistory.current) return;
+    const history = historyRef.current;
+    if (!historyInitialized.current) {
+      history.present = currentHistorySerialized;
+      historyInitialized.current = true;
+      setHistoryVersion((version) => version + 1);
+      return;
+    }
+    if (history.past.at(-1) !== currentHistorySerialized) {
+      history.past.push(currentHistorySerialized);
+      if (history.past.length > WORKBOOK_HISTORY_LIMIT) history.past.shift();
+    }
+    history.present = currentHistorySerialized;
+    history.future = [];
+    skipNextHistoryRecord.current = true;
+    setHistoryVersion((version) => version + 1);
+  }, [currentHistorySerialized]);
+  const updateFederalSettingsUndoable = useCallback((updater: SetStateAction<FederalSettings>) => {
+    recordUndoCheckpoint();
+    setFederalSettings(updater);
+  }, [recordUndoCheckpoint]);
+  const updateStateSettingsUndoable = useCallback((updater: SetStateAction<StateSettings>) => {
+    recordUndoCheckpoint();
+    setStateSettings(updater);
+  }, [recordUndoCheckpoint]);
+  const updateLocalTaxSettingsUndoable = useCallback((updater: SetStateAction<LocalTaxSettings>) => {
+    recordUndoCheckpoint();
+    setLocalTaxSettings(updater);
+  }, [recordUndoCheckpoint]);
 
   const resetHistoryTracking = useCallback(() => {
     historyRef.current = { past: [], present: "", future: [] };
     historyInitialized.current = false;
     isApplyingHistory.current = false;
+    skipNextHistoryRecord.current = false;
     setHistoryVersion((version) => version + 1);
   }, []);
 
@@ -6926,6 +6958,12 @@ export default function App() {
       history.present = currentHistorySerialized;
       return;
     }
+    if (skipNextHistoryRecord.current) {
+      skipNextHistoryRecord.current = false;
+      history.present = currentHistorySerialized;
+      setHistoryVersion((version) => version + 1);
+      return;
+    }
     if (history.present === currentHistorySerialized) return;
     if (history.present) {
       history.past.push(history.present);
@@ -7088,7 +7126,7 @@ export default function App() {
   const showLocalTaxBasePanel = localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none";
   const updateLocalTaxProfile = (localityId: string) => {
     const profile = getLocalTaxProfile(localityId);
-    setLocalTaxSettings((current) => normalizeLocalTaxSettings({
+    updateLocalTaxSettingsUndoable((current) => normalizeLocalTaxSettings({
       ...current,
       enabled: profile.kind !== "none",
       localityId: profile.id,
@@ -7099,7 +7137,7 @@ export default function App() {
     }));
   };
   const updateLocalTaxBase = (key: LocalTaxBaseKey, checked: boolean) => {
-    setLocalTaxSettings((current) => ({
+    updateLocalTaxSettingsUndoable((current) => ({
       ...current,
       taxableBase: {
         ...current.taxableBase,
@@ -9472,7 +9510,7 @@ export default function App() {
                 </button>
               )}
             </div>
-            {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
+            {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
           <div className="topbar-stack">
             {authEnabled ? (
@@ -9639,25 +9677,25 @@ export default function App() {
                   total={extraOrdinaryWhatIfTotal}
                   rows={federalSettings.extraOrdinaryItems}
                   typeOptions={ordinaryWhatIfTypes}
-                  onChange={(rows) => setFederalSettings((current) => ({ ...current, extraOrdinaryItems: rows, extraOrdinaryIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
+                  onChange={(rows) => updateFederalSettingsUndoable((current) => ({ ...current, extraOrdinaryItems: rows, extraOrdinaryIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
                 />
                 <TaxWhatIfMiniTable
                   title="Extra preferred income"
                   total={extraPreferredWhatIfTotal}
                   rows={federalSettings.extraPreferredItems}
                   typeOptions={preferredWhatIfTypes}
-                  onChange={(rows) => setFederalSettings((current) => ({ ...current, extraPreferredItems: rows, extraPreferredIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
+                  onChange={(rows) => updateFederalSettingsUndoable((current) => ({ ...current, extraPreferredItems: rows, extraPreferredIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
                 />
               </div>
             </details>
             <div className="form-grid">
-              <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => setFederalSettings((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
-              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
+              <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => updateFederalSettingsUndoable((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
+              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
             </div>
             <div className="form-grid form-grid--compact tax-deduction-mode">
               <label>
                 <span>Deduction method</span>
-                <select value={federalSettings.deductionMode} onChange={(event) => setFederalSettings((current) => ({ ...current, deductionMode: normalizeFederalDeductionMode(event.target.value) }))}>
+                <select value={federalSettings.deductionMode} onChange={(event) => updateFederalSettingsUndoable((current) => ({ ...current, deductionMode: normalizeFederalDeductionMode(event.target.value) }))}>
                   <option value="standard">Standard deduction ({formatCurrencyDetailed(federalSettings.standardDeduction)})</option>
                   <option value="itemized">Itemized deduction ({formatCurrencyDetailed(itemizedFederalDeduction)})</option>
                 </select>
@@ -9667,14 +9705,14 @@ export default function App() {
               <FederalAboveLineDeductionTable
                 rows={federalSettings.aboveLineDeductionItems}
                 summary={federalAboveLineDeductionSummary}
-                onChange={(rows) => setFederalSettings((current) => ({ ...current, aboveLineDeductionItems: rows }))}
+                onChange={(rows) => updateFederalSettingsUndoable((current) => ({ ...current, aboveLineDeductionItems: rows }))}
               />
             )}
             {federalSettings.deductionMode === "itemized" && (
               <FederalDeductionMiniTable
                 rows={federalSettings.deductionItems}
                 summary={federalDeductionSummary}
-                onChange={(rows) => setFederalSettings((current) => ({
+                onChange={(rows) => updateFederalSettingsUndoable((current) => ({
                   ...current,
                   deductionItems: rows,
                   mortgageInterest: deductionTotalByType(rows, "Mortgage interest"),
@@ -9709,28 +9747,28 @@ export default function App() {
             <details className="tax-what-if-disclosure" open={isStateTaxWhatIfOpen} onToggle={(event) => setIsStateTaxWhatIfOpen(event.currentTarget.open)}>
               <summary>What-If</summary>
               <div className="form-grid tax-what-if-disclosure__fields">
-                <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => setStateSettings((current) => ({ ...current, extraStateIncome: value }))} /></label>
+                <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => updateStateSettingsUndoable((current) => ({ ...current, extraStateIncome: value }))} /></label>
               </div>
             </details>
             <div className="form-grid form-grid--compact-wide">
-              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => setStateSettings((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
+              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
               {selectedStateHasIncomeTax && (
                 <label>
                   <span>Deduction method</span>
-                  <select value={stateSettings.deductionMode} onChange={(event) => setStateSettings((current) => ({ ...current, deductionMode: normalizeFederalDeductionMode(event.target.value) }))}>
+                  <select value={stateSettings.deductionMode} onChange={(event) => updateStateSettingsUndoable((current) => ({ ...current, deductionMode: normalizeFederalDeductionMode(event.target.value) }))}>
                     <option value="standard">Standard deduction ({formatCurrencyDetailed(stateSettings.standardDeduction)})</option>
                     <option value="itemized">Itemized deductions ({formatCurrencyDetailed(stateItemized)})</option>
                   </select>
                 </label>
               )}
-              {selectedStateHasIncomeTax && stateSettings.deductionMode === "standard" && <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => setStateSettings((current) => ({ ...current, standardDeduction: value }))} /></label>}
+              {selectedStateHasIncomeTax && stateSettings.deductionMode === "standard" && <label><span>{selectedStateCode} standard deduction</span><CurrencyInput value={stateSettings.standardDeduction} onChange={(value) => updateStateSettingsUndoable((current) => ({ ...current, standardDeduction: value }))} /></label>}
             </div>
             {selectedStateHasIncomeTax && stateSettings.deductionMode === "itemized" ? (
               <StateDeductionMiniTable
                 stateCode={selectedStateCode}
                 rows={stateSettings.deductionItems}
                 federalRows={federalSettings.deductionItems}
-                onChange={(rows) => setStateSettings((current) => ({
+                onChange={(rows) => updateStateSettingsUndoable((current) => ({
                   ...current,
                   deductionItems: rows,
                   mortgageInterest: deductionTotalByType(rows, "Mortgage interest"),
@@ -9761,7 +9799,7 @@ export default function App() {
             <div className="form-grid form-grid--compact-wide">
               <label>
                 <span>Local tax on/off</span>
-                <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => setLocalTaxSettings((current) => {
+                <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => updateLocalTaxSettingsUndoable((current) => {
                   const profile = getLocalTaxProfile(current.localityId);
                   const enabled = event.target.value === "on" && profile.kind !== "none";
                   return {
@@ -9782,14 +9820,14 @@ export default function App() {
               </label>
               <label>
                 <span>Type city/locality</span>
-                <input type="text" value={localTaxSettings.localityName} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, localityName: event.target.value }))} placeholder="City, county, or district" />
+                <input type="text" value={localTaxSettings.localityName} onChange={(event) => updateLocalTaxSettingsUndoable((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, localityName: event.target.value }))} placeholder="City, county, or district" />
               </label>
               <label>
                 <span>Residency</span>
                 <select value={localTaxSettings.residency} onChange={(event) => {
                   const residency = event.target.value === "nonresident" ? "nonresident" : "resident";
                   const profile = getLocalTaxProfile(localTaxSettings.localityId);
-                  setLocalTaxSettings((current) => ({ ...current, residency, rate: residency === "nonresident" ? current.nonresidentRate || profile.nonresidentRate || current.rate : profile.id === "custom" ? current.rate : profile.residentRate }));
+                  updateLocalTaxSettingsUndoable((current) => ({ ...current, residency, rate: residency === "nonresident" ? current.nonresidentRate || profile.nonresidentRate || current.rate : profile.id === "custom" ? current.rate : profile.residentRate }));
                 }}>
                   <option value="resident">Resident</option>
                   <option value="nonresident">Nonresident / worked there</option>
@@ -9797,11 +9835,11 @@ export default function App() {
               </label>
               <label>
                 <span>Resident/current rate</span>
-                <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.rate * 100)} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, rate: toNumber(event.target.value) / 100, enabled: toNumber(event.target.value) > 0 }))} />
+                <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.rate * 100)} onChange={(event) => updateLocalTaxSettingsUndoable((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, rate: toNumber(event.target.value) / 100, enabled: toNumber(event.target.value) > 0 }))} />
               </label>
               <label>
                 <span>Nonresident rate</span>
-                <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.nonresidentRate * 100)} onChange={(event) => setLocalTaxSettings((current) => ({ ...current, nonresidentRate: toNumber(event.target.value) / 100 }))} />
+                <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.nonresidentRate * 100)} onChange={(event) => updateLocalTaxSettingsUndoable((current) => ({ ...current, nonresidentRate: toNumber(event.target.value) / 100 }))} />
               </label>
             </div>
             {showLocalTaxBasePanel && (
