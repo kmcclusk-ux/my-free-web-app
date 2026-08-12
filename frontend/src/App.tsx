@@ -2,6 +2,7 @@ import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useSta
 import { createPortal, flushSync } from "react-dom";
 import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
+import { calculateTaxableSocialSecurity } from "./socialSecurityTax";
 import "./App.css";
 
 type TabKey =
@@ -6841,7 +6842,24 @@ export default function App() {
   const effectiveW2Income = flows.w2Income + (isFederalTaxWhatIfOpen ? extraW2WhatIfTotal : 0);
   const w2PayrollTax = calculateW2PayrollTax(effectiveW2Income, federalSettings.filingStatus, selectedStateCode);
   const effectiveExtraStateIncome = isStateTaxWhatIfOpen ? stateSettings.extraStateIncome : 0;
-  const ordinaryBeforeDeductions = flows.federalOrdinary + effectiveExtraOrdinaryIncome;
+  const socialSecurityRows = derivedRows.filter((row) => normalizeTaxTreatmentKey(row.taxTreatment) === "ss85fed");
+  const socialSecurityBenefits = socialSecurityRows.reduce((total, row) => total + row.filteredIncome, 0);
+  const scheduledSocialSecurityOrdinary = socialSecurityRows.reduce((total, row) => total + row.ordinaryMonthly * 12, 0);
+  const federalTaxExemptInterest = derivedRows.reduce((total, row) => {
+    const treatment = normalizeTaxTreatmentKey(row.taxTreatment);
+    return ["taxfree", "fedtaxfree"].includes(treatment) ? total + row.filteredIncome : total;
+  }, 0);
+  const otherFederalIncomeForSocialSecurity = Math.max(
+    flows.federalOrdinary - scheduledSocialSecurityOrdinary + flows.federalPreferred + effectiveExtraOrdinaryIncome + effectiveExtraPreferredIncome,
+    0
+  );
+  const taxableSocialSecurity = calculateTaxableSocialSecurity(
+    socialSecurityBenefits,
+    otherFederalIncomeForSocialSecurity,
+    federalTaxExemptInterest,
+    federalSettings.filingStatus
+  );
+  const ordinaryBeforeDeductions = flows.federalOrdinary - scheduledSocialSecurityOrdinary + taxableSocialSecurity + effectiveExtraOrdinaryIncome;
   const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
   const federalTaxableInvestmentIncome = flows.federalOrdinary + flows.federalPreferred;
