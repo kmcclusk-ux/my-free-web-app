@@ -12,7 +12,8 @@ export type AmplifyDependentResourcesAttributes = {
       "LambdaExecutionRole": "string",
       "LambdaExecutionRoleArn": "string",
       "Name": "string",
-      "Region": "string"
+      "Region": "string",
+      "WorkbookTableName": "string"
     }
   }
 }

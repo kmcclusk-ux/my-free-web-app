@@ -44,13 +44,13 @@ Do not invent balances, prices, returns, allocations, gains, losses, or tax figu
 If web search tools are available, use them only when the user asks for current external information or facts not present in the workbook snapshot. Do not browse for questions that can be answered from the supplied portfolio/workbook data.
 When the user only asks a question, answer normally in concise prose or markdown. When the user asks you to change the app UI or workbook data, return JSON only in this shape:
 {"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
-Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAssets, highlightRows, selectRows, selectAccount, setFilter, clearFilters, sortTable, setView, addRow, updateRow, upsertRows, replaceRows, and deleteRows.
-Editable tableIds are investments, tickers, accounts, categories, taxTreatment, accountTaxType, and investmentType.
+Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAssets, highlightRows, selectRows, selectAccount, setFilter, clearFilters, sortTable, setView, updateSettings, setWhatIf, addRow, updateRow, upsertRows, replaceRows, and deleteRows.
+Editable tableIds are investments, tickers, accounts, categories, taxTreatment, accountTaxType, and accountType.
 Use row ids from the snapshot when possible. If a request is ambiguous, select/highlight matching rows or ask a clarifying question instead of changing or deleting data.
 Action schemas:
 - setCheckbox payload: {"id": investment row id, "field":"includeIncome"|"overrideProposal", "checked": boolean}.
 - setAllCheckboxes payload: {"field":"includeIncome"|"overrideProposal", "checked": boolean}. Use requiresConfirmation true.
-- addRow payload: {"tableId":"investments"|"tickers"|"accounts"|"categories"|"taxTreatment"|"accountTaxType"|"investmentType","row":{allowed fields for that table}}. Use requiresConfirmation true.
+- addRow payload: {"tableId":"investments"|"tickers"|"accounts"|"categories"|"taxTreatment"|"accountTaxType"|"accountType","row":{allowed fields for that table}}. Use requiresConfirmation true.
 - updateRow payload: {"tableId":"...","id": row id OR "selector":"text to match" OR "all":true,"values":{allowed fields to change}}. Use requiresConfirmation true.
 - upsertRows payload: {"tableId":"...","rows":[{row fields}],"matchField":"optional allowed field name"}. Updates existing rows by id, selector, or the table primary field; adds rows that do not match. Use requiresConfirmation true.
 - replaceRows payload: {"tableId":"...","rows":[{row fields}]}. Replaces the entire table. Use only when the user explicitly asks to replace or reset a full tab/table. Always use requiresConfirmation true.
@@ -63,13 +63,17 @@ Action schemas:
 - setFilter payload: {"filterName":"account"|"category"|"asset","value":"filter value"}.
 - sortTable payload: {"tableId":"investments","column":"description"|"account"|"category"|"totalInvestment"|"yearlyIncome"|"symbol"|"includedTotal"|"filteredIncome","direction":"asc"|"desc"}.
 - setView payload: {"viewName":"Investments"|"Tickers"|"Accounts"|"Federal Tax"|"State Tax"|"Tax Calculator"|"focus_grid"|"analytics"}.
+- updateSettings payload: {"section":"federal"|"state"|"local"|"planner"|"ui","values":{allowed settings fields}}. This changes calculation inputs/preferences and is persisted to the authenticated workbook. Use requiresConfirmation true.
+- setWhatIf payload: {"scope":"investments"|"federal"|"state","enabled":boolean}. This opens/closes the requested What-If UI; investment What-If selection is persisted. Use requiresConfirmation true.
+Federal settings fields: filingStatus, deductionMode, extraOrdinaryIncome, extraPreferredIncome, extraOrdinaryItems, extraPreferredItems, aboveLineDeductionItems, deductionItems, mortgageInterest, propertyTax, standardDeduction, saltCap.
+State settings fields: stateCode, extraStateIncome, deductionMode, deductionItems, mortgageInterest, propertyTax, standardDeduction. Local settings fields: enabled, localityId, localityName, residency, rate, nonresidentRate, taxableBase. Planner settings fields: federalWithholding, stateWithholding. UI settings fields: incomePrimaryPeriod, darkMode, investmentFavorites, selectedAssetIds.
 Investment row fields: description, account, category, totalInvestment, yearlyIncome, includeIncome, overrideProposal, symbol, newSymbol, newPercent.
 When the user pastes spreadsheet investment rows, map columns like DESC/description -> description, ACCNT/account -> account, total inv. -> totalInvestment, yr inc. -> yearlyIncome, Inc/use checkbox -> includeIncome, override -> overrideProposal, symbol/ticker -> symbol, new symbol -> newSymbol, and new % -> newPercent. Ignore calculated downstream columns such as monthly income, tax status, ordinary, preferred, state, non taxable, cash/stocks/bonds rollups, filtered, and total.
 Ticker row fields: symbol, percentReturn, category, taxTreatment, incomeItem, extraData, description, exDividend, divPayout.
 Account row fields: account, taxStatus, dividendAccrued, includeInFreeCashflow.
-Category row fields: name. Tax treatment row fields: label. Account tax type row fields: taxStatus. Investment type row fields: name.
-For bulk updates to tickers, accounts, categories, taxTreatment, accountTaxType, or investmentType, prefer upsertRows. Use replaceRows only when the user clearly wants the whole table replaced.
-Primary match fields for upsertRows: tickers=symbol, accounts=account, categories=name, taxTreatment=label, accountTaxType=taxStatus, investmentType=name.
+Category row fields: name. Tax treatment row fields: label, ordinaryShare, preferredShare, stateRule, niitIncluded, localCategory, description. Account tax type row fields: taxStatus. Account type row fields: name, taxStatus.
+For bulk updates to tickers, accounts, categories, taxTreatment, accountTaxType, or accountType, prefer upsertRows. Use replaceRows only when the user clearly wants the whole table replaced.
+Primary match fields for upsertRows: tickers=symbol, accounts=account, categories=name, taxTreatment=label, accountTaxType=taxStatus, accountType=name.
 To highlight rows for a ticker or description, use {"message":"Highlighting matching rows.","actions":[{"type":"highlightRows","payload":{"symbol":"BSJQ","matchMode":"symbol"}}]}.
 To highlight specific investment row ids, use {"message":"Highlighting matching rows.","actions":[{"type":"highlightRows","payload":{"ids":[17,21,31]}}]}.
 For "clear all Inc checkboxes", return {"message":"Clearing all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":false},"requiresConfirmation":true}]}.
@@ -78,9 +82,6 @@ Do not use setFilter for Inc. Inc is a checkbox field, not a filter.
 Do not request placing trades, transferring money, connecting brokerage accounts, or external irreversible financial actions.`;
 function isFilingStatus(x) {
     return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
-}
-function isOrdinary2025FilingStatus(x) {
-    return x === "single" || x === "mfj";
 }
 function readNonNegativeNumber(value, fieldName) {
     const num = Number(value);
@@ -110,6 +111,14 @@ function normalizePublicReportSlug(value) {
         .replace(/^-+|-+$/g, "")
         .slice(0, 80)
         .replace(/-+$/g, "");
+}
+function readPublicUsername(value) {
+    const requested = String(value || "").trim().toLowerCase();
+    const username = normalizePublicReportSlug(requested).slice(0, 32);
+    if (!username || username !== requested || RESERVED_PUBLIC_REPORT_SLUGS.has(username)) {
+        return { error: "Choose a valid public username containing letters, numbers, or hyphens." };
+    }
+    return { value: username };
 }
 function readPublicReportPayload(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -1525,8 +1534,25 @@ async function handlePublicReportRequest(event, body) {
             return jsonResponse(500, { error: message }, origin);
         }
     }
+    if (calc === "PUBLIC_REPORT_DELETE") {
+        const reportId = String(body.reportId || "").trim();
+        if (!/^[a-zA-Z0-9-]{1,100}$/.test(reportId)) {
+            return jsonResponse(400, { error: "Invalid public report id." }, origin);
+        }
+        try {
+            const deleted = await store.deletePublicReport(authResult.auth.sub, reportId);
+            if (!deleted)
+                return jsonResponse(404, { error: "Published report not found." }, origin);
+            return jsonResponse(200, { deleted: true, reportId }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to delete public report.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
     const reportId = String(body.reportId || "").trim();
     const name = String(body.name || "").trim();
+    const publicUsernameResult = readPublicUsername(body.publicUsername);
     const requestedSlug = String(body.slug || "").trim().toLowerCase();
     const slug = normalizePublicReportSlug(requestedSlug);
     const previousSlugValue = String(body.previousSlug || "").trim().toLowerCase();
@@ -1537,8 +1563,14 @@ async function handlePublicReportRequest(event, body) {
     if (!name || name.length > 80) {
         return jsonResponse(400, { error: "Report name must contain between 1 and 80 characters." }, origin);
     }
+    if ("error" in publicUsernameResult) {
+        return jsonResponse(400, { error: publicUsernameResult.error }, origin);
+    }
     if (!slug || slug !== requestedSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
         return jsonResponse(400, { error: "Invalid or reserved public report slug." }, origin);
+    }
+    if (!slug.startsWith(`${publicUsernameResult.value}-`)) {
+        return jsonResponse(400, { error: "The public report URL must use your claimed username." }, origin);
     }
     if (previousSlugValue && previousSlug !== previousSlugValue) {
         return jsonResponse(400, { error: "Invalid previous public report slug." }, origin);
@@ -1559,6 +1591,23 @@ async function handlePublicReportRequest(event, body) {
         updatedAt: now,
     };
     try {
+        await store.claimPublicUsername(publicUsernameResult.value, authResult.auth.sub);
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+            return jsonResponse(409, { error: "That username is already used by another account." }, origin);
+        }
+        const message = error instanceof Error ? error.message : "Unable to verify the public username.";
+        console.error("PUBLIC_REPORT_UPSERT username verification failed", {
+            requestId: event.requestContext?.requestId,
+            reportId,
+            slug,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            message,
+        });
+        return jsonResponse(500, { error: message }, origin);
+    }
+    try {
         const saved = await store.putPublicReport(record, previousSlug);
         return jsonResponse(200, {
             report: {
@@ -1569,7 +1618,7 @@ async function handlePublicReportRequest(event, body) {
                 createdAt: saved.createdAt,
                 updatedAt: saved.updatedAt,
             },
-            publicUrl: `https://aftertaxus.com/${saved.slug}`,
+            publicUrl: `https://aftertaxus.com/${encodeURIComponent(publicUsernameResult.value)}/${encodeURIComponent(saved.slug.slice(publicUsernameResult.value.length + 1))}`,
         }, origin);
     }
     catch (error) {
@@ -1577,6 +1626,54 @@ async function handlePublicReportRequest(event, body) {
             return jsonResponse(409, { error: "That public report URL is already in use. Choose a different report name." }, origin);
         }
         const message = error instanceof Error ? error.message : "Unable to publish public report.";
+        console.error("PUBLIC_REPORT_UPSERT save failed", {
+            requestId: event.requestContext?.requestId,
+            reportId,
+            slug,
+            previousSlug,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            message,
+        });
+        return jsonResponse(500, { error: message }, origin);
+    }
+}
+async function handlePublicUsernameRequest(event, body) {
+    const calc = body.calc;
+    const origin = resolveCorsOrigin(event, calc !== "PUBLIC_USERNAME_CHECK");
+    const usernameResult = readPublicUsername(body.username);
+    if ("error" in usernameResult) {
+        return jsonResponse(400, { error: usernameResult.error }, origin);
+    }
+    let store;
+    try {
+        store = new workbookStore_1.WorkbookStore();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Username storage is unavailable.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+    if (calc === "PUBLIC_USERNAME_CHECK") {
+        try {
+            const ownerSub = await store.getPublicUsernameOwner(usernameResult.value);
+            return jsonResponse(200, { username: usernameResult.value, available: !ownerSub }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to check username availability.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    const authResult = await authenticateCognitoRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    try {
+        const claimed = await store.claimPublicUsername(usernameResult.value, authResult.auth.sub);
+        return jsonResponse(200, { username: claimed.username, available: true }, origin);
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+            return jsonResponse(409, { error: "That username is already used by another account." }, origin);
+        }
+        const message = error instanceof Error ? error.message : "Unable to save the public username.";
         return jsonResponse(500, { error: message }, origin);
     }
 }
@@ -1625,8 +1722,11 @@ const handler = async (event) => {
     if (calc === "MCP_TOKEN_CREATE" || calc === "MCP_TOKEN_LIST" || calc === "MCP_TOKEN_REVOKE") {
         return handleMcpTokenRequest(event, resolveCorsOrigin(event, true), body);
     }
-    if (calc === "PUBLIC_REPORT_GET" || calc === "PUBLIC_REPORT_LIST" || calc === "PUBLIC_REPORT_UPSERT") {
+    if (calc === "PUBLIC_REPORT_GET" || calc === "PUBLIC_REPORT_LIST" || calc === "PUBLIC_REPORT_UPSERT" || calc === "PUBLIC_REPORT_DELETE") {
         return handlePublicReportRequest(event, body);
+    }
+    if (calc === "PUBLIC_USERNAME_CHECK" || calc === "PUBLIC_USERNAME_CLAIM") {
+        return handlePublicUsernameRequest(event, body);
     }
     if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
         const authResult = await authenticatePortfolioRequest(event, origin);
@@ -1691,9 +1791,6 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        if (!isOrdinary2025FilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "FED_TAX_2025_ORDINARY currently supports filingStatus=single or mfj" }, origin);
-        }
         const tax = (0, taxCalcs_1.fedTax2025Ordinary)(taxableIncome.value, filingStatus);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, filingStatus, tax }, origin);
     }
@@ -1705,7 +1802,36 @@ const handler = async (event) => {
         const tax = (0, taxCalcs_1.caTax2025Mfj)(taxableIncome.value);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
     }
-    if (calc === "FED_PREF_TAX_2024") {
+    if (calc === "STATE_TAX_2025") {
+        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
+        if ("error" in taxableIncome) {
+            return jsonResponse(400, { error: taxableIncome.error }, origin);
+        }
+        const filingStatus = String(body.filingStatus || "single").toLowerCase();
+        if (!isFilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
+        }
+        const state = String(body.state || "").trim().toUpperCase();
+        if (!state) {
+            return jsonResponse(400, { error: "STATE_TAX_2025 requires state" }, origin);
+        }
+        const rawBrackets = body.brackets;
+        if (rawBrackets !== undefined && !Array.isArray(rawBrackets)) {
+            return jsonResponse(400, { error: "STATE_TAX_2025 brackets must be an array" }, origin);
+        }
+        const brackets = Array.isArray(rawBrackets)
+            ? rawBrackets.map((bracket) => ({
+                threshold: Number(bracket?.threshold),
+                rate: Number(bracket?.rate),
+            }))
+            : [];
+        if (brackets.some((bracket) => !Number.isFinite(bracket.threshold) || bracket.threshold < 0 || !Number.isFinite(bracket.rate) || bracket.rate < 0)) {
+            return jsonResponse(400, { error: "STATE_TAX_2025 brackets require threshold and rate >= 0" }, origin);
+        }
+        const result = brackets.length ? (0, taxCalcs_1.localProgressiveTax)(taxableIncome.value, brackets) : { tax: 0, effectiveRate: 0, marginalRate: 0 };
+        return jsonResponse(200, { calc, state, filingStatus, taxableIncome: taxableIncome.value, ...result }, origin);
+    }
+    if (calc === "FED_PREF_TAX_2024" || calc === "FED_PREF_TAX_2025") {
         const ordinaryTaxable = readNonNegativeNumber(body.ordinaryTaxable, "ordinaryTaxable");
         if ("error" in ordinaryTaxable) {
             return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
@@ -1718,9 +1844,9 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        const tax = (0, taxCalcs_1.fedPrefTax2024)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
+        const tax = (0, taxCalcs_1.fedPrefTax2025)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
         return jsonResponse(200, {
-            calc,
+            calc: "FED_PREF_TAX_2025",
             ordinaryTaxable: ordinaryTaxable.value,
             prefTaxable: prefTaxable.value,
             filingStatus,
@@ -1740,9 +1866,6 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        if (!isOrdinary2025FilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "FED_TAX_2025_COMBINED currently supports filingStatus=single or mfj" }, origin);
-        }
         const magi = readNonNegativeNumber(body.magi, "magi");
         if ("error" in magi) {
             return jsonResponse(400, { error: magi.error }, origin);
@@ -1752,7 +1875,7 @@ const handler = async (event) => {
             return jsonResponse(400, { error: netInvestmentIncome.error }, origin);
         }
         const ordinaryTax = (0, taxCalcs_1.fedTax2025Ordinary)(ordinaryTaxable.value, filingStatus);
-        const prefTax = (0, taxCalcs_1.fedPrefTax2024)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
+        const prefTax = (0, taxCalcs_1.fedPrefTax2025)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
         const niit = (0, taxCalcs_1.niitTax)(magi.value, netInvestmentIncome.value, filingStatus);
         const tax = ordinaryTax + prefTax + niit;
         return jsonResponse(200, {
@@ -1768,15 +1891,53 @@ const handler = async (event) => {
             tax,
         }, origin);
     }
+    if (calc === "LOCAL_TAX") {
+        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
+        if ("error" in taxableIncome) {
+            return jsonResponse(400, { error: taxableIncome.error }, origin);
+        }
+        const enabled = body.enabled !== false;
+        const kind = String(body.kind || "none").toLowerCase();
+        if (!enabled || kind === "none") {
+            return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax: 0, effectiveRate: 0, marginalRate: 0 }, origin);
+        }
+        if (kind === "progressive") {
+            const rawBrackets = body.brackets;
+            if (!Array.isArray(rawBrackets)) {
+                return jsonResponse(400, { error: "LOCAL_TAX progressive calculations require brackets" }, origin);
+            }
+            const brackets = rawBrackets.map((bracket) => ({
+                threshold: Number(bracket?.threshold),
+                rate: Number(bracket?.rate),
+            }));
+            if (brackets.some((bracket) => !Number.isFinite(bracket.threshold) || bracket.threshold < 0 || !Number.isFinite(bracket.rate) || bracket.rate < 0)) {
+                return jsonResponse(400, { error: "LOCAL_TAX brackets require threshold and rate >= 0" }, origin);
+            }
+            return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, ...(0, taxCalcs_1.localProgressiveTax)(taxableIncome.value, brackets) }, origin);
+        }
+        if (kind === "flat") {
+            const residency = String(body.residency || "resident").toLowerCase();
+            const rateValue = residency === "nonresident" && body.nonresidentRate !== undefined ? body.nonresidentRate : body.rate;
+            const rate = readNonNegativeNumber(rateValue, "rate");
+            if ("error" in rate) {
+                return jsonResponse(400, { error: rate.error }, origin);
+            }
+            return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, ...(0, taxCalcs_1.localFlatTax)(taxableIncome.value, rate.value) }, origin);
+        }
+        return jsonResponse(400, { error: "LOCAL_TAX kind must be one of: none, flat, progressive" }, origin);
+    }
     return jsonResponse(400, {
         error: "Unknown calc.",
         allowed: [
             "FED_TAX_2025_MFJ",
             "FED_TAX_2025_ORDINARY",
             "FED_PREF_TAX_2024",
+            "FED_PREF_TAX_2025",
             "FED_TAX_2025_COMBINED",
             "CA_TAX_2025_MFJ",
+            "STATE_TAX_2025",
             "STATE_TAX_2025_CA_MFJ",
+            "LOCAL_TAX",
             "PORTFOLIO_CHAT",
         ],
     }, origin);

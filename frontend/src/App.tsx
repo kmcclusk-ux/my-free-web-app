@@ -1,6 +1,6 @@
 import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode, type SetStateAction } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, federalCombinedTax2025, isW2IncomeType } from "./taxMath";
+import { calculateDisplayedAfterTaxIncome, calculateW2PayrollTax, isW2IncomeType } from "./taxMath";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
 import { calculateTaxableSocialSecurity } from "./socialSecurityTax";
 import "./App.css";
@@ -18,7 +18,7 @@ type TabKey =
   | "accountType";
 
 type FilingStatus = "single" | "mfj" | "mfs" | "hoh";
-type TaxResult = { calc: string; tax: number; taxableIncome?: number; filingStatus?: FilingStatus; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string };
+type TaxResult = { calc: string; tax: number; taxableIncome?: number; filingStatus?: FilingStatus; ordinaryTax?: number; prefTax?: number; niit?: number; state?: string; stateName?: string; note?: string; effectiveRate?: number; marginalRate?: number };
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
 type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
@@ -217,6 +217,8 @@ type AssistantAction =
   | { type: "clearFilters"; payload?: Record<string, never>; requiresConfirmation?: boolean }
   | { type: "sortTable"; payload: { tableId: "investments"; column: InvestmentSortColumn; direction: "asc" | "desc" }; requiresConfirmation?: boolean }
   | { type: "setView"; payload: { viewName: string }; requiresConfirmation?: boolean }
+  | { type: "updateSettings"; payload: { section: "federal" | "state" | "local" | "planner" | "ui"; values: Record<string, unknown> }; requiresConfirmation?: boolean }
+  | { type: "setWhatIf"; payload: { scope?: "investments" | "federal" | "state"; enabled: boolean }; requiresConfirmation?: boolean }
   | { type: "addRow"; payload: { tableId: WorkbookTableId; row?: Record<string, unknown>; values?: Record<string, unknown> }; requiresConfirmation?: boolean }
   | { type: "updateRow"; payload: { tableId: WorkbookTableId; id?: number | string; selector?: string; all?: boolean; values: Record<string, unknown> }; requiresConfirmation?: boolean }
   | { type: "upsertRows"; payload: { tableId: WorkbookTableId; rows?: Array<Record<string, unknown>>; row?: Record<string, unknown>; values?: Array<Record<string, unknown>>; matchField?: string }; requiresConfirmation?: boolean }
@@ -975,40 +977,11 @@ export function getLocalStateTaxProfile(stateCode: string): LocalStateTaxProfile
   return localStateTaxProfiles.find((profile) => profile.code === normalized) ?? localStateTaxProfiles.find((profile) => profile.code === "CA")!;
 }
 
-function computeThresholdTax(taxableIncome: number, brackets: ReadonlyArray<LocalStateTaxBracket>): number {
-  const ti = Number(taxableIncome);
-  if (!Number.isFinite(ti) || ti <= 0 || brackets.length === 0) return 0;
-
-  const sorted = [...brackets].sort((a, b) => a.threshold - b.threshold);
-  let tax = 0;
-
-  for (let index = 0; index < sorted.length; index += 1) {
-    const bracket = sorted[index];
-    const nextThreshold = sorted[index + 1]?.threshold ?? Number.POSITIVE_INFINITY;
-    if (ti <= bracket.threshold) continue;
-    const amount = Math.min(ti, nextThreshold) - bracket.threshold;
-    if (amount > 0) tax += amount * bracket.rate;
-    if (ti <= nextThreshold) break;
-  }
-
-  return tax;
-}
-
-function localStateTax2025(taxableIncome: number, stateCode: string, filingStatus: LocalStateTaxFilingStatus = "single") {
-  const profile = getLocalStateTaxProfile(stateCode);
-  const brackets =
-    filingStatus === "mfj" ? profile.mfj :
+function stateTaxBracketsForProfile(profile: LocalStateTaxProfile, filingStatus: LocalStateTaxFilingStatus) {
+  return filingStatus === "mfj" ? profile.mfj :
     filingStatus === "mfs" ? profile.mfs ?? profile.single :
     filingStatus === "hoh" ? profile.hoh ?? profile.single :
     profile.single;
-  return {
-    state: profile.code,
-    stateName: profile.name,
-    taxableIncome: Number.isFinite(Number(taxableIncome)) ? Math.max(Number(taxableIncome), 0) : 0,
-    filingStatus,
-    tax: computeThresholdTax(taxableIncome, brackets),
-    note: profile.note,
-  };
 }
 
 
@@ -2201,28 +2174,6 @@ function normalizeLocalTaxSettings(raw: unknown): LocalTaxSettings {
   };
 }
 
-function calculateProgressiveTax(taxableIncome: number, brackets: LocalTaxBracket[]) {
-  const sorted = [...brackets].sort((left, right) => left.threshold - right.threshold);
-  return sorted.reduce((tax, bracket, index) => {
-    const nextThreshold = sorted[index + 1]?.threshold ?? Number.POSITIVE_INFINITY;
-    const taxableAtRate = Math.max(Math.min(taxableIncome, nextThreshold) - bracket.threshold, 0);
-    return tax + taxableAtRate * bracket.rate;
-  }, 0);
-}
-
-function calculateLocalTax(settings: LocalTaxSettings, taxableIncome: number) {
-  const profile = getLocalTaxProfile(settings.localityId);
-  if (!settings.enabled || taxableIncome <= 0 || profile.kind === "none") return { tax: 0, effectiveRate: 0, marginalRate: 0, profile };
-  if (profile.kind === "progressive" && profile.brackets?.length) {
-    const tax = calculateProgressiveTax(taxableIncome, profile.brackets);
-    const reachedBracket = [...profile.brackets].sort((left, right) => left.threshold - right.threshold).filter((bracket) => taxableIncome >= bracket.threshold).at(-1);
-    return { tax, effectiveRate: taxableIncome > 0 ? tax / taxableIncome : 0, marginalRate: reachedBracket?.rate || 0, profile };
-  }
-  const rate = settings.residency === "nonresident" ? settings.nonresidentRate || settings.rate : settings.rate;
-  const tax = taxableIncome * rate;
-  return { tax, effectiveRate: taxableIncome > 0 ? tax / taxableIncome : 0, marginalRate: rate, profile };
-}
-
 function normalizeFederalSettings(raw: unknown): FederalSettings {
   const merged = mergeSettings(initialFederalSettings, raw) as FederalSettings;
   const extraOrdinaryItems = normalizeTaxWhatIfItems(merged.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
@@ -2438,7 +2389,7 @@ function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: str
   return "tax-free";
 }
 function isUnknownCalcError(error: Error) { return /unknown calc/i.test(error.message || ""); }
-async function postTaxCalculation(payload: Record<string, number | string>) {
+async function postTaxCalculation(payload: Record<string, unknown>) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
   const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const json = (await response.json()) as TaxResult | ApiError;
@@ -2538,6 +2489,17 @@ async function listPublicSummaryReports(idToken?: string) {
   const json = (await response.json()) as { reports?: PublicSummaryReportRecord[]; error?: string };
   if (!response.ok) throw new Error(json.error || "Public reports could not be loaded.");
   return Array.isArray(json.reports) ? json.reports : [];
+}
+
+async function deletePublicSummaryReport(reportId: string, idToken?: string) {
+  if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
+  const response = await fetch(`${API_BASE_URL}/hello`, {
+    method: "POST",
+    headers: authHeaders(idToken),
+    body: JSON.stringify({ calc: "PUBLIC_REPORT_DELETE", reportId }),
+  });
+  const json = (await response.json()) as { deleted?: boolean; error?: string };
+  if (!response.ok || !json.deleted) throw new Error(json.error || "Published report could not be deleted.");
 }
 
 function workbookRefreshMarker(response: WorkbookResponse) {
@@ -3952,6 +3914,8 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
                     className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"} ${isLowerBoundary || isUpperBoundary ? "tax-thermometer__tick--adjacent" : ""}`.trim()}
                     style={positionStyle(marker.amount)}
                     title={`${marker.detail}: ${formatCurrency(marker.amount)} (${titleDistance})`}
+                    aria-label={`${marker.detail}: ${formatCurrency(marker.amount)}. ${titleDistance}`}
+                    tabIndex={0}
                   >
                     <span className="tax-thermometer__tick-label">
                       <strong>{formatCurrency(marker.amount)}</strong>
@@ -3962,6 +3926,8 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
                       className={`tax-thermometer__distance-bubble ${isLowerBoundary ? "tax-thermometer__distance-bubble--past" : "tax-thermometer__distance-bubble--away"}`}
                       style={positionStyle(distanceBubbleAmount)}
                       title={titleDistance}
+                      aria-label={titleDistance}
+                      tabIndex={0}
                     >
                       <span className="tax-thermometer__distance-arrow">{isLowerBoundary ? "↓" : "↑"}</span>
                       <span>{distanceLabel}</span>
@@ -3976,6 +3942,8 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
                 className={`tax-thermometer__value tax-thermometer__value--${value.tone}`}
                 style={positionStyle(value.amount)}
                 title={`${value.label}: ${value.value}`}
+                aria-label={`${value.label}: ${value.value}`}
+                tabIndex={0}
               >
                 <span className="tax-thermometer__value-label">
                   <em>{value.label}</em>
@@ -4022,6 +3990,10 @@ function rateLabelToDecimal(label: string) {
   return Number.isFinite(parsed) ? parsed / 100 : 0;
 }
 
+function rateLabelKey(label: string) {
+  return label.replace(/\s+/g, " ").trim();
+}
+
 function getReachedTaxRateValue(markers: ThermometerMarker[], taxableIncome: number, fallback: string) {
   return rateLabelToDecimal(getReachedTaxRateLabel(markers, taxableIncome, fallback));
 }
@@ -4044,7 +4016,7 @@ function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateM
     .sort((left, right) => left.amount - right.amount);
 
   let highestCombinedRate = 0;
-  return uniqueThresholds
+  const combinedMarkers = uniqueThresholds
     .map((row) => {
       const federalRate = getReachedTaxRateValue(federalMarkers, row.amount, "10%");
       const stateRate = getReachedTaxRateValue(stateMarkers, row.amount, stateBaseRateLabel);
@@ -4062,6 +4034,10 @@ function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateM
         tone: "tax",
       };
     });
+  return combinedMarkers.filter((marker, index, allMarkers) => {
+    const previousMarker = allMarkers[index - 1];
+    return !previousMarker || rateLabelKey(previousMarker.label) !== rateLabelKey(marker.label);
+  });
 }
 
 type TaxThermometerMode = "combined" | "federal" | "state" | "local" | "allocation" | "accountTax" | "accountType" | "taxTreatment";
@@ -4495,6 +4471,8 @@ function AssistantPanel({
           action.type === "setAllCheckboxes" ||
           action.type === "selectAccount" ||
           action.type === "setView" ||
+          action.type === "updateSettings" ||
+          action.type === "setWhatIf" ||
           action.type === "addRow" ||
           action.type === "updateRow" ||
           action.type === "upsertRows" ||
@@ -6114,7 +6092,7 @@ export default function App() {
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
-  const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | "publish" | null>(null);
+  const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | "publish" | "published" | null>(null);
   const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
   const [summaryReportName, setSummaryReportName] = useState("");
   const [summaryScenarioName, setSummaryScenarioName] = useState("Current workbook");
@@ -6146,10 +6124,15 @@ export default function App() {
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
   const selectedStateName = stateNameByCode[selectedStateCode] || selectedStateCode;
   const selectedStateTaxProfile = getLocalStateTaxProfile(selectedStateCode);
+  const selectedStateBrackets = stateTaxBracketsForProfile(selectedStateTaxProfile, federalSettings.filingStatus);
   const selectedStateHasIncomeTax = selectedStateTaxProfile.single.length > 0 || selectedStateTaxProfile.mfj.length > 0;
   const [isSheetPanelOpen, setIsSheetPanelOpen] = useState(false);
   const [federalResult, setFederalResult] = useState<TaxResult | null>(null);
+  const [federalWithoutInvestmentsResult, setFederalWithoutInvestmentsResult] = useState<TaxResult | null>(null);
   const [stateResult, setStateResult] = useState<TaxResult | null>(null);
+  const [stateWithoutInvestmentsResult, setStateWithoutInvestmentsResult] = useState<TaxResult | null>(null);
+  const [localResult, setLocalResult] = useState<TaxResult | null>(null);
+  const [localWithoutInvestmentsResult, setLocalWithoutInvestmentsResult] = useState<TaxResult | null>(null);
   const [federalError, setFederalError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
   const [storageState, setStorageState] = useState<SaveState>("loading");
@@ -6924,13 +6907,20 @@ export default function App() {
   const stateItemized = stateSettings.deductionItems.reduce((total, row) => row.deductionType ? total + Math.max(toNumber(row.amount), 0) : total, 0);
   const stateDeduction = stateSettings.deductionMode === "itemized" ? stateItemized : stateSettings.standardDeduction;
   const stateTaxableAfterDeductions = Math.max(stateGross - stateDeduction, 0);
-  const localStateResult = localStateTax2025(stateTaxableAfterDeductions, selectedStateCode, federalSettings.filingStatus);
   const hasMatchingStateResult =
     stateResult?.state === selectedStateCode &&
     typeof stateResult.taxableIncome === "number" &&
     Math.abs(stateResult.taxableIncome - stateTaxableAfterDeductions) < 0.01 &&
-    !(stateResult.tax === 0 && localStateResult.tax > 0);
-  const displayedStateResult = hasMatchingStateResult ? stateResult : localStateResult;
+    stateResult.filingStatus === federalSettings.filingStatus;
+  const displayedStateResult: TaxResult = hasMatchingStateResult ? stateResult : {
+    calc: "STATE_TAX_2025",
+    state: selectedStateCode,
+    stateName: selectedStateTaxProfile.name,
+    taxableIncome: stateTaxableAfterDeductions,
+    filingStatus: federalSettings.filingStatus,
+    tax: 0,
+    note: selectedStateTaxProfile.note,
+  };
   const localTaxBaseAmounts = derivedRows.reduce((base, row) => {
     if (!row.includeIncome || row.filteredIncome <= 0) return base;
     if (["taxfree", "hold"].includes(normalizeTaxTreatmentKey(row.taxTreatment))) return base;
@@ -6943,8 +6933,35 @@ export default function App() {
     addLocalTaxWhatIfItems(localTaxBaseAmounts, federalSettings.extraPreferredItems, true, federalSettings.extraPreferredIncome);
   }
   const localTaxableIncome = localTaxBaseKeys.reduce((total, key) => total + (localTaxSettings.taxableBase[key] ? localTaxBaseAmounts[key] : 0), 0);
-  const localTaxResult = calculateLocalTax(localTaxSettings, localTaxableIncome);
+  const selectedLocalTaxProfile = getLocalTaxProfile(localTaxSettings.localityId);
+  const localTaxResult = {
+    tax: localResult?.tax || 0,
+    effectiveRate: localResult?.effectiveRate || 0,
+    marginalRate: localResult?.marginalRate || 0,
+    profile: selectedLocalTaxProfile,
+  };
   const localTaxTotal = localTaxResult.tax;
+  useEffect(() => {
+    let cancelled = false;
+    const rate = localTaxSettings.residency === "nonresident" ? localTaxSettings.nonresidentRate || localTaxSettings.rate : localTaxSettings.rate;
+    const timeoutId = window.setTimeout(() => {
+      postTaxCalculation({
+        calc: "LOCAL_TAX",
+        taxableIncome: localTaxableIncome,
+        enabled: localTaxSettings.enabled,
+        kind: selectedLocalTaxProfile.kind,
+        rate,
+        nonresidentRate: localTaxSettings.nonresidentRate,
+        residency: localTaxSettings.residency,
+        brackets: selectedLocalTaxProfile.brackets || [],
+      }).then((result) => {
+        if (!cancelled) setLocalResult(result);
+      }).catch(() => {
+        if (!cancelled) setLocalResult(null);
+      });
+    }, 220);
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+  }, [localTaxableIncome, localTaxSettings.enabled, localTaxSettings.rate, localTaxSettings.nonresidentRate, localTaxSettings.residency, selectedLocalTaxProfile]);
   const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, displayedStateResult.tax, federalSettings.saltCap);
   const federalAboveLineDeductionSummary = summarizeAboveLineDeductions(federalSettings.aboveLineDeductionItems);
   const itemizedFederalDeduction = federalDeductionSummary.itemizedDeduction;
@@ -7184,7 +7201,13 @@ export default function App() {
         if (!cancelled) { setFederalResult(null); setFederalError(error.message); }
       });
 
-      postTaxCalculation({ calc: "STATE_TAX_2025", state: selectedStateCode, filingStatus: federalSettings.filingStatus, taxableIncome: stateTaxableAfterDeductions }).then((result) => {
+      postTaxCalculation({
+        calc: "STATE_TAX_2025",
+        state: selectedStateCode,
+        filingStatus: federalSettings.filingStatus,
+        taxableIncome: stateTaxableAfterDeductions,
+        brackets: selectedStateBrackets,
+      }).then((result) => {
         if (!cancelled) { setStateResult(result); setStateError(null); }
       }).catch((error: Error) => {
         if (!cancelled) { setStateResult(null); setStateError(isUnknownCalcError(error) ? null : error.message); }
@@ -7192,7 +7215,7 @@ export default function App() {
     }, 220);
 
     return () => { cancelled = true; window.clearTimeout(timeoutId); };
-    }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions, selectedStateCode]);
+    }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions, selectedStateCode, selectedStateBrackets]);
 
 
 
@@ -7246,18 +7269,68 @@ export default function App() {
   const preferredTaxableWithoutInvestments = Math.min(preferredBeforeDeductionsWithoutInvestments, federalTaxableAfterDeductionsWithoutInvestments);
   const ordinaryTaxableWithoutInvestments = Math.max(federalTaxableAfterDeductionsWithoutInvestments - preferredTaxableWithoutInvestments, 0);
   const netInvestmentIncomeWithoutInvestments = Math.max(grossFederalTaxableWithoutInvestments - flows.nonInvestmentIncome - effectiveW2Income, 0);
-  const federalTaxWithoutInvestments = federalCombinedTax2025({
-    ordinaryTaxable: ordinaryTaxableWithoutInvestments,
-    preferredTaxable: preferredTaxableWithoutInvestments,
-    filingStatus: federalSettings.filingStatus,
-    magi: grossFederalTaxableWithoutInvestments,
-    netInvestmentIncome: netInvestmentIncomeWithoutInvestments,
-  }).tax;
+  const federalTaxWithoutInvestments = federalWithoutInvestmentsResult?.tax || 0;
+  useEffect(() => {
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      postTaxCalculation({
+        calc: "FED_TAX_2025_COMBINED",
+        ordinaryTaxable: ordinaryTaxableWithoutInvestments,
+        prefTaxable: preferredTaxableWithoutInvestments,
+        filingStatus: federalSettings.filingStatus,
+        magi: grossFederalTaxableWithoutInvestments,
+        netInvestmentIncome: netInvestmentIncomeWithoutInvestments,
+      }).then((result) => {
+        if (!cancelled) setFederalWithoutInvestmentsResult(result);
+      }).catch(() => {
+        if (!cancelled) setFederalWithoutInvestmentsResult(null);
+      });
+    }, 220);
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+  }, [ordinaryTaxableWithoutInvestments, preferredTaxableWithoutInvestments, federalSettings.filingStatus, grossFederalTaxableWithoutInvestments, netInvestmentIncomeWithoutInvestments]);
   const stateGrossWithoutInvestments = Math.max(stateGross - flows.investmentStateTaxable, 0);
   const stateTaxableAfterDeductionsWithoutInvestments = Math.max(stateGrossWithoutInvestments - stateDeduction, 0);
-  const stateTaxWithoutInvestments = localStateTax2025(stateTaxableAfterDeductionsWithoutInvestments, selectedStateCode, federalSettings.filingStatus).tax;
+  const stateTaxWithoutInvestments = stateWithoutInvestmentsResult?.tax || 0;
+  useEffect(() => {
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      postTaxCalculation({
+        calc: "STATE_TAX_2025",
+        state: selectedStateCode,
+        filingStatus: federalSettings.filingStatus,
+        taxableIncome: stateTaxableAfterDeductionsWithoutInvestments,
+        brackets: selectedStateBrackets,
+      }).then((result) => {
+        if (!cancelled) setStateWithoutInvestmentsResult(result);
+      }).catch(() => {
+        if (!cancelled) setStateWithoutInvestmentsResult(null);
+      });
+    }, 220);
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+  }, [stateTaxableAfterDeductionsWithoutInvestments, selectedStateCode, federalSettings.filingStatus, selectedStateBrackets]);
   const localTaxableWithoutInvestments = Math.max(localTaxableIncome - flows.investmentIncome, 0);
-  const localTaxWithoutInvestments = calculateLocalTax(localTaxSettings, localTaxableWithoutInvestments).tax;
+  const localTaxWithoutInvestments = localWithoutInvestmentsResult?.tax || 0;
+  useEffect(() => {
+    let cancelled = false;
+    const rate = localTaxSettings.residency === "nonresident" ? localTaxSettings.nonresidentRate || localTaxSettings.rate : localTaxSettings.rate;
+    const timeoutId = window.setTimeout(() => {
+      postTaxCalculation({
+        calc: "LOCAL_TAX",
+        taxableIncome: localTaxableWithoutInvestments,
+        enabled: localTaxSettings.enabled,
+        kind: selectedLocalTaxProfile.kind,
+        rate,
+        nonresidentRate: localTaxSettings.nonresidentRate,
+        residency: localTaxSettings.residency,
+        brackets: selectedLocalTaxProfile.brackets || [],
+      }).then((result) => {
+        if (!cancelled) setLocalWithoutInvestmentsResult(result);
+      }).catch(() => {
+        if (!cancelled) setLocalWithoutInvestmentsResult(null);
+      });
+    }, 220);
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+  }, [localTaxableWithoutInvestments, localTaxSettings.enabled, localTaxSettings.rate, localTaxSettings.nonresidentRate, localTaxSettings.residency, selectedLocalTaxProfile]);
   const investmentTaxBurden = Math.max((federalIncomeTaxTotal - federalTaxWithoutInvestments) + (displayedStateResult.tax - stateTaxWithoutInvestments) + (localTaxTotal - localTaxWithoutInvestments), 0);
   const investmentAfterTaxIncome = flows.investmentIncome - investmentTaxBurden;
   const portfolioBeforeTaxYield = flows.totalInvestmentAmount > 0 ? flows.investmentIncome / flows.totalInvestmentAmount : 0;
@@ -7269,7 +7342,6 @@ export default function App() {
   const federalOrdinaryTax = federalResult?.ordinaryTax || 0;
   const federalPreferredTax = federalResult?.prefTax || 0;
   const federalNiit = federalResult?.niit || 0;
-  const selectedLocalTaxProfile = getLocalTaxProfile(localTaxSettings.localityId);
   const marginalFederalRate = rateLabelToDecimal(marginalFederalRateLabel);
   const marginalStateRate = rateLabelToDecimal(marginalStateRateLabel);
   const marginalLocalRate = localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" ? localTaxResult.marginalRate : 0;
@@ -7283,13 +7355,6 @@ export default function App() {
   const allInMarginalTaxRateLabel = formatPercent(allInMarginalTaxRate);
   const allInEffectiveTaxRate = totalIncome > 0 ? totalTax / totalIncome : 0;
   const allInEffectiveTaxRateLabel = formatPercent(allInEffectiveTaxRate);
-  const selectedStateBrackets = federalSettings.filingStatus === "mfj"
-    ? selectedStateTaxProfile.mfj
-    : federalSettings.filingStatus === "mfs"
-      ? selectedStateTaxProfile.mfs ?? selectedStateTaxProfile.single
-      : federalSettings.filingStatus === "hoh"
-        ? selectedStateTaxProfile.hoh ?? selectedStateTaxProfile.single
-        : selectedStateTaxProfile.single;
   const federalSummaryAboveLineItems = federalSettings.aboveLineDeductionItems.filter((item) => item.deductionType);
   const federalSummaryItemizedItems = federalSettings.deductionItems.filter((item) => item.deductionType);
   const stateSummaryDeductionItems = stateSettings.deductionItems.filter((item) => item.deductionType);
@@ -7753,7 +7818,7 @@ export default function App() {
   useEffect(() => {
     if (authToken && hasLoadedStorage.current && storageState === "ready") void refreshPublicSummaryReports(false);
   }, [authToken, refreshPublicSummaryReports, storageState]);
-  const openSummaryReportDialog = (mode: "create" | "manage" | "publish") => {
+  const openSummaryReportDialog = (mode: "create" | "manage" | "publish" | "published") => {
     setIsTopbarMenuOpen(false);
     setSummaryReportDestination("new");
     setSummaryReportName(`${selectedStateCode} tax scenarios`);
@@ -7808,6 +7873,32 @@ export default function App() {
       setMcpTokenMessage(`Scenario report renamed. Public link: ${saved.publicUrl}`);
     } catch (error) {
       setSummaryReportDialogError(error instanceof Error ? error.message : "Scenario report could not be renamed.");
+    } finally {
+      setSummaryReportBusyId("");
+    }
+  };
+  const deleteSummaryReport = async (pageId: string) => {
+    if (!authToken) {
+      setSummaryReportDialogError("Sign in to delete published reports.");
+      return;
+    }
+    const entry = summaryLandingPageOptions.find(({ page }) => page.id === pageId);
+    if (!entry) return;
+    if (!window.confirm(`Delete the published report “${entry.page.name}”? Its public URL will stop working.`)) return;
+    setSummaryReportBusyId(pageId);
+    setSummaryReportDialogError("");
+    try {
+      await deletePublicSummaryReport(pageId, authToken);
+      setScenarioLandingPages((current) => current.filter((page) => page.id !== pageId));
+      setSummaryReportRenameDrafts((current) => {
+        const next = { ...current };
+        delete next[pageId];
+        return next;
+      });
+      setSelectedSummaryLandingPageId((current) => current === pageId ? "" : current);
+      setMcpTokenMessage("Published report deleted.");
+    } catch (error) {
+      setSummaryReportDialogError(error instanceof Error ? error.message : "Published report could not be deleted.");
     } finally {
       setSummaryReportBusyId("");
     }
@@ -8250,15 +8341,19 @@ export default function App() {
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
             <TopbarActionIcon name="report" />
-            <span>Create Summary Report</span>
+            <span>Create a Scenario</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
             <TopbarActionIcon name="report" />
-            <span>Manage Summary Reports</span>
+            <span>Manage Scenarios</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("publish")}>
             <TopbarActionIcon name="report" />
             <span>Publish Summary Report</span>
+          </button>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("published")}>
+            <TopbarActionIcon name="report" />
+            <span>Manage Published Reports</span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
@@ -9004,6 +9099,69 @@ export default function App() {
       return { ok: true, message: `Switched to ${navItem.label}.` };
     }
 
+    if (actionType === "updateSettings") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      const section = String(payload.section || "");
+      const values = payload.values && typeof payload.values === "object" && !Array.isArray(payload.values)
+        ? payload.values as Record<string, unknown>
+        : {};
+      const allowedFields: Record<string, string[]> = {
+        federal: ["filingStatus", "deductionMode", "extraOrdinaryIncome", "extraPreferredIncome", "extraOrdinaryItems", "extraPreferredItems", "aboveLineDeductionItems", "deductionItems", "mortgageInterest", "propertyTax", "standardDeduction", "saltCap"],
+        state: ["stateCode", "extraStateIncome", "deductionMode", "deductionItems", "mortgageInterest", "propertyTax", "standardDeduction"],
+        local: ["enabled", "localityId", "localityName", "residency", "rate", "nonresidentRate", "taxableBase"],
+        planner: ["federalWithholding", "stateWithholding"],
+        ui: ["incomePrimaryPeriod", "darkMode", "investmentFavorites", "selectedAssetIds"],
+      };
+      if (!allowedFields[section]) return { ok: false, message: `Rejected updateSettings: ${section || "(blank)"} is not an editable settings section.` };
+      const rejected = Object.keys(values).filter((field) => !allowedFields[section].includes(field));
+      if (rejected.length) return { ok: false, message: `Rejected updateSettings: unsupported ${section} field(s) ${rejected.join(", ")}.` };
+      if (Object.keys(values).length === 0) return { ok: false, message: "Rejected updateSettings: no settings were supplied." };
+
+      if (section === "ui") {
+        if (values.darkMode !== undefined && typeof values.darkMode !== "boolean") return { ok: false, message: "Rejected updateSettings: darkMode must be true or false." };
+        if (values.incomePrimaryPeriod !== undefined && values.incomePrimaryPeriod !== "annual" && values.incomePrimaryPeriod !== "monthly") return { ok: false, message: "Rejected updateSettings: incomePrimaryPeriod must be annual or monthly." };
+        if (values.investmentFavorites !== undefined && !Array.isArray(values.investmentFavorites)) return { ok: false, message: "Rejected updateSettings: investmentFavorites must be an array." };
+        if (values.selectedAssetIds !== undefined && !Array.isArray(values.selectedAssetIds)) return { ok: false, message: "Rejected updateSettings: selectedAssetIds must be an array." };
+      }
+
+      recordUndoCheckpoint();
+      if (section === "federal") setFederalSettings((current) => normalizeFederalSettings({ ...current, ...values }));
+      if (section === "state") setStateSettings((current) => normalizeStateSettings({ ...current, ...values }));
+      if (section === "local") setLocalTaxSettings((current) => normalizeLocalTaxSettings({ ...current, ...values }));
+      if (section === "planner") {
+        setPlannerSettings((current) => ({
+          ...current,
+          ...Object.fromEntries(Object.entries(values).map(([field, value]) => [field, Math.max(0, Number(value) || 0)])),
+        }));
+      }
+      if (section === "ui") {
+        if (Array.isArray(values.selectedAssetIds)) {
+          const validIds = new Set(investments.map((row) => row.id));
+          setSelectedInvestmentIds(values.selectedAssetIds.map(Number).filter((id) => validIds.has(id)));
+        }
+        const { selectedAssetIds: _selectedAssetIds, ...uiValues } = values;
+        setUiSettings((current) => ({
+          ...current,
+          ...uiValues,
+          investmentFavorites: Array.isArray(uiValues.investmentFavorites)
+            ? uiValues.investmentFavorites.map(String).filter(Boolean)
+            : current.investmentFavorites,
+        } as UiSettings));
+      }
+      return { ok: true, message: `Updated ${Object.keys(values).join(", ")} in ${section} settings; recalculation and backend save are queued.` };
+    }
+
+    if (actionType === "setWhatIf") {
+      const payload = ((action as any).payload || {}) as Record<string, unknown>;
+      if (typeof payload.enabled !== "boolean") return { ok: false, message: "Rejected setWhatIf: enabled must be true or false." };
+      const scope = String(payload.scope || "investments");
+      if (scope === "investments") setIsWhatIfActive(payload.enabled);
+      else if (scope === "federal") { setIsFederalTaxWhatIfOpen(payload.enabled); setActiveTab("federal"); }
+      else if (scope === "state") { setIsStateTaxWhatIfOpen(payload.enabled); setActiveTab("state"); }
+      else return { ok: false, message: `Rejected setWhatIf: ${scope} is not a supported scope.` };
+      return { ok: true, message: `${payload.enabled ? "Opened" : "Closed"} ${scope} What-If controls.` };
+    }
+
     if (actionType === "addRow") {
       const payload = ((action as any).payload || {}) as Record<string, unknown>;
       const config = getAssistantTableConfig(payload.tableId);
@@ -9150,8 +9308,8 @@ export default function App() {
           <section className="summary-report-dialog" role="dialog" aria-modal="true" aria-labelledby="summary-report-dialog-title">
             <div className="summary-report-dialog__header">
               <div>
-                <p className="eyebrow">{summaryReportDialogMode === "publish" ? "Public Landing Page" : "Scenario Library"}</p>
-                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "create" ? "Create summary report" : summaryReportDialogMode === "manage" ? "Manage summary reports" : "Publish summary report"}</h3>
+                <p className="eyebrow">{summaryReportDialogMode === "publish" || summaryReportDialogMode === "published" ? "Public Landing Pages" : "Scenario Library"}</p>
+                <h3 id="summary-report-dialog-title">{summaryReportDialogMode === "create" ? "Create a scenario" : summaryReportDialogMode === "manage" ? "Manage scenarios" : summaryReportDialogMode === "published" ? "Manage published reports" : "Publish summary report"}</h3>
               </div>
               <button className="summary-report-dialog__close" type="button" onClick={() => setSummaryReportDialogMode(null)} aria-label="Close scenario dialog">×</button>
             </div>
@@ -9159,6 +9317,8 @@ export default function App() {
               ? "Save the current workbook values as a private scenario. Nothing is published from this step."
               : summaryReportDialogMode === "manage"
                 ? "Add, rename, describe, or remove scenarios in your private scenario library."
+                : summaryReportDialogMode === "published"
+                  ? "View, open, rename, or permanently delete each report you have published."
                 : `Select up to ${PUBLISHED_SCENARIO_LIMIT} saved scenarios, tailor their descriptions, and publish them on one landing page with a visible public URL.`}</p>
 
             {summaryReportDialogMode === "create" ? (
@@ -9255,6 +9415,64 @@ export default function App() {
                 {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
                 <div className="summary-report-dialog__actions">
                   <button className="primary-button" type="button" onClick={() => setSummaryReportDialogMode(null)}>Done</button>
+                </div>
+              </>
+            ) : summaryReportDialogMode === "published" ? (
+              <>
+                <section className="summary-report-dialog__management summary-report-dialog__published" aria-labelledby="manage-published-reports-title">
+                  <div className="summary-report-dialog__management-heading">
+                    <div>
+                      <span>Published reports</span>
+                      <strong id="manage-published-reports-title">{summaryLandingPageOptions.length} published {summaryLandingPageOptions.length === 1 ? "report" : "reports"}</strong>
+                    </div>
+                    {isSummaryReportListLoading && <small>Refreshing…</small>}
+                  </div>
+                  {summaryLandingPageOptions.length === 0 ? (
+                    <p className="summary-report-dialog__empty">No reports have been published yet.</p>
+                  ) : (
+                    <div className="summary-report-dialog__report-list">
+                      {summaryLandingPageOptions.map(({ page, payload }) => {
+                        const draftName = summaryReportRenameDrafts[page.id] ?? page.name;
+                        const publicUrl = page.slug ? buildPublicSummaryReportUrl(page.slug, publicUsername) : "";
+                        const isBusy = summaryReportBusyId === page.id;
+                        const editScenarioIds = payload.scenarios.flatMap((publishedScenario) => {
+                          const savedScenario = uiSettings.savedScenarios.find((scenario) => scenario.id === publishedScenario.id)
+                            || uiSettings.savedScenarios.find((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(publishedScenario.name));
+                          return savedScenario ? [savedScenario.id] : [];
+                        });
+                        const editDescriptions = Object.fromEntries(payload.scenarios.flatMap((publishedScenario) => {
+                          const savedScenario = uiSettings.savedScenarios.find((scenario) => scenario.id === publishedScenario.id)
+                            || uiSettings.savedScenarios.find((scenario) => normalizeLookupKey(scenario.name) === normalizeLookupKey(publishedScenario.name));
+                          return savedScenario ? [[savedScenario.id, publishedScenario.description]] : [];
+                        }));
+                        return (
+                          <div className="summary-report-dialog__report-row" key={page.id}>
+                            <div className="summary-report-dialog__report-name">
+                              <input aria-label={`Published report name for ${page.name}`} value={draftName} maxLength={80} disabled={isBusy} onChange={(event) => { const value = event.target.value; setSummaryReportRenameDrafts((current) => ({ ...current, [page.id]: value })); setSummaryReportDialogError(""); }} />
+                              <small>{publicUrl} · {payload.scenarios.length} {payload.scenarios.length === 1 ? "scenario" : "scenarios"} · Updated {new Date(page.updatedAt).toLocaleDateString()}</small>
+                            </div>
+                            <div className="summary-report-dialog__report-actions">
+                              {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
+                              {publicUrl && <button className="ghost-button" type="button" disabled={isBusy} onClick={() => { void copySummaryPublishedUrl(publicUrl); }}>Copy URL</button>}
+                              <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => {
+                                openSummaryReportDialog("publish");
+                                setSummaryReportDestination("existing");
+                                setSelectedSummaryLandingPageId(page.id);
+                                setSummaryPublishScenarioIds(editScenarioIds);
+                                setSummaryPublishDescriptions(editDescriptions);
+                              }}>Edit scenarios</button>
+                              <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void renameSummaryReport(page.id); }}>{isBusy ? "Saving…" : "Save changes"}</button>
+                              <button className="ghost-button summary-report-dialog__remove" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void deleteSummaryReport(page.id); }}>Delete</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+                {summaryReportDialogError && <p className="summary-report-dialog__error" role="alert">{summaryReportDialogError}</p>}
+                <div className="summary-report-dialog__actions">
+                  <button className="primary-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => setSummaryReportDialogMode(null)}>Done</button>
                 </div>
               </>
             ) : (

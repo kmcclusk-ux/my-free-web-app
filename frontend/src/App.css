@@ -7985,3 +7985,62 @@ html.aftertaxus-dark-mode .status-card--navigable .status-card__nav {
   background: rgba(15, 23, 42, .74);
   color: #fee2e2;
 }
+
+.tax-thermometer__tick:focus-visible,
+.tax-thermometer__value:focus-visible,
+.tax-thermometer__distance-bubble:focus-visible {
+  outline: 2px solid #0b63f6;
+  outline-offset: 4px;
+}
+
+.thermometer-rail .tax-thermometer__value {
+  z-index: 24;
+}
+
+.thermometer-rail .tax-thermometer__value > span {
+  z-index: 25;
+  max-width: 132px;
+  overflow: hidden;
+}
+
+.thermometer-rail .tax-thermometer__value-label strong {
+  display: none;
+}
+
+.thermometer-rail .tax-thermometer__value:hover .tax-thermometer__value-label,
+.thermometer-rail .tax-thermometer__value:focus-visible .tax-thermometer__value-label {
+  min-width: max-content;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .22);
+}
+
+.thermometer-rail .tax-thermometer__value:hover .tax-thermometer__value-label strong,
+.thermometer-rail .tax-thermometer__value:focus-visible .tax-thermometer__value-label strong {
+  display: grid;
+  gap: 2px;
+}
+
+.thermometer-rail .tax-thermometer__distance-bubble {
+  z-index: 18;
+  right: calc(50% + 11px);
+  left: auto;
+  max-width: 132px;
+}
+
+.thermometer-rail .tax-thermometer__distance-bubble > span:not(.tax-thermometer__distance-arrow) {
+  display: none;
+}
+
+.thermometer-rail .tax-thermometer__distance-bubble:hover,
+.thermometer-rail .tax-thermometer__distance-bubble:focus-visible {
+  z-index: 28;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .22);
+}
+
+.thermometer-rail .tax-thermometer__distance-bubble:hover > span,
+.thermometer-rail .tax-thermometer__distance-bubble:focus-visible > span {
+  display: inline-flex;
+}
+
+.thermometer-rail .tax-thermometer__tick {
+  z-index: 16;
+}

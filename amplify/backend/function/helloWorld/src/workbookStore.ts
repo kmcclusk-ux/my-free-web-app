@@ -64,6 +64,13 @@ type PublicReportAlias = {
   updatedAt: string;
 };
 
+export type PublicUsernameRecord = {
+  username: string;
+  ownerSub: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const ENTITY_KEYS: WorkbookEntityKey[] = [
   "tab#investments",
   "tab#tickers",
@@ -139,6 +146,10 @@ function publicReportLookupWorkspaceId(slug: string) {
 
 function publicReportUserWorkspaceId(ownerSub: string) {
   return `publicReports#user#${ownerSub}`;
+}
+
+function publicUsernameLookupWorkspaceId(username: string) {
+  return `publicUsername#${username}`;
 }
 
 export class WorkbookStore {
@@ -386,6 +397,47 @@ export class WorkbookStore {
     };
   }
 
+  async getPublicUsernameOwner(username: string): Promise<string | null> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          workspaceId: publicUsernameLookupWorkspaceId(username),
+          entityKey: "profile#username",
+        },
+      })
+    );
+    const record = response.Item?.data as PublicUsernameRecord | undefined;
+    return record?.ownerSub || null;
+  }
+
+  async claimPublicUsername(username: string, ownerSub: string): Promise<PublicUsernameRecord> {
+    const now = toNowIso();
+    const record: PublicUsernameRecord = {
+      username,
+      ownerSub,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: publicUsernameLookupWorkspaceId(username),
+          entityKey: "profile#username",
+          ownerSub,
+          data: record,
+          updatedAt: now,
+        },
+        ConditionExpression: "attribute_not_exists(workspaceId) OR ownerSub = :ownerSub",
+        ExpressionAttributeValues: {
+          ":ownerSub": ownerSub,
+        },
+      })
+    );
+    return record;
+  }
+
   async getPublicReport(slug: string): Promise<PublicReportRecord | null> {
     const readLookup = async (lookupSlug: string) => {
       const response = await this.client.send(
@@ -500,5 +552,25 @@ export class WorkbookStore {
     }
 
     return savedRecord;
+  }
+
+  async deletePublicReport(ownerSub: string, reportId: string): Promise<boolean> {
+    const ownerKey = {
+      workspaceId: publicReportUserWorkspaceId(ownerSub),
+      entityKey: `report#${reportId}`,
+    };
+    const existingResponse = await this.client.send(new GetCommand({ TableName: this.tableName, Key: ownerKey }));
+    const existing = existingResponse.Item?.data as PublicReportRecord | undefined;
+    if (!existing || existing.ownerSub !== ownerSub || existing.reportId !== reportId) return false;
+
+    await this.client.send(new BatchWriteCommand({
+      RequestItems: {
+        [this.tableName]: [
+          { DeleteRequest: { Key: ownerKey } },
+          { DeleteRequest: { Key: { workspaceId: publicReportLookupWorkspaceId(existing.slug), entityKey: "report#public" } } },
+        ],
+      },
+    }));
+    return true;
   }
 }

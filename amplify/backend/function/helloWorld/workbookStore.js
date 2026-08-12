@@ -70,6 +70,9 @@ function publicReportLookupWorkspaceId(slug) {
 function publicReportUserWorkspaceId(ownerSub) {
     return `publicReports#user#${ownerSub}`;
 }
+function publicUsernameLookupWorkspaceId(username) {
+    return `publicUsername#${username}`;
+}
 class WorkbookStore {
     constructor() {
         this.tableName = getRequiredEnv("WORKBOOK_TABLE_NAME");
@@ -266,6 +269,41 @@ class WorkbookStore {
             revokedAt: revoked.revokedAt,
         };
     }
+    async getPublicUsernameOwner(username) {
+        const response = await this.client.send(new lib_dynamodb_1.GetCommand({
+            TableName: this.tableName,
+            Key: {
+                workspaceId: publicUsernameLookupWorkspaceId(username),
+                entityKey: "profile#username",
+            },
+        }));
+        const record = response.Item?.data;
+        return record?.ownerSub || null;
+    }
+    async claimPublicUsername(username, ownerSub) {
+        const now = toNowIso();
+        const record = {
+            username,
+            ownerSub,
+            createdAt: now,
+            updatedAt: now,
+        };
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: publicUsernameLookupWorkspaceId(username),
+                entityKey: "profile#username",
+                ownerSub,
+                data: record,
+                updatedAt: now,
+            },
+            ConditionExpression: "attribute_not_exists(workspaceId) OR ownerSub = :ownerSub",
+            ExpressionAttributeValues: {
+                ":ownerSub": ownerSub,
+            },
+        }));
+        return record;
+    }
     async getPublicReport(slug) {
         const readLookup = async (lookupSlug) => {
             const response = await this.client.send(new lib_dynamodb_1.GetCommand({
@@ -363,6 +401,25 @@ class WorkbookStore {
             }));
         }
         return savedRecord;
+    }
+    async deletePublicReport(ownerSub, reportId) {
+        const ownerKey = {
+            workspaceId: publicReportUserWorkspaceId(ownerSub),
+            entityKey: `report#${reportId}`,
+        };
+        const existingResponse = await this.client.send(new lib_dynamodb_1.GetCommand({ TableName: this.tableName, Key: ownerKey }));
+        const existing = existingResponse.Item?.data;
+        if (!existing || existing.ownerSub !== ownerSub || existing.reportId !== reportId)
+            return false;
+        await this.client.send(new lib_dynamodb_1.BatchWriteCommand({
+            RequestItems: {
+                [this.tableName]: [
+                    { DeleteRequest: { Key: ownerKey } },
+                    { DeleteRequest: { Key: { workspaceId: publicReportLookupWorkspaceId(existing.slug), entityKey: "report#public" } } },
+                ],
+            },
+        }));
+        return true;
     }
 }
 exports.WorkbookStore = WorkbookStore;
