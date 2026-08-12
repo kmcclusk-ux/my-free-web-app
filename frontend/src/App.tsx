@@ -4063,6 +4063,17 @@ function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateM
 }
 
 type TaxThermometerMode = "combined" | "federal" | "state" | "local" | "allocation" | "accountTax" | "accountType" | "taxTreatment";
+const TAX_THERMOMETER_MODE_STORAGE_KEY = "tax-thermometer-mode";
+const taxThermometerModes: TaxThermometerMode[] = ["combined", "federal", "state", "local", "allocation", "accountTax", "accountType", "taxTreatment"];
+
+function loadTaxThermometerMode(fallback: TaxThermometerMode) {
+  try {
+    const storedMode = window.localStorage.getItem(TAX_THERMOMETER_MODE_STORAGE_KEY) as TaxThermometerMode | null;
+    return storedMode && taxThermometerModes.includes(storedMode) ? storedMode : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mode: TaxThermometerMode; onChange: (mode: TaxThermometerMode) => void; stateCode: string; stateName: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -4127,8 +4138,17 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
 }
 
 function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows, initialMode = "allocation" }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }>; initialMode?: TaxThermometerMode }) {
-  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>(initialMode);
+  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>(() => loadTaxThermometerMode(initialMode));
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TAX_THERMOMETER_MODE_STORAGE_KEY, thermometerMode);
+    } catch {
+      // Continue without persistence when browser storage is unavailable.
+    }
+  }, [thermometerMode]);
+
   const totalTax = federalTax + stateTax + (localEnabled ? localTax : 0);
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
   const stateMarkers = getStateTaxRateMarkers(stateCode, filingStatus);
