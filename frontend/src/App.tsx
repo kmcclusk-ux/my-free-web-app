@@ -6844,10 +6844,23 @@ export default function App() {
   const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
   const grossFederalTaxable = ordinaryBeforeDeductions + preferredBeforeDeductions;
   const federalTaxableInvestmentIncome = flows.federalOrdinary + flows.federalPreferred;
-  const stateTaxFreeInvestmentDividends = derivedRows.reduce((total, row) => {
-    if (row.incomeItem || !isTaxableAccountStatus(row.taxStatus)) return total;
-    return total + Math.max(row.investmentIncome - row.investmentStateMonthly * 12, 0);
-  }, 0);
+  const stateTaxFreeInvestmentBreakdown = useMemo(() => {
+    const dividendsBySymbol = new Map<string, number>();
+    derivedRows.forEach((row) => {
+      if (row.incomeItem || !isTaxableAccountStatus(row.taxStatus)) return;
+      const exemptDividends = Math.max(row.investmentIncome - row.investmentStateMonthly * 12, 0);
+      if (exemptDividends <= 0) return;
+      const symbol = String(row.effectiveSymbol || row.symbol || "Unnamed investment").trim().toUpperCase();
+      dividendsBySymbol.set(symbol, (dividendsBySymbol.get(symbol) || 0) + exemptDividends);
+    });
+    return [...dividendsBySymbol.entries()]
+      .map(([symbol, dividends]) => ({ symbol, dividends }))
+      .sort((left, right) => right.dividends - left.dividends || left.symbol.localeCompare(right.symbol));
+  }, [derivedRows]);
+  const stateTaxFreeInvestmentDividends = stateTaxFreeInvestmentBreakdown.reduce((total, row) => total + row.dividends, 0);
+  const stateTaxFreeInvestmentSummary = stateTaxFreeInvestmentBreakdown.length
+    ? stateTaxFreeInvestmentBreakdown.map((row) => `${row.symbol} (${formatCurrencyDetailed(row.dividends)})`).join(", ")
+    : "None";
   const stateInvestmentAdjustment = flows.stateTaxable - federalTaxableInvestmentIncome;
   const federalWhatIfIncome = effectiveExtraOrdinaryIncome + effectiveExtraPreferredIncome;
   const stateGross = federalTaxableInvestmentIncome + stateInvestmentAdjustment + federalWhatIfIncome + effectiveExtraStateIncome;
@@ -9411,7 +9424,8 @@ export default function App() {
           <div className="tax-summary-modal__grid">
             <TaxSummarySection title="State taxable income" subtitle="Federal-taxable investment income is adjusted for state treatment before deductions.">
               <TaxSummaryRow label="Federal-taxable investments" value={formatCurrencyDetailed(federalTaxableInvestmentIncome)} />
-              <TaxSummaryRow label="State-tax-free investment dividends" value={formatCurrencyDetailed(stateTaxFreeInvestmentDividends)} note="Full annual investment income excluded from the state taxable base, including state-exempt Treasury and tax-free treatments in taxable accounts." />
+              <TaxSummaryRow label="State-tax-free investments" value={stateTaxFreeInvestmentSummary} note="Each symbol includes its annual dividends excluded from state tax. Holdings of the same symbol are combined." />
+              <TaxSummaryRow label="Total state-tax-free dividends" value={formatCurrencyDetailed(stateTaxFreeInvestmentDividends)} note="Full annual investment income excluded from the state taxable base, including state-exempt Treasury and tax-free treatments in taxable accounts." emphasis />
               <TaxSummaryRow label="State taxability adjustment" value={formatSignedCurrency(stateInvestmentAdjustment)} note="Captures state-exempt and state-only taxable investment treatment." />
               <TaxSummaryRow label="Federal What-If income" value={formatCurrencyDetailed(federalWhatIfIncome)} />
               <TaxSummaryRow label={`${selectedStateCode} extra income`} value={formatCurrencyDetailed(effectiveExtraStateIncome)} />
