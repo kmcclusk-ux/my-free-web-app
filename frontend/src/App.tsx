@@ -1327,6 +1327,12 @@ function normalizeLookupKey(value: unknown) {
 function normalizeTaxTreatmentKey(value: unknown) {
   return normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
 }
+function canonicalStateRuleForTaxTreatment(value: unknown) {
+  const key = normalizeTaxTreatmentKey(value);
+  if (["taxfree", "hold"].includes(key)) return "exempt";
+  if (["statetaxfree", "treasuryinterest", "ustreasuryinterest"].includes(key)) return "treasury-exempt";
+  return "";
+}
 function stockAnalysisDividendUrl(symbol: unknown, assetType: unknown = "ETF") {
   const normalizedSymbol = String(symbol || "").trim().toLowerCase();
   const section = normalizeLookupKey(assetType) === "stock" ? "stocks" : "etf";
@@ -2414,7 +2420,8 @@ function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean, rule?
   return amount * (pref ? fallback.preferredShare : fallback.ordinaryShare);
 }
 function stateTaxAdjust(amount: number, taxTreatment: string, _stateCode = "CA", rule?: TaxTreatmentRow) {
-  const stateRule = normalizeTaxTreatmentKey(rule?.stateRule || defaultTaxTreatmentRule(taxTreatment).stateRule);
+  const canonicalStateRule = canonicalStateRuleForTaxTreatment(taxTreatment);
+  const stateRule = normalizeTaxTreatmentKey(canonicalStateRule || rule?.stateRule || defaultTaxTreatmentRule(taxTreatment).stateRule);
   return ["exempt", "treasuryexempt"].includes(stateRule) ? 0 : amount;
 }
 function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: string, rule?: TaxTreatmentRow): AssetTaxTone {
@@ -2735,7 +2742,7 @@ function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number):
     label,
     ordinaryShare: ordinaryShare !== undefined ? normalizeRate(ordinaryShare) : defaults.ordinaryShare,
     preferredShare: preferredShare !== undefined ? normalizeRate(preferredShare) : defaults.preferredShare,
-    stateRule: workbookField(row, "stateRule", "state_rule", "state_treatment") ?? defaults.stateRule,
+    stateRule: canonicalStateRuleForTaxTreatment(label) || workbookField(row, "stateRule", "state_rule", "state_treatment") || defaults.stateRule,
     niitIncluded: niitIncluded !== undefined ? normalizeBoolean(niitIncluded) : defaults.niitIncluded,
     localCategory: workbookField(row, "localCategory", "local_category", "local_income_category") ?? defaults.localCategory,
     description: workbookField(row, "description", "desc", "explanation") ?? defaults.description,

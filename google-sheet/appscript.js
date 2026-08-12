@@ -839,6 +839,9 @@ function normalizeTaxTreatmentExportRecord_(record) {
   var niitIncluded = firstExportValue_(record, ['niitIncluded', 'niit_included', 'include_in_niit', 'col_5']);
   var localCategory = firstExportValue_(record, ['localCategory', 'local_category', 'local_income_category', 'col_6']);
   var description = firstExportValue_(record, ['description', 'desc', 'explanation', 'col_7']);
+  var normalizedLabel = String(label || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalizedLabel === 'taxfree' || normalizedLabel === 'hold') stateRule = 'exempt';
+  if (normalizedLabel === 'statetaxfree' || normalizedLabel === 'treasuryinterest' || normalizedLabel === 'ustreasuryinterest') stateRule = 'treasury-exempt';
   if (!exportValueIsBlank_(label)) {
     record.label = label;
     record.tax_treatment = label;
