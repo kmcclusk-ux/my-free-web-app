@@ -5038,7 +5038,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, tickerMap, stat
       if (firstSelectedRow) scrollInvestmentElementIntoTableView(firstSelectedRow, { block: "center", inline: "nearest" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [selectedAssetIds, displayedRows]);
+  // Only reposition the grid when the highlighted-row selection itself changes.
+  // Row edits (including Included and WhatIf checkboxes) rebuild displayedRows and
+  // must leave the user's current scroll position untouched.
+  }, [selectedIdsSignature]);
   const getRowClassName = (row: InvestmentRow) => {
     const classes = ["investment-row"];
     if (Math.abs(toNumber(row.totalInvestment)) < 0.005) {
