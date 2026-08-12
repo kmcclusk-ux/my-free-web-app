@@ -8003,6 +8003,11 @@ export default function App() {
   };
   const openAuthEntry = (mode: AuthEntryMode) => {
     setIsTopbarMenuOpen(false);
+    if (mode === "signIn") {
+      setSignInPublicUsernameError("");
+      void startCognitoSignIn("", "signIn");
+      return;
+    }
     setAuthEntryMode(mode);
     setSignInPublicUsernameError("");
     setIsAuthEntryOpen(true);
