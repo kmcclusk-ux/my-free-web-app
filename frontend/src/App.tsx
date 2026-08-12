@@ -5968,6 +5968,27 @@ function PublicReportStatus({ title, message }: { title: string; message: string
 }
 
 function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload }) {
+  const [plainTextScenario, setPlainTextScenario] = useState<{ name: string; text: string } | null>(null);
+  const [plainTextCopied, setPlainTextCopied] = useState(false);
+  const buildScenarioPlainText = (scenario: SummaryReportScenario) => {
+    const stateCode = scenario.stateCode || payload.stateCode;
+    const filingStatus = scenario.filingStatus || payload.filingStatus;
+    const localTaxText = scenario.localTax > 0 ? `, ${formatCurrencyDetailed(scenario.localTax)} local` : "";
+    return `${scenario.name} (${filingStatusLabels[filingStatus]}, ${stateCode}): ${formatCurrencyDetailed(scenario.income)} annual income, including ${formatCurrencyDetailed(scenario.investmentIncome)} of investment income. Estimated tax is ${formatCurrencyDetailed(scenario.totalTax)} (${formatCurrencyDetailed(scenario.federalTax)} federal, ${formatCurrencyDetailed(scenario.stateTax)} state${localTaxText}), for a ${formatPercent(scenario.effectiveTaxRate)} effective rate and ${scenario.marginalTaxRateLabel} marginal rate. Estimated after-tax income: ${formatCurrencyDetailed(scenario.afterTaxIncome)}. Planning estimate; actual results depend on deductions, credits, and other tax details.`;
+  };
+  const openScenarioPlainText = (scenario: SummaryReportScenario) => {
+    setPlainTextCopied(false);
+    setPlainTextScenario({ name: scenario.name, text: buildScenarioPlainText(scenario) });
+  };
+  const copyScenarioPlainText = async () => {
+    if (!plainTextScenario) return;
+    try {
+      await navigator.clipboard.writeText(plainTextScenario.text);
+      setPlainTextCopied(true);
+    } catch {
+      setPlainTextCopied(false);
+    }
+  };
   return (
     <div className="summary-report-page summary-scenarios-page">
       <header className="summary-scenarios-page__header">
@@ -6007,6 +6028,7 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
                     <div>
                       <div className="summary-scenario-card__title-line">
                         <h2>{scenario.name}</h2>
+                        <button className="summary-scenario-card__plain-text-button" type="button" onClick={() => openScenarioPlainText(scenario)}>Plain-text summary</button>
                         <span>{scenarioStateCode} · {filingStatusLabels[scenarioFilingStatus]}</span>
                       </div>
                       <p>{scenario.description}</p>
@@ -6044,6 +6066,22 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
           <a href="https://www.aftertaxus.com/">See your own scenario</a>
         </footer>
       </main>
+      {plainTextScenario && createPortal(
+        <div className="scenario-plain-text-popup__backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlainTextScenario(null); }}>
+          <section className="scenario-plain-text-popup" role="dialog" aria-modal="true" aria-labelledby="scenario-plain-text-title">
+            <header>
+              <div><span>Ready to paste</span><h2 id="scenario-plain-text-title">{plainTextScenario.name}</h2></div>
+              <button type="button" onClick={() => setPlainTextScenario(null)} aria-label="Close plain-text summary">×</button>
+            </header>
+            <textarea readOnly value={plainTextScenario.text} rows={8} onFocus={(event) => event.currentTarget.select()} aria-label="Plain-text tax implications" />
+            <div className="scenario-plain-text-popup__actions">
+              <small>{plainTextCopied ? "Copied to clipboard." : "Plain text formatted for forums and message boards."}</small>
+              <button className="primary-button" type="button" onClick={() => void copyScenarioPlainText()}>{plainTextCopied ? "Copied" : "Copy text"}</button>
+            </div>
+          </section>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
