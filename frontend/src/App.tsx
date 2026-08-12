@@ -1039,7 +1039,7 @@ const initialTickers: TickerRow[] = ([
 ] as Array<Omit<TickerRow, "incomeItem">>).map((row) => ({ ...row, incomeItem: isIncomeAssetType(row.assetType) || isDefaultIncomeTicker(row) }));
 
 const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name, includeInAllocation: true }));
-function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "label" | "includeInAllocation"> {
+export function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "label" | "includeInAllocation"> {
   const key = normalizeTaxTreatmentKey(label);
   const base = { ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest", description: "Ordinary taxable investment income" };
   if (["taxfree", "hold"].includes(key)) return { ...base, ordinaryShare: 0, stateRule: "exempt", niitIncluded: false, localCategory: "", description: "Excluded from current federal, state, local, and NIIT taxable income" };
@@ -1053,7 +1053,8 @@ function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "l
   if (["shorttermgain"].includes(key)) return { ...base, localCategory: "capitalGains", description: "Short-term capital gain taxed as ordinary income" };
   return base;
 }
-const initialTaxTreatments: TaxTreatmentRow[] = ["tax-free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"].map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label), includeInAllocation: true }));
+export const defaultTaxTreatmentLabels = ["tax-free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"] as const;
+const initialTaxTreatments: TaxTreatmentRow[] = defaultTaxTreatmentLabels.map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label), includeInAllocation: true }));
 const assetTypeOptions = ["ETF", "Stock", "Income"];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus, includeInAllocation: true }));
 const initialAccountTypes: AccountTypeRow[] = [
@@ -1324,10 +1325,10 @@ function normalizeLookupKey(value: unknown) {
     .toLowerCase()
     .replace(/\s+/g, " ");
 }
-function normalizeTaxTreatmentKey(value: unknown) {
+export function normalizeTaxTreatmentKey(value: unknown) {
   return normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
 }
-function canonicalStateRuleForTaxTreatment(value: unknown) {
+export function canonicalStateRuleForTaxTreatment(value: unknown) {
   const key = normalizeTaxTreatmentKey(value);
   if (["taxfree", "hold"].includes(key)) return "exempt";
   if (["statetaxfree", "treasuryinterest", "ustreasuryinterest"].includes(key)) return "treasury-exempt";
@@ -2409,7 +2410,7 @@ function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
-function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean, rule?: TaxTreatmentRow) {
+export function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean, rule?: TaxTreatmentRow) {
   if (rule) {
     const ordinary = Math.max(0, Math.min(1, toNumber(rule.ordinaryShare)));
     const preferred = Math.max(0, Math.min(1, toNumber(rule.preferredShare)));
@@ -2419,7 +2420,7 @@ function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean, rule?
   const fallback = defaultTaxTreatmentRule(taxTreatment);
   return amount * (pref ? fallback.preferredShare : fallback.ordinaryShare);
 }
-function stateTaxAdjust(amount: number, taxTreatment: string, _stateCode = "CA", rule?: TaxTreatmentRow) {
+export function stateTaxAdjust(amount: number, taxTreatment: string, _stateCode = "CA", rule?: TaxTreatmentRow) {
   const canonicalStateRule = canonicalStateRuleForTaxTreatment(taxTreatment);
   const stateRule = normalizeTaxTreatmentKey(canonicalStateRule || rule?.stateRule || defaultTaxTreatmentRule(taxTreatment).stateRule);
   return ["exempt", "treasuryexempt"].includes(stateRule) ? 0 : amount;

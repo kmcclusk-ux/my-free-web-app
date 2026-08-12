@@ -5,9 +5,12 @@ applications:
       phases:
         preBuild:
           commands:
+            - npm ci --prefix ..
             - npm ci
         build:
           commands:
+            - npm run test:tax-treatments --prefix ..
+            - export VITE_APP_VERSION="${AWS_BRANCH}-$(echo ${CODEBUILD_RESOLVED_SOURCE_VERSION:-local} | cut -c1-7)"
             - npm run build
       artifacts:
         baseDirectory: dist

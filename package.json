@@ -8,7 +8,8 @@
     "build": "cd amplify/backend/function/helloWorld && npm run build",
     "clean": "rimraf build",
     "rebuild": "npm run clean && npm run build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:tax-treatments": "vitest run tests/tax-treatment.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
