@@ -7933,7 +7933,7 @@ export default function App() {
   const openPublishedReportPlainText = (name: string, payload: SummaryReportPayload) => {
     const scenarioText = payload.scenarios.map((scenario) => {
       const investmentAmount = typeof scenario.investments === "number" ? scenario.investments : payload.investments;
-      return `${scenario.name}\nIncome: ${formatCurrency(scenario.income)}\nInvestments: ${formatCurrency(investmentAmount)}\nMarginal tax rate: ${scenario.marginalTaxRateLabel}`;
+      return `${scenario.name}\nMarginal tax rate: ${scenario.marginalTaxRateLabel}\nTotal taxes paid: ${formatCurrency(scenario.totalTax)}\nIncome: ${formatCurrency(scenario.income)}\nInvestments: ${formatCurrency(investmentAmount)}`;
     }).join("\n\n");
     setPublishedReportPlainTextCopied(false);
     setPublishedReportPlainText({ name, text: `${name}\n\n${scenarioText}` });
