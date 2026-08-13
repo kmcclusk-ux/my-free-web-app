@@ -7932,11 +7932,12 @@ export default function App() {
   };
   const openPublishedReportPlainText = (name: string, payload: SummaryReportPayload) => {
     const scenarioText = payload.scenarios.map((scenario) => {
-      const investmentAmount = typeof scenario.investments === "number" ? scenario.investments : payload.investments;
-      return `${scenario.name}\nMarginal tax rate: ${scenario.marginalTaxRateLabel}\nTotal taxes paid: ${formatCurrency(scenario.totalTax)}\nIncome: ${formatCurrency(scenario.income)}\nInvestments: ${formatCurrency(investmentAmount)}`;
+      const taxRate = scenario.income > 0 ? Math.max(0, Math.min(scenario.totalTax / scenario.income, 1)) : 0;
+      const centsKept = ((1 - taxRate) * 100).toFixed(1);
+      return `For an income of ${formatCurrency(scenario.income)}\nGovernment takes ${formatPercent(taxRate)}. You get to keep ${centsKept} cents for every dollar earned.`;
     }).join("\n\n");
     setPublishedReportPlainTextCopied(false);
-    setPublishedReportPlainText({ name, text: `${name}\n\n${scenarioText}` });
+    setPublishedReportPlainText({ name, text: scenarioText });
   };
   const copyPublishedReportPlainText = async () => {
     if (!publishedReportPlainText) return;
