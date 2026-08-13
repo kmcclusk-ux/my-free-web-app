@@ -6139,6 +6139,7 @@ export default function App() {
   const [mcpTokenMessage, setMcpTokenMessage] = useState("");
   const [isCreatingMcpToken, setIsCreatingMcpToken] = useState(false);
   const [isTopbarMenuOpen, setIsTopbarMenuOpen] = useState(false);
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
   const [summaryReportPayload, setSummaryReportPayload] = useState<SummaryReportPayload | null>(readSummaryReportFromUrl);
   const [publicReportLoadState, setPublicReportLoadState] = useState<"idle" | "loading" | "error">(() => !readSummaryReportFromUrl() && readPublicReportSlugFromUrl() ? "loading" : "idle");
   const [publicReportLoadError, setPublicReportLoadError] = useState("");
@@ -6384,12 +6385,14 @@ export default function App() {
     const closeOnOutsideClick = (event: MouseEvent | TouchEvent) => {
       if (!topbarMenuRef.current?.contains(event.target as Node)) {
         setIsTopbarMenuOpen(false);
+        setIsShareMenuOpen(false);
       }
     };
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsTopbarMenuOpen(false);
+        setIsShareMenuOpen(false);
       }
     };
 
@@ -7820,6 +7823,7 @@ export default function App() {
   }, [authToken, refreshPublicSummaryReports, storageState]);
   const openSummaryReportDialog = (mode: "create" | "manage" | "publish" | "published") => {
     setIsTopbarMenuOpen(false);
+    setIsShareMenuOpen(false);
     setSummaryReportDestination("new");
     setSummaryReportName(`${selectedStateCode} tax scenarios`);
     setSummaryScenarioName(`Scenario ${uiSettings.savedScenarios.length + 1}`);
@@ -8283,7 +8287,7 @@ export default function App() {
   ) : null;
   const actionMenu = (
     <div className="topbar-menu app-action-menu" ref={topbarMenuRef}>
-      <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => !current)} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
+      <button className="ai-button topbar-menu__trigger app-action-menu__trigger" type="button" onClick={() => setIsTopbarMenuOpen((current) => { if (current) setIsShareMenuOpen(false); return !current; })} aria-haspopup="menu" aria-expanded={isTopbarMenuOpen} aria-label="Open actions menu" title="Menu">
         <TopbarActionIcon name="menu" />
         <AfterTaxUSMark className="app-action-menu__mark" idSuffix="menu" />
         <span className="app-action-menu__brand">AfterTax US</span>
@@ -8339,22 +8343,33 @@ export default function App() {
             <TopbarActionIcon name="theme" />
             <span>{uiSettings.darkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
-            <TopbarActionIcon name="report" />
-            <span>Create a Scenario</span>
-          </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
-            <TopbarActionIcon name="report" />
-            <span>Manage Scenarios</span>
-          </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("publish")}>
-            <TopbarActionIcon name="report" />
-            <span>Publish Summary Report</span>
-          </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("published")}>
-            <TopbarActionIcon name="report" />
-            <span>Manage Published Reports</span>
-          </button>
+          <div className="topbar-menu__submenu">
+            <button className="topbar-menu__item topbar-menu__submenu-trigger" type="button" role="menuitem" aria-haspopup="menu" aria-expanded={isShareMenuOpen} onClick={() => setIsShareMenuOpen((current) => !current)}>
+              <TopbarActionIcon name="report" />
+              <span>Share</span>
+              <span className="topbar-menu__submenu-chevron" aria-hidden="true">›</span>
+            </button>
+            {isShareMenuOpen && (
+              <div className="topbar-menu__panel topbar-menu__submenu-panel" role="menu" aria-label="Share actions">
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
+                  <TopbarActionIcon name="report" />
+                  <span>Create a Scenario</span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
+                  <TopbarActionIcon name="report" />
+                  <span>Manage Scenarios</span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("publish")}>
+                  <TopbarActionIcon name="report" />
+                  <span>Publish Summary Report</span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("published")}>
+                  <TopbarActionIcon name="report" />
+                  <span>Manage Published Reports</span>
+                </button>
+              </div>
+            )}
+          </div>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
             <span>Save Version</span>
