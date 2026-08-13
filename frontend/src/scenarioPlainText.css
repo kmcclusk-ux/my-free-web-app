@@ -11,6 +11,7 @@
 }
 
 .scenario-plain-text-popup__backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgba(15, 23, 42, 0.58); }
+.published-report-plain-text-popup__backdrop { z-index: 5300; }
 .scenario-plain-text-popup { width: min(640px, 100%); border-radius: 18px; background: #fff; color: #0f172a; padding: 1.25rem; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28); }
 .scenario-plain-text-popup header, .scenario-plain-text-popup__actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .scenario-plain-text-popup header span, .scenario-plain-text-popup__actions small { color: #64748b; font-size: 0.78rem; }

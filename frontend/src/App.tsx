@@ -266,6 +266,7 @@ type SummaryReportScenario = {
   name: string;
   source: "current" | "reference";
   income: number;
+  investments?: number;
   wages: number;
   ordinaryIncome: number;
   preferredIncome: number;
@@ -512,6 +513,7 @@ function decodeSummaryReportScenario(value: unknown, index: number): SummaryRepo
     name: typeof scenario.name === "string" && scenario.name.trim() ? scenario.name.trim() : `Scenario ${index + 1}`,
     source: scenario.source === "current" ? "current" : "reference",
     income: scenario.income,
+    investments: typeof scenario.investments === "number" ? scenario.investments : undefined,
     wages: typeof scenario.wages === "number" ? scenario.wages : 0,
     ordinaryIncome: typeof scenario.ordinaryIncome === "number" ? scenario.ordinaryIncome : 0,
     preferredIncome: typeof scenario.preferredIncome === "number" ? scenario.preferredIncome : 0,
@@ -555,6 +557,7 @@ function decodeSummaryReportPayload(value: string): SummaryReportPayload | null 
       name: "Current modeled scenario",
       source: "current" as const,
       income: parsed.income,
+      investments: parsed.investments,
       wages: 0,
       ordinaryIncome: 0,
       preferredIncome: 0,
@@ -6106,6 +6109,8 @@ export default function App() {
   const [summaryScenarioPendingDeleteKey, setSummaryScenarioPendingDeleteKey] = useState("");
   const [summaryReportBusyId, setSummaryReportBusyId] = useState("");
   const [summaryPublishedUrl, setSummaryPublishedUrl] = useState("");
+  const [publishedReportPlainText, setPublishedReportPlainText] = useState<{ name: string; text: string } | null>(null);
+  const [publishedReportPlainTextCopied, setPublishedReportPlainTextCopied] = useState(false);
   const [isSummaryReportListLoading, setIsSummaryReportListLoading] = useState(false);
   const [scenarioLandingPages, setScenarioLandingPages] = useState<ScenarioLandingPage[]>([]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
@@ -6373,11 +6378,20 @@ export default function App() {
   useEffect(() => {
     if (!summaryReportDialogMode) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSummaryReportDialogMode(null);
+      if (event.key === "Escape" && !publishedReportPlainText) setSummaryReportDialogMode(null);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [summaryReportDialogMode]);
+  }, [publishedReportPlainText, summaryReportDialogMode]);
+
+  useEffect(() => {
+    if (!publishedReportPlainText) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPublishedReportPlainText(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [publishedReportPlainText]);
 
   useEffect(() => {
     if (!isTopbarMenuOpen) return;
@@ -7746,6 +7760,7 @@ export default function App() {
     name,
     source: "current",
     income: currentSummaryReportPayload.income,
+    investments: currentSummaryReportPayload.investments,
     wages: effectiveW2Income,
     ordinaryIncome: ordinaryBeforeDeductions,
     preferredIncome: preferredBeforeDeductions,
@@ -7913,6 +7928,23 @@ export default function App() {
       setMcpTokenMessage("Public summary report URL copied.");
     } catch {
       setMcpTokenMessage("Could not copy the public summary report URL.");
+    }
+  };
+  const openPublishedReportPlainText = (name: string, payload: SummaryReportPayload) => {
+    const scenarioText = payload.scenarios.map((scenario) => {
+      const investmentAmount = typeof scenario.investments === "number" ? scenario.investments : payload.investments;
+      return `${scenario.name}\nIncome: ${formatCurrency(scenario.income)}\nInvestments: ${formatCurrency(investmentAmount)}\nMarginal tax rate: ${scenario.marginalTaxRateLabel}`;
+    }).join("\n\n");
+    setPublishedReportPlainTextCopied(false);
+    setPublishedReportPlainText({ name, text: `${name}\n\n${scenarioText}` });
+  };
+  const copyPublishedReportPlainText = async () => {
+    if (!publishedReportPlainText) return;
+    try {
+      await navigator.clipboard.writeText(publishedReportPlainText.text);
+      setPublishedReportPlainTextCopied(true);
+    } catch {
+      setPublishedReportPlainTextCopied(false);
     }
   };
   const saveCurrentScenario = () => {
@@ -9469,6 +9501,7 @@ export default function App() {
                             <div className="summary-report-dialog__report-actions">
                               {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
                               {publicUrl && <button className="ghost-button" type="button" disabled={isBusy} onClick={() => { void copySummaryPublishedUrl(publicUrl); }}>Copy URL</button>}
+                              <button className="ghost-button" type="button" disabled={isBusy} onClick={() => openPublishedReportPlainText(page.name, payload)}>Plain text</button>
                               <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => {
                                 openSummaryReportDialog("publish");
                                 setSummaryReportDestination("existing");
@@ -9594,6 +9627,7 @@ export default function App() {
                             <div className="summary-report-dialog__report-actions">
                               {publicUrl && <a className="ghost-button" href={publicUrl} target="_blank" rel="noreferrer">Open</a>}
                               {publicUrl && <button className="ghost-button" type="button" onClick={() => { void copySummaryPublishedUrl(publicUrl); }}>Copy</button>}
+                              <button className="ghost-button" type="button" onClick={() => openPublishedReportPlainText(page.name, payload)}>Plain text</button>
                               <button className="ghost-button" type="button" disabled={Boolean(summaryReportBusyId)} onClick={() => { void renameSummaryReport(page.id); }}>{summaryReportBusyId === page.id ? "Saving…" : "Save name"}</button>
                             </div>
                           </div>
@@ -9610,6 +9644,22 @@ export default function App() {
                 </div>
               </>
             )}
+          </section>
+        </div>,
+        document.body
+      )}
+      {publishedReportPlainText && createPortal(
+        <div className="scenario-plain-text-popup__backdrop published-report-plain-text-popup__backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPublishedReportPlainText(null); }}>
+          <section className="scenario-plain-text-popup" role="dialog" aria-modal="true" aria-labelledby="published-report-plain-text-title">
+            <header>
+              <div><span>Ready to paste</span><h2 id="published-report-plain-text-title">{publishedReportPlainText.name}</h2></div>
+              <button type="button" onClick={() => setPublishedReportPlainText(null)} aria-label="Close plain-text report">&times;</button>
+            </header>
+            <textarea readOnly value={publishedReportPlainText.text} rows={Math.min(Math.max(publishedReportPlainText.text.split("\n").length + 1, 8), 18)} onFocus={(event) => event.currentTarget.select()} aria-label="Plain-text published report" />
+            <div className="scenario-plain-text-popup__actions">
+              <small>{publishedReportPlainTextCopied ? "Copied to clipboard." : "Plain text formatted for forums and message boards."}</small>
+              <button className="primary-button" type="button" onClick={() => void copyPublishedReportPlainText()}>{publishedReportPlainTextCopied ? "Copied" : "Copy text"}</button>
+            </div>
           </section>
         </div>,
         document.body
