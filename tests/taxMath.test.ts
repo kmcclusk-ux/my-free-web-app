@@ -16,6 +16,37 @@ describe("backend payroll and after-tax calculations", () => {
     expect(result.total).toBeCloseTo(19318.2, 2);
   });
 
+  test("430k of California W2 income includes all FICA and SDI in jurisdiction and plan totals", () => {
+    const payroll = calculateW2PayrollTax(430000, "mfj", "CA");
+    expect(payroll.federal.socialSecurity).toBeCloseTo(10918.2, 2);
+    expect(payroll.federal.medicare).toBeCloseTo(6235, 2);
+    expect(payroll.federal.additionalMedicare).toBeCloseTo(1620, 2);
+    expect(payroll.federal.total).toBeCloseTo(18773.2, 2);
+    expect(payroll.state.total).toBeCloseTo(5160, 2);
+    expect(payroll.total).toBeCloseTo(23933.2, 2);
+
+    const plan = calculateTaxPlan2025({
+      filingStatus: "mfj",
+      state: "CA",
+      ordinaryIncomeExcludingSocialSecurity: 430000,
+      preferredIncome: 0,
+      stateGrossIncome: 430000,
+      totalIncome: 430000,
+      displayIncome: 430000,
+      federalDeductionMode: "standard",
+      stateDeductionMode: "standard",
+      stateStandardDeduction: 11000,
+      w2Income: 430000,
+    });
+
+    expect(plan.federal.payrollTax).toBeCloseTo(18773.2, 2);
+    expect(plan.federal.total).toBeCloseTo(plan.federal.incomeTax + 18773.2, 2);
+    expect(plan.state.payrollTax).toBeCloseTo(5160, 2);
+    expect(plan.state.total).toBeCloseTo(plan.state.incomeTax + 5160, 2);
+    expect(plan.totalTax).toBeCloseTo(plan.federal.total + plan.state.total + plan.local.tax, 2);
+    expect(plan.afterTaxIncome).toBeCloseTo(430000 - plan.totalTax, 2);
+  });
+
   test("W2 payroll tax has explicit coverage for all states plus DC", () => {
     const supportedCodes = getSupportedW2PayrollTaxStateCodes();
     expect(supportedCodes).toHaveLength(51);

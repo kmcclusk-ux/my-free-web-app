@@ -4029,7 +4029,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   );
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTax, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, stateBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows, initialMode = "allocation" }: { federalTaxable: number; stateTaxable: number; federalTax: number; stateTax: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; stateBrackets: LocalStateTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }>; initialMode?: TaxThermometerMode }) {
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federalIncomeTax, federalPayrollTax, stateTax, stateIncomeTax, statePayrollTax, statePayrollLabel, totalIncome, w2Income, marginalPayrollRate, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, stateBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows, initialMode = "allocation" }: { federalTaxable: number; stateTaxable: number; federalTax: number; federalIncomeTax: number; federalPayrollTax: number; stateTax: number; stateIncomeTax: number; statePayrollTax: number; statePayrollLabel: string; totalIncome: number; w2Income: number; marginalPayrollRate: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; stateBrackets: LocalStateTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }>; initialMode?: TaxThermometerMode }) {
   const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>(() => loadTaxThermometerMode(initialMode));
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -4052,13 +4052,14 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   const localBaseRateValue = localEnabled ? (localBrackets[0]?.rate ?? localMarginalRate) : 0;
   const localBaseRateLabel = formatPercent(localBaseRateValue);
   const hasNoStateIncomeTax = stateMarkers.length === 0 && stateTax === 0;
-  const federalEffectiveRate = federalTaxable > 0 ? federalTax / federalTaxable : 0;
-  const stateEffectiveRate = stateTaxable > 0 ? stateTax / stateTaxable : 0;
-  const combinedTaxable = Math.max(federalTaxable, stateTaxable, localEnabled ? localTaxable : 0);
+  const allTaxRateBase = Math.max(totalIncome, federalTaxable, stateTaxable, localEnabled ? localTaxable : 0);
+  const federalEffectiveRate = allTaxRateBase > 0 ? federalTax / allTaxRateBase : 0;
+  const stateEffectiveRate = allTaxRateBase > 0 ? stateTax / allTaxRateBase : 0;
+  const combinedTaxable = allTaxRateBase;
   const federalMarginalRate = getReachedTaxRateValue(federalMarkers, federalTaxable, "10%");
   const stateMarginalRate = getReachedTaxRateValue(stateMarkers, stateTaxable, stateBaseRateLabel);
   const niitMarginalRate = combinedTaxable >= niitThresholdForStatus(filingStatus) ? 0.038 : 0;
-  const combinedMarginalRate = federalMarginalRate + stateMarginalRate + (localEnabled ? localMarginalRate : 0) + niitMarginalRate;
+  const combinedMarginalRate = federalMarginalRate + stateMarginalRate + (localEnabled ? localMarginalRate : 0) + niitMarginalRate + (w2Income > 0 ? marginalPayrollRate : 0);
   const combinedBaseRateLabel = formatPercent(0.10 + rateLabelToDecimal(stateBaseRateLabel) + localBaseRateValue);
   const activeAllocationRows = thermometerMode === "accountTax" ? accountTaxAllocationRows : thermometerMode === "accountType" ? accountTypeAllocationRows : thermometerMode === "taxTreatment" ? taxTreatmentAllocationRows : allocationRows;
   const allocationTotal = activeAllocationRows.reduce((sum, row) => sum + row.amount, 0);
@@ -4113,14 +4114,16 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
   ];
   const combinedMarkers = buildCombinedTaxRateMarkers(federalMarkers, stateMarkers, stateCode, stateName, stateBaseRateLabel, filingStatus, localMarkers, localName, localBaseRateLabel);
   const federalStats: ThermometerStat[] = [
-    { label: "Federal tax", value: formatCurrencyDetailed(federalTax), tone: "tax" },
-    { label: "Effective", value: formatPercent(federalEffectiveRate), tone: "taxable" },
-    { label: "Top bracket", value: getReachedTaxRateLabel(federalOrdinaryRateMarkers[filingStatus], federalTaxable, "10%"), tone: "income" },
+    { label: "Income tax", value: formatCurrencyDetailed(federalIncomeTax), tone: "tax" },
+    { label: "FICA payroll", value: formatCurrencyDetailed(federalPayrollTax), tone: "tax" },
+    { label: "Total federal", value: formatCurrencyDetailed(federalTax), tone: "tax" },
+    { label: "All-in effective", value: formatPercent(federalEffectiveRate), tone: "taxable" },
   ];
   const stateStats: ThermometerStat[] = [
-    { label: `${stateCode} tax`, value: formatCurrencyDetailed(stateTax), tone: "tax" },
-    { label: "Effective", value: formatPercent(stateEffectiveRate), tone: "taxable" },
-    { label: "Top bracket", value: stateMarkers.length ? getReachedTaxRateLabel(stateMarkers, stateTaxable, "1%") : "state schedule", tone: "income" },
+    { label: "Income tax", value: formatCurrencyDetailed(stateIncomeTax), tone: "tax" },
+    { label: statePayrollLabel, value: formatCurrencyDetailed(statePayrollTax), tone: "tax" },
+    { label: `Total ${stateCode}`, value: formatCurrencyDetailed(stateTax), tone: "tax" },
+    { label: "All-in effective", value: formatPercent(stateEffectiveRate), tone: "taxable" },
   ];
   const localStats: ThermometerStat[] = [
     { label: "Local tax", value: formatCurrencyDetailed(localTax), tone: "tax" },
@@ -4179,7 +4182,12 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, stateTa
           taxableIncome: combinedTaxable,
           values: combinedValues,
           markers: combinedMarkers,
-          stats: [],
+          stats: [
+            { label: "Federal + FICA", value: formatCurrencyDetailed(federalTax), tone: "tax" },
+            { label: `${stateCode} + payroll`, value: formatCurrencyDetailed(stateTax), tone: "tax" },
+            ...(localEnabled ? [{ label: "Local tax", value: formatCurrencyDetailed(localTax), tone: "tax" as const }] : []),
+            { label: "All-in effective", value: formatPercent(allTaxRateBase > 0 ? totalTax / allTaxRateBase : 0), tone: "taxable" as const },
+          ],
           footerLabel: "",
           footerValue: "",
           baseRateLabel: combinedBaseRateLabel,
@@ -9667,6 +9675,7 @@ export default function App() {
               <TaxSummaryRow label="Additional Medicare" value={formatCurrencyDetailed(w2PayrollTax.federal.additionalMedicare)} />
               <TaxSummaryRow label="Total federal tax and payroll" value={formatCurrencyDetailed(federalTaxWithPayroll)} emphasis />
               <TaxSummaryRow label="Effective federal income-tax rate" value={formatPercent(grossFederalTaxable > 0 ? federalIncomeTaxTotal / grossFederalTaxable : 0)} note="Federal income tax divided by gross modeled federal taxable income, before deductions." />
+              <TaxSummaryRow label="Effective federal tax plus FICA rate" value={formatPercent(flows.totalIncome > 0 ? federalTaxWithPayroll / flows.totalIncome : 0)} note="Federal income tax and employee FICA divided by total modeled income." emphasis />
               <TaxSummaryRow label="Current ordinary marginal bracket" value={marginalFederalRateLabel} />
             </TaxSummarySection>
           </div>
@@ -9729,6 +9738,7 @@ export default function App() {
               {w2PayrollTax.state.components.length === 0 && <TaxSummaryRow label="State employee payroll contributions" value={formatCurrencyDetailed(0)} note="No state W-2 payroll component is modeled for this state." />}
               <TaxSummaryRow label={`Total ${selectedStateCode} tax and payroll`} value={formatCurrencyDetailed(stateTaxWithPayroll)} emphasis />
               <TaxSummaryRow label="Effective state income-tax rate" value={formatPercent(stateGross > 0 ? displayedStateResult.tax / stateGross : 0)} />
+              <TaxSummaryRow label={`Effective ${selectedStateCode} tax plus payroll rate`} value={formatPercent(flows.totalIncome > 0 ? stateTaxWithPayroll / flows.totalIncome : 0)} note={`State income tax and modeled employee payroll contributions divided by total modeled income.`} emphasis />
               <TaxSummaryRow label="Current marginal state bracket" value={marginalStateRateLabel} />
               {selectedStateBrackets.map((bracket) => <TaxSummaryRow key={`${bracket.threshold}-${bracket.rate}`} label={bracket.threshold > 0 ? `Taxable income over ${formatCurrencyDetailed(bracket.threshold)}` : "First modeled bracket"} value={formatPercent(bracket.rate)} status="Marginal rate" />)}
             </TaxSummarySection>
@@ -10286,7 +10296,15 @@ export default function App() {
                 federalTaxable={federalTaxableAfterDeductions}
                 stateTaxable={stateTaxableAfterDeductions}
                 federalTax={federalTaxWithPayroll}
+                federalIncomeTax={federalIncomeTaxTotal}
+                federalPayrollTax={w2PayrollTax.federal.total}
                 stateTax={stateTaxWithPayroll}
+                stateIncomeTax={displayedStateResult.tax}
+                statePayrollTax={w2PayrollTax.state.total}
+                statePayrollLabel={w2PayrollTax.state.components.map((component) => component.label).join(" + ") || "State payroll"}
+                totalIncome={flows.totalIncome}
+                w2Income={effectiveW2Income}
+                marginalPayrollRate={marginalW2PayrollRate}
                 localTaxable={localTaxableIncome}
                 localTax={localTaxTotal}
                 localName={localTaxSettings.localityName || selectedLocalTaxProfile.locality || "Local"}
