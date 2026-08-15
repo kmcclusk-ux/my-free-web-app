@@ -46,6 +46,67 @@ describe("Lambda handler", () => {
     expect(json.tax).toBe(99086);
   });
 
+  test("FED_TAX_2025_COMBINED derives taxable income from 455k of gross ordinary income", async () => {
+    const response = await post({
+      calc: "FED_TAX_2025_COMBINED",
+      ordinaryIncome: 455000,
+      preferredIncome: 0,
+      deduction: 31500,
+      filingStatus: "mfj",
+      magi: 455000,
+      netInvestmentIncome: 0,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.taxableIncome).toBe(423500);
+    expect(json.ordinaryTaxable).toBe(423500);
+    expect(json.prefTaxable).toBe(0);
+    expect(json.ordinaryTax).toBe(89646);
+    expect(json.tax).toBe(89646);
+  });
+
+  test("FED_TAX_2025_COMBINED taxes 455k of preferential investment income", async () => {
+    const response = await post({
+      calc: "FED_TAX_2025_COMBINED",
+      ordinaryIncome: 0,
+      preferredIncome: 455000,
+      deduction: 31500,
+      filingStatus: "mfj",
+      magi: 455000,
+      netInvestmentIncome: 455000,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.taxableIncome).toBe(423500);
+    expect(json.ordinaryTaxable).toBe(0);
+    expect(json.prefTaxable).toBe(423500);
+    expect(json.prefTax).toBe(49020);
+    expect(json.niit).toBe(7790);
+    expect(json.tax).toBe(56810);
+  });
+
+  test("FED_TAX_2025_COMBINED selects the official standard deduction by filing status", async () => {
+    const response = await post({
+      calc: "FED_TAX_2025_COMBINED",
+      ordinaryIncome: 455000,
+      preferredIncome: 0,
+      deductionMode: "standard",
+      aboveLineDeduction: 0,
+      itemizedDeduction: 999999,
+      filingStatus: "single",
+      magi: 455000,
+      netInvestmentIncome: 0,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.deduction).toBe(15750);
+    expect(json.taxableIncome).toBe(439250);
+    expect(json.ordinaryTax).toBe(123284.75);
+  });
+
   test("FED_TAX_2025_COMBINED returns ordinary, pref, and niit totals for single", async () => {
     const response = await post({
       calc: "FED_TAX_2025_COMBINED",

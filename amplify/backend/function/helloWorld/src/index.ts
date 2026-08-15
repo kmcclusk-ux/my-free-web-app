@@ -5,6 +5,8 @@ import {
   fedTax2025Mfj,
   fedTax2025Ordinary,
   fedPrefTax2025,
+  federalStandardDeduction2025,
+  splitFederalTaxableIncome2025,
   caTax2025Mfj,
   localFlatTax,
   localProgressiveTax,
@@ -66,8 +68,14 @@ type RequestBody =
     }
   | {
       calc: "FED_TAX_2025_COMBINED";
-      ordinaryTaxable: number;
-      prefTaxable: number;
+      ordinaryTaxable?: number;
+      prefTaxable?: number;
+      ordinaryIncome?: number;
+      preferredIncome?: number;
+      deduction?: number;
+      deductionMode?: "standard" | "itemized";
+      aboveLineDeduction?: number;
+      itemizedDeduction?: number;
       filingStatus: FilingStatus;
       magi: number;
       netInvestmentIncome: number;
@@ -2206,14 +2214,46 @@ export const handler = async (
   }
 
   if (calc === "FED_TAX_2025_COMBINED") {
-    const ordinaryTaxable = readNonNegativeNumber((body as any).ordinaryTaxable, "ordinaryTaxable");
-    if ("error" in ordinaryTaxable) {
-      return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
-    }
+    const usesGrossIncome = (body as any).ordinaryIncome !== undefined
+      || (body as any).preferredIncome !== undefined
+      || (body as any).deduction !== undefined;
+    let taxableSplit: ReturnType<typeof splitFederalTaxableIncome2025>;
 
-    const prefTaxable = readNonNegativeNumber((body as any).prefTaxable, "prefTaxable");
-    if ("error" in prefTaxable) {
-      return jsonResponse(400, { error: prefTaxable.error }, origin);
+    if (usesGrossIncome) {
+      const ordinaryIncome = readNonNegativeNumber((body as any).ordinaryIncome, "ordinaryIncome");
+      if ("error" in ordinaryIncome) return jsonResponse(400, { error: ordinaryIncome.error }, origin);
+      const preferredIncome = readNonNegativeNumber((body as any).preferredIncome, "preferredIncome");
+      if ("error" in preferredIncome) return jsonResponse(400, { error: preferredIncome.error }, origin);
+      const requestedDeductionMode = (body as any).deductionMode;
+      if (requestedDeductionMode !== undefined && requestedDeductionMode !== "standard" && requestedDeductionMode !== "itemized") {
+        return jsonResponse(400, { error: "deductionMode must be standard or itemized" }, origin);
+      }
+      if (requestedDeductionMode) {
+        const aboveLineDeduction = readNonNegativeNumber((body as any).aboveLineDeduction ?? 0, "aboveLineDeduction");
+        if ("error" in aboveLineDeduction) return jsonResponse(400, { error: aboveLineDeduction.error }, origin);
+        const selectedDeduction = requestedDeductionMode === "standard"
+          ? federalStandardDeduction2025(String((body as any).filingStatus || "mfj").toLowerCase() as FilingStatus)
+          : readNonNegativeNumber((body as any).itemizedDeduction ?? 0, "itemizedDeduction");
+        if (typeof selectedDeduction !== "number" && "error" in selectedDeduction) {
+          return jsonResponse(400, { error: selectedDeduction.error }, origin);
+        }
+        const standardOrItemizedDeduction = typeof selectedDeduction === "number" ? selectedDeduction : selectedDeduction.value;
+        taxableSplit = splitFederalTaxableIncome2025(
+          ordinaryIncome.value,
+          preferredIncome.value,
+          aboveLineDeduction.value + standardOrItemizedDeduction
+        );
+      } else {
+        const deduction = readNonNegativeNumber((body as any).deduction, "deduction");
+        if ("error" in deduction) return jsonResponse(400, { error: deduction.error }, origin);
+        taxableSplit = splitFederalTaxableIncome2025(ordinaryIncome.value, preferredIncome.value, deduction.value);
+      }
+    } else {
+      const ordinaryTaxable = readNonNegativeNumber((body as any).ordinaryTaxable, "ordinaryTaxable");
+      if ("error" in ordinaryTaxable) return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
+      const prefTaxable = readNonNegativeNumber((body as any).prefTaxable, "prefTaxable");
+      if ("error" in prefTaxable) return jsonResponse(400, { error: prefTaxable.error }, origin);
+      taxableSplit = splitFederalTaxableIncome2025(ordinaryTaxable.value, prefTaxable.value, 0);
     }
 
     const filingStatus = String((body as any).filingStatus || "mfj").toLowerCase();
@@ -2238,8 +2278,8 @@ export const handler = async (
       return jsonResponse(400, { error: netInvestmentIncome.error }, origin);
     }
 
-    const ordinaryTax = fedTax2025Ordinary(ordinaryTaxable.value, filingStatus);
-    const prefTax = fedPrefTax2025(ordinaryTaxable.value, prefTaxable.value, filingStatus);
+    const ordinaryTax = fedTax2025Ordinary(taxableSplit.ordinaryTaxable, filingStatus);
+    const prefTax = fedPrefTax2025(taxableSplit.ordinaryTaxable, taxableSplit.prefTaxable, filingStatus);
     const niit = niitTax(magi.value, netInvestmentIncome.value, filingStatus);
     const tax = ordinaryTax + prefTax + niit;
 
@@ -2247,8 +2287,7 @@ export const handler = async (
       200,
       {
         calc,
-        ordinaryTaxable: ordinaryTaxable.value,
-        prefTaxable: prefTaxable.value,
+        ...taxableSplit,
         filingStatus,
         magi: magi.value,
         netInvestmentIncome: netInvestmentIncome.value,

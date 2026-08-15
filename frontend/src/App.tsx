@@ -1199,6 +1199,7 @@ const newDeductionItem = (deductionType: string, amount = 0): DeductionItem => (
 const blankOrdinaryWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(ordinaryWhatIfTypes[0]);
 const blankPreferredWhatIfItem = (): TaxWhatIfItem => newTaxWhatIfItem(preferredWhatIfTypes[0]);
 const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deductionMode: "standard", extraOrdinaryIncome: 0, extraPreferredIncome: 0, extraOrdinaryItems: [blankOrdinaryWhatIfItem()], extraPreferredItems: [blankPreferredWhatIfItem()], aboveLineDeductionItems: [newAboveLineDeductionItem(blankDeductionType)], deductionItems: [newDeductionItem(blankDeductionType)], mortgageInterest: 0, propertyTax: 0, standardDeduction: 31500, saltCap: 40400 };
+const federalStandardDeduction2025: Record<FilingStatus, number> = { single: 15750, mfj: 31500, mfs: 15750, hoh: 23625 };
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, deductionMode: "itemized", deductionItems: [newDeductionItem("Mortgage interest", 26500), newDeductionItem("Property tax", 19000)], mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialLocalTaxSettings: LocalTaxSettings = { enabled: false, localityId: "none", localityName: "", residency: "resident", rate: 0, nonresidentRate: 0, taxableBase: noLocalTaxBase() };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
@@ -1445,6 +1446,9 @@ function isTaxableAccountStatus(value: unknown, forceTaxable = false) {
   const key = normalizeLookupKey(value);
   const compactKey = key.replace(/[^a-z0-9]/g, "");
   return compactKey === "taxable" || compactKey === "partiallytaxable";
+}
+export function accountStatusAllowsCurrentTaxableIncome(value: unknown, incomeItem: boolean, forceTaxable = false) {
+  return incomeItem || isTaxableAccountStatus(value, forceTaxable);
 }
 function buildAccountTypeTaxStatusMap(rows: AccountTypeRow[]) {
   const map: Record<string, string> = {};
@@ -6707,15 +6711,15 @@ export default function App() {
     const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
     const accountTypeTaxStatus = inferAccountTypeTaxStatus(account?.accountType || inferAccountTypeFromAccountName(row.account));
     const taxStatus = String(isW2IncomeAccount ? "taxable" : accountTaxStatusByName[accountKey] || accountTypeTaxStatus || account?.taxStatus || "taxable").toLowerCase();
-    const isTaxableAccount = isTaxableAccountStatus(taxStatus, isW2IncomeAccount);
+    const accountAllowsCurrentTaxableIncome = accountStatusAllowsCurrentTaxableIncome(taxStatus, incomeItem, isW2IncomeAccount);
     const currentTaxTreatment = String(currentTicker?.taxTreatment || "income").toLowerCase();
     const proposedTaxTreatment = String(proposedTicker?.taxTreatment || "income").toLowerCase();
     const taxTreatment = isW2IncomeAccount ? "income" : String(effectiveTicker?.taxTreatment || "income").toLowerCase();
     const taxTreatmentRule = taxTreatmentMap[normalizeLookupKey(taxTreatment)];
     const investmentType = String(effectiveTicker?.category || "").toLowerCase();
     const extraData = toNumber(effectiveTicker?.extraData || 0);
-    const taxableMonthlyBase = isTaxableAccount && row.includeIncome ? filteredIncome / 12 : 0;
-    const displayTaxableMonthlyBase = isTaxableAccount && row.includeIncome && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
+    const taxableMonthlyBase = accountAllowsCurrentTaxableIncome && row.includeIncome ? filteredIncome / 12 : 0;
+    const displayTaxableMonthlyBase = accountAllowsCurrentTaxableIncome && row.includeIncome && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
     const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false, taxTreatmentRule);
     const preferredMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, true, taxTreatmentRule);
     const stateMonthly = stateTaxAdjust(taxableMonthlyBase, taxTreatment, selectedStateCode, taxTreatmentRule);
@@ -6763,7 +6767,7 @@ export default function App() {
       displayPreferredMonthly,
       displayStateMonthly,
       w2Income,
-      nonTaxableMonthly: !isTaxableAccount && row.includeIncome ? monthlyIncome : 0,
+      nonTaxableMonthly: !accountAllowsCurrentTaxableIncome && row.includeIncome ? monthlyIncome : 0,
       nonInvestmentIncome,
       displayNonInvestmentIncome,
       cash: investmentType === "cash" ? includedTotal : 0,
@@ -6982,7 +6986,8 @@ export default function App() {
   const federalDeductionSummary = summarizeFederalDeductions(federalSettings.deductionItems, displayedStateResult.tax, federalSettings.saltCap);
   const federalAboveLineDeductionSummary = summarizeAboveLineDeductions(federalSettings.aboveLineDeductionItems);
   const itemizedFederalDeduction = federalDeductionSummary.itemizedDeduction;
-  const federalDeduction = federalSettings.deductionMode === "itemized" ? itemizedFederalDeduction : federalSettings.standardDeduction;
+  const federalStandardDeduction = federalStandardDeduction2025[federalSettings.filingStatus];
+  const federalDeduction = federalSettings.deductionMode === "itemized" ? itemizedFederalDeduction : federalStandardDeduction;
   const federalTaxableBeforeStandardOrItemized = Math.max(grossFederalTaxable - federalAboveLineDeductionSummary.total, 0);
   const federalTaxableAfterDeductions = Math.max(federalTaxableBeforeStandardOrItemized - federalDeduction, 0);
   const prefTaxable = Math.min(preferredBeforeDeductions, federalTaxableAfterDeductions);
@@ -7212,7 +7217,17 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const timeoutId = window.setTimeout(() => {
-      postTaxCalculation({ calc: "FED_TAX_2025_COMBINED", ordinaryTaxable, prefTaxable, filingStatus: federalSettings.filingStatus, magi, netInvestmentIncome }).then((result) => {
+      postTaxCalculation({
+        calc: "FED_TAX_2025_COMBINED",
+        ordinaryIncome: ordinaryBeforeDeductions,
+        preferredIncome: preferredBeforeDeductions,
+        deductionMode: federalSettings.deductionMode,
+        aboveLineDeduction: federalAboveLineDeductionSummary.total,
+        itemizedDeduction: itemizedFederalDeduction,
+        filingStatus: federalSettings.filingStatus,
+        magi,
+        netInvestmentIncome,
+      }).then((result) => {
         if (!cancelled) { setFederalResult(result); setFederalError(null); }
       }).catch((error: Error) => {
         if (!cancelled) { setFederalResult(null); setFederalError(error.message); }
@@ -7232,7 +7247,7 @@ export default function App() {
     }, 220);
 
     return () => { cancelled = true; window.clearTimeout(timeoutId); };
-    }, [ordinaryTaxable, prefTaxable, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions, selectedStateCode, selectedStateBrackets]);
+    }, [ordinaryBeforeDeductions, preferredBeforeDeductions, federalAboveLineDeductionSummary.total, itemizedFederalDeduction, federalSettings.deductionMode, federalSettings.filingStatus, magi, netInvestmentIncome, stateTaxableAfterDeductions, selectedStateCode, selectedStateBrackets]);
 
 
 
@@ -7281,10 +7296,6 @@ export default function App() {
   const ordinaryBeforeDeductionsWithoutInvestments = Math.max(ordinaryBeforeDeductions - flows.investmentFederalOrdinary, 0);
   const preferredBeforeDeductionsWithoutInvestments = Math.max(preferredBeforeDeductions - flows.investmentFederalPreferred, 0);
   const grossFederalTaxableWithoutInvestments = ordinaryBeforeDeductionsWithoutInvestments + preferredBeforeDeductionsWithoutInvestments;
-  const federalTaxableBeforeStandardOrItemizedWithoutInvestments = Math.max(grossFederalTaxableWithoutInvestments - federalAboveLineDeductionSummary.total, 0);
-  const federalTaxableAfterDeductionsWithoutInvestments = Math.max(federalTaxableBeforeStandardOrItemizedWithoutInvestments - federalDeduction, 0);
-  const preferredTaxableWithoutInvestments = Math.min(preferredBeforeDeductionsWithoutInvestments, federalTaxableAfterDeductionsWithoutInvestments);
-  const ordinaryTaxableWithoutInvestments = Math.max(federalTaxableAfterDeductionsWithoutInvestments - preferredTaxableWithoutInvestments, 0);
   const netInvestmentIncomeWithoutInvestments = Math.max(grossFederalTaxableWithoutInvestments - flows.nonInvestmentIncome - effectiveW2Income, 0);
   const federalTaxWithoutInvestments = federalWithoutInvestmentsResult?.tax || 0;
   useEffect(() => {
@@ -7292,8 +7303,11 @@ export default function App() {
     const timeoutId = window.setTimeout(() => {
       postTaxCalculation({
         calc: "FED_TAX_2025_COMBINED",
-        ordinaryTaxable: ordinaryTaxableWithoutInvestments,
-        prefTaxable: preferredTaxableWithoutInvestments,
+        ordinaryIncome: ordinaryBeforeDeductionsWithoutInvestments,
+        preferredIncome: preferredBeforeDeductionsWithoutInvestments,
+        deductionMode: federalSettings.deductionMode,
+        aboveLineDeduction: federalAboveLineDeductionSummary.total,
+        itemizedDeduction: itemizedFederalDeduction,
         filingStatus: federalSettings.filingStatus,
         magi: grossFederalTaxableWithoutInvestments,
         netInvestmentIncome: netInvestmentIncomeWithoutInvestments,
@@ -7304,7 +7318,7 @@ export default function App() {
       });
     }, 220);
     return () => { cancelled = true; window.clearTimeout(timeoutId); };
-  }, [ordinaryTaxableWithoutInvestments, preferredTaxableWithoutInvestments, federalSettings.filingStatus, grossFederalTaxableWithoutInvestments, netInvestmentIncomeWithoutInvestments]);
+  }, [ordinaryBeforeDeductionsWithoutInvestments, preferredBeforeDeductionsWithoutInvestments, federalAboveLineDeductionSummary.total, itemizedFederalDeduction, federalSettings.deductionMode, federalSettings.filingStatus, grossFederalTaxableWithoutInvestments, netInvestmentIncomeWithoutInvestments]);
   const stateGrossWithoutInvestments = Math.max(stateGross - flows.investmentStateTaxable, 0);
   const stateTaxableAfterDeductionsWithoutInvestments = Math.max(stateGrossWithoutInvestments - stateDeduction, 0);
   const stateTaxWithoutInvestments = stateWithoutInvestmentsResult?.tax || 0;
@@ -9689,7 +9703,7 @@ export default function App() {
             </TaxSummarySection>
 
             <TaxSummarySection title="Deduction election" subtitle="Comparison of the two modeled deduction paths.">
-              <TaxSummaryRow label="Standard deduction" value={formatCurrencyDetailed(federalSettings.standardDeduction)} status={federalSettings.deductionMode === "standard" ? "Selected" : "Not selected"} />
+              <TaxSummaryRow label="Standard deduction" value={formatCurrencyDetailed(federalStandardDeduction)} status={federalSettings.deductionMode === "standard" ? "Selected" : "Not selected"} />
               <TaxSummaryRow label="Modeled itemized deduction" value={formatCurrencyDetailed(itemizedFederalDeduction)} status={federalSettings.deductionMode === "itemized" ? "Selected" : "Not selected"} />
               <TaxSummaryRow label="Deduction used in calculation" value={formatCurrencyDetailed(federalDeduction)} emphasis />
               <TaxSummaryRow label="SALT cap configured in model" value={formatCurrencyDetailed(federalSettings.saltCap)} note="The cap is applied to modeled state income tax plus entered property tax." status="Limit" />
@@ -10176,7 +10190,7 @@ export default function App() {
               <label>
                 <span>Deduction method</span>
                 <select value={federalSettings.deductionMode} onChange={(event) => updateFederalSettingsUndoable((current) => ({ ...current, deductionMode: normalizeFederalDeductionMode(event.target.value) }))}>
-                  <option value="standard">Standard deduction ({formatCurrencyDetailed(federalSettings.standardDeduction)})</option>
+                  <option value="standard">Standard deduction ({formatCurrencyDetailed(federalStandardDeduction)})</option>
                   <option value="itemized">Itemized deduction ({formatCurrencyDetailed(itemizedFederalDeduction)})</option>
                 </select>
               </label>

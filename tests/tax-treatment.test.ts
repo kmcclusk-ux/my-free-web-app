@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   canonicalStateRuleForTaxTreatment,
+  accountStatusAllowsCurrentTaxableIncome,
   defaultTaxTreatmentLabels,
   defaultTaxTreatmentRule,
   fedTaxAdjust,
@@ -25,6 +26,12 @@ const expectedTreatments = [
 ] as const;
 
 describe("investment tax-treatment regression coverage", () => {
+  test("current distributions remain taxable even when held in deferred accounts", () => {
+    expect(accountStatusAllowsCurrentTaxableIncome("deferred", true)).toBe(true);
+    expect(accountStatusAllowsCurrentTaxableIncome("deferred", false)).toBe(false);
+    expect(accountStatusAllowsCurrentTaxableIncome("taxable", false)).toBe(true);
+  });
+
   test("the expectation table covers every built-in treatment exactly once", () => {
     expect(expectedTreatments.map((row) => row.label)).toEqual([...defaultTaxTreatmentLabels]);
     expect(new Set(expectedTreatments.map((row) => row.label)).size).toBe(defaultTaxTreatmentLabels.length);

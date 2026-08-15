@@ -103,6 +103,16 @@ export function fedTax2025Ordinary(
   return computeBracketedTax(taxableIncome, schedules[filingStatus] ?? schedules.single);
 }
 
+export function federalStandardDeduction2025(filingStatus: FilingStatus): number {
+  const deductions: Record<FilingStatus, number> = {
+    single: 15_750,
+    mfj: 31_500,
+    mfs: 15_750,
+    hoh: 23_625,
+  };
+  return deductions[filingStatus] ?? deductions.single;
+}
+
 /**
  * Preferential tax (LTCG + qualified dividends) on the preferential portion ONLY.
  */
@@ -136,6 +146,28 @@ export function fedPrefTax2025(
   const amount20 = Math.max(0, QDCG - amount0 - amount15);
 
   return amount15 * 0.15 + amount20 * 0.2;
+}
+
+export function splitFederalTaxableIncome2025(
+  ordinaryIncome: number,
+  preferredIncome: number,
+  deduction: number
+) {
+  const ordinary = Math.max(Number(ordinaryIncome) || 0, 0);
+  const preferred = Math.max(Number(preferredIncome) || 0, 0);
+  const allowedDeduction = Math.max(Number(deduction) || 0, 0);
+  const taxableIncome = Math.max(ordinary + preferred - allowedDeduction, 0);
+  const prefTaxable = Math.min(preferred, taxableIncome);
+  const ordinaryTaxable = Math.max(taxableIncome - prefTaxable, 0);
+
+  return {
+    ordinaryIncome: ordinary,
+    preferredIncome: preferred,
+    deduction: allowedDeduction,
+    taxableIncome,
+    ordinaryTaxable,
+    prefTaxable,
+  };
 }
 
 export const fedPrefTax2024 = fedPrefTax2025;

@@ -5,7 +5,9 @@ exports.fedPrefTax2024 = void 0;
 exports.fedTax2025Mfj = fedTax2025Mfj;
 exports.fedTax2025Single = fedTax2025Single;
 exports.fedTax2025Ordinary = fedTax2025Ordinary;
+exports.federalStandardDeduction2025 = federalStandardDeduction2025;
 exports.fedPrefTax2025 = fedPrefTax2025;
+exports.splitFederalTaxableIncome2025 = splitFederalTaxableIncome2025;
 exports.caTax2025Mfj = caTax2025Mfj;
 exports.niitTax = niitTax;
 exports.localFlatTax = localFlatTax;
@@ -99,6 +101,15 @@ function fedTax2025Ordinary(taxableIncome, filingStatus) {
     };
     return computeBracketedTax(taxableIncome, schedules[filingStatus] ?? schedules.single);
 }
+function federalStandardDeduction2025(filingStatus) {
+    const deductions = {
+        single: 15750,
+        mfj: 31500,
+        mfs: 15750,
+        hoh: 23625,
+    };
+    return deductions[filingStatus] ?? deductions.single;
+}
 /**
  * Preferential tax (LTCG + qualified dividends) on the preferential portion ONLY.
  */
@@ -123,6 +134,22 @@ function fedPrefTax2025(ordinaryTaxable, prefTaxable, filingStatus) {
     const amount15 = Math.max(0, Math.min(QDCG - amount0, b.z15 - baseFor15));
     const amount20 = Math.max(0, QDCG - amount0 - amount15);
     return amount15 * 0.15 + amount20 * 0.2;
+}
+function splitFederalTaxableIncome2025(ordinaryIncome, preferredIncome, deduction) {
+    const ordinary = Math.max(Number(ordinaryIncome) || 0, 0);
+    const preferred = Math.max(Number(preferredIncome) || 0, 0);
+    const allowedDeduction = Math.max(Number(deduction) || 0, 0);
+    const taxableIncome = Math.max(ordinary + preferred - allowedDeduction, 0);
+    const prefTaxable = Math.min(preferred, taxableIncome);
+    const ordinaryTaxable = Math.max(taxableIncome - prefTaxable, 0);
+    return {
+        ordinaryIncome: ordinary,
+        preferredIncome: preferred,
+        deduction: allowedDeduction,
+        taxableIncome,
+        ordinaryTaxable,
+        prefTaxable,
+    };
 }
 exports.fedPrefTax2024 = fedPrefTax2025;
 /**
