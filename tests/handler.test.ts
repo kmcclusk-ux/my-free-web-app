@@ -201,23 +201,85 @@ describe("Lambda handler", () => {
     expect(JSON.parse(twentyResponse.body).tax).toBe(2000);
   });
 
-  test("STATE_TAX_2025 calculates progressive brackets supplied by the UI", async () => {
+  test("STATE_TAX_2025 uses backend-owned state schedules and ignores injected brackets", async () => {
     const response = await post({
       calc: "STATE_TAX_2025",
-      state: "TS",
+      state: "CA",
       filingStatus: "mfj",
       taxableIncome: 200000,
       brackets: [
-        { threshold: 0, rate: 0.01 },
-        { threshold: 100000, rate: 0.02 },
+        { threshold: 0, rate: 0 },
       ],
     });
 
     expect(response.statusCode).toBe(200);
     const json = JSON.parse(response.body);
-    expect(json.tax).toBe(3000);
-    expect(json.effectiveRate).toBe(0.015);
-    expect(json.marginalRate).toBe(0.02);
+    expect(json.state).toBe("CA");
+    expect(json.tax).toBeCloseTo(11477.276, 3);
+    expect(json.effectiveRate).toBeCloseTo(11477.276 / 200000, 8);
+    expect(json.marginalRate).toBe(0.093);
+  });
+
+  test("TAX_CONFIG_2025 publishes the backend-owned state and local definitions", async () => {
+    const response = await post({ calc: "TAX_CONFIG_2025" });
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.taxYear).toBe(2025);
+    expect(json.states).toHaveLength(51);
+    expect(json.states.find((profile: { code: string }) => profile.code === "CA").mfj[1].threshold).toBe(22158);
+    expect(json.localities.find((profile: { id: string }) => profile.id === "ny-yonkers").kind).toBe("state-surcharge");
+  });
+
+  test("TAX_PLAN_2025 returns federal income tax for 455k instead of payroll tax alone", async () => {
+    const response = await post({
+      calc: "TAX_PLAN_2025",
+      filingStatus: "mfj",
+      state: "CA",
+      ordinaryIncomeExcludingSocialSecurity: 455000,
+      preferredIncome: 0,
+      netInvestmentIncome: 0,
+      w2Income: 0,
+      totalIncome: 455000,
+      displayIncome: 455000,
+      federalDeductionMode: "standard",
+      stateGrossIncome: 455000,
+      stateDeductionMode: "standard",
+      stateStandardDeduction: 11080,
+      local: { enabled: false },
+    });
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.federal.taxableIncome).toBe(423500);
+    expect(json.federal.incomeTax).toBe(89646);
+    expect(json.federal.payrollTax).toBe(0);
+    expect(json.state.incomeTax).toBeGreaterThan(0);
+    expect(json.totalTax).toBe(json.federal.total + json.state.total + json.local.tax);
+    expect(json.afterTaxIncome).toBe(455000 - json.totalTax);
+  });
+
+  test("aggregate endpoints reject unknown state and local schedules", async () => {
+    const stateResponse = await post({
+      calc: "TAX_PLAN_2025",
+      filingStatus: "single",
+      state: "ZZ",
+      ordinaryIncomeExcludingSocialSecurity: 100000,
+      preferredIncome: 0,
+      stateGrossIncome: 100000,
+    });
+    expect(stateResponse.statusCode).toBe(400);
+    expect(JSON.parse(stateResponse.body).error).toMatch(/unsupported state/i);
+
+    const localResponse = await post({
+      calc: "TAX_PLAN_2025",
+      filingStatus: "single",
+      state: "CA",
+      ordinaryIncomeExcludingSocialSecurity: 100000,
+      preferredIncome: 0,
+      stateGrossIncome: 100000,
+      local: { enabled: true, localityId: "missing" },
+    });
+    expect(localResponse.statusCode).toBe(400);
+    expect(JSON.parse(localResponse.body).error).toMatch(/unsupported locality/i);
   });
 
   test("LOCAL_TAX calculates flat and progressive local tax", async () => {

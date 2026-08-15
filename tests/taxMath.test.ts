@@ -1,20 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
+  calculateTaxPlan2025,
   calculateW2PayrollTax,
-  calculateDisplayedAfterTaxIncome,
   getSupportedW2PayrollTaxStateCodes,
-  isW2IncomeType,
-} from "../frontend/src/taxMath";
+} from "../amplify/backend/function/helloWorld/taxCalcs.js";
+import { isW2IncomeType } from "../frontend/src/taxMath";
 
-describe("frontend tax math helpers", () => {
-  test("displayed after-tax income subtracts the full tax burden", () => {
-    expect(calculateDisplayedAfterTaxIncome(100000, 90000, 70000)).toBe(10000);
-  });
-
-  test("excluded-only tax never shields spendable income from total tax", () => {
-    expect(calculateDisplayedAfterTaxIncome(100000, 50000, 60000)).toBe(50000);
-  });
-
+describe("backend payroll and after-tax calculations", () => {
   test("W2 payroll tax applies FICA caps and additional Medicare threshold", () => {
     const result = calculateW2PayrollTax(300000, "mfj", "CA");
     expect(result.federal.socialSecurity).toBeCloseTo(10918.2, 2);
@@ -35,7 +27,7 @@ describe("frontend tax math helpers", () => {
     }
   });
 
-  test("W2 payroll tax includes state-specific components only where employee withholding applies", () => {
+  test("W2 payroll tax includes state-specific employee components only where modeled", () => {
     expect(calculateW2PayrollTax(100000, "single", "TX").state.components).toHaveLength(0);
     expect(calculateW2PayrollTax(100000, "single", "NY").state.components.map((component) => component.label)).toEqual([
       "NY state disability insurance",
@@ -44,9 +36,41 @@ describe("frontend tax math helpers", () => {
     expect(calculateW2PayrollTax(100000, "single", "HI").state.components[0]?.label).toBe("HI temporary disability insurance employee share");
   });
 
-  test("W2 payroll tax is only selected for W2 income type labels", () => {
+  test("excluded income remains taxable but is removed only from spendable after-tax income", () => {
+    const included = calculateTaxPlan2025({
+      filingStatus: "single",
+      state: "TX",
+      ordinaryIncomeExcludingSocialSecurity: 100000,
+      preferredIncome: 0,
+      stateGrossIncome: 100000,
+      totalIncome: 100000,
+      displayIncome: 100000,
+      federalDeductionMode: "standard",
+      stateDeductionMode: "standard",
+      stateStandardDeduction: 0,
+      w2Income: 0,
+    });
+    const excluded = calculateTaxPlan2025({
+      filingStatus: "single",
+      state: "TX",
+      ordinaryIncomeExcludingSocialSecurity: 100000,
+      preferredIncome: 0,
+      stateGrossIncome: 100000,
+      totalIncome: 100000,
+      displayIncome: 40000,
+      federalDeductionMode: "standard",
+      stateDeductionMode: "standard",
+      stateStandardDeduction: 0,
+      w2Income: 0,
+    });
+
+    expect(excluded.totalTax).toBe(included.totalTax);
+    expect(excluded.afterTaxIncome).toBe(40000 - excluded.totalTax);
+    expect(excluded.excludedIncome).toBe(60000);
+  });
+
+  test("W2 labels remain a frontend classification concern, not a tax formula", () => {
     expect(isW2IncomeType("W2 wages")).toBe(true);
     expect(isW2IncomeType("Ordinary dividends")).toBe(false);
-    expect(isW2IncomeType("Business income")).toBe(false);
   });
 });

@@ -7,7 +7,7 @@ import {
   fedTaxAdjust,
   stateTaxAdjust,
 } from "../frontend/src/App";
-import { calculateTaxableSocialSecurity } from "../frontend/src/socialSecurityTax";
+import { calculateTaxableSocialSecurity2025 } from "../amplify/backend/function/helloWorld/taxCalcs.js";
 
 const amount = 100;
 const expectedTreatments = [
@@ -59,23 +59,23 @@ describe("investment tax-treatment regression coverage", () => {
   });
 
   test("Social Security is not taxable below the provisional-income base", () => {
-    expect(calculateTaxableSocialSecurity(24000, 10000, 0, "single")).toBe(0);
+    expect(calculateTaxableSocialSecurity2025(24000, 10000, 0, "single")).toBe(0);
   });
 
   test("Social Security is partially taxable between the base amounts", () => {
-    expect(calculateTaxableSocialSecurity(24000, 16000, 0, "single")).toBe(1500);
+    expect(calculateTaxableSocialSecurity2025(24000, 16000, 0, "single")).toBe(1500);
   });
 
   test("Social Security reaches but never exceeds the 85% cap", () => {
-    expect(calculateTaxableSocialSecurity(24000, 100000, 0, "single")).toBe(20400);
+    expect(calculateTaxableSocialSecurity2025(24000, 100000, 0, "single")).toBe(20400);
   });
 
   test("tax-exempt interest is included in provisional income", () => {
-    expect(calculateTaxableSocialSecurity(24000, 10000, 10000, "single")).toBe(3500);
+    expect(calculateTaxableSocialSecurity2025(24000, 10000, 10000, "single")).toBe(3500);
   });
 
   test("married filing jointly uses the higher base amounts", () => {
-    expect(calculateTaxableSocialSecurity(30000, 15000, 0, "mfj")).toBe(0);
-    expect(calculateTaxableSocialSecurity(30000, 25000, 0, "mfj")).toBe(4000);
+    expect(calculateTaxableSocialSecurity2025(30000, 15000, 0, "mfj")).toBe(0);
+    expect(calculateTaxableSocialSecurity2025(30000, 25000, 0, "mfj")).toBe(4000);
   });
 });

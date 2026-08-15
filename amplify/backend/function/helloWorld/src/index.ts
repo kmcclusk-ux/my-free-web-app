@@ -8,11 +8,16 @@ import {
   federalStandardDeduction2025,
   splitFederalTaxableIncome2025,
   caTax2025Mfj,
+  calculateTaxPlan2025,
+  calculateStateTax2025,
+  localTaxProfiles2025,
   localFlatTax,
   localProgressiveTax,
   niitTax,
+  stateTaxProfiles,
   type FilingStatus,
   type LocalTaxBracket,
+  type TaxPlan2025Input,
 } from "./taxCalcs";
 import { WorkbookStore, type PublicReportRecord, type WorkbookPayload } from "./workbookStore";
 
@@ -81,8 +86,10 @@ type RequestBody =
       netInvestmentIncome: number;
     }
   | { calc: "CA_TAX_2025_MFJ"; taxableIncome: number }
-  | { calc: "STATE_TAX_2025"; taxableIncome: number; state: string; filingStatus: FilingStatus; brackets?: LocalTaxBracket[] }
+  | { calc: "STATE_TAX_2025"; taxableIncome: number; state: string; filingStatus: FilingStatus }
   | { calc: "STATE_TAX_2025_CA_MFJ"; taxableIncome: number }
+  | ({ calc: "TAX_PLAN_2025" } & TaxPlan2025Input)
+  | { calc: "TAX_CONFIG_2025" }
   | {
       calc: "LOCAL_TAX";
       taxableIncome: number;
@@ -172,7 +179,7 @@ Action schemas:
 - setView payload: {"viewName":"Investments"|"Tickers"|"Accounts"|"Federal Tax"|"State Tax"|"Tax Calculator"|"focus_grid"|"analytics"}.
 - updateSettings payload: {"section":"federal"|"state"|"local"|"planner"|"ui","values":{allowed settings fields}}. This changes calculation inputs/preferences and is persisted to the authenticated workbook. Use requiresConfirmation true.
 - setWhatIf payload: {"scope":"investments"|"federal"|"state","enabled":boolean}. This opens/closes the requested What-If UI; investment What-If selection is persisted. Use requiresConfirmation true.
-Federal settings fields: filingStatus, deductionMode, extraOrdinaryIncome, extraPreferredIncome, extraOrdinaryItems, extraPreferredItems, aboveLineDeductionItems, deductionItems, mortgageInterest, propertyTax, standardDeduction, saltCap.
+Federal settings fields: filingStatus, deductionMode, extraOrdinaryIncome, extraPreferredIncome, extraOrdinaryItems, extraPreferredItems, aboveLineDeductionItems, deductionItems, mortgageInterest, propertyTax. The backend owns statutory federal values such as the standard deduction and SALT cap.
 State settings fields: stateCode, extraStateIncome, deductionMode, deductionItems, mortgageInterest, propertyTax, standardDeduction. Local settings fields: enabled, localityId, localityName, residency, rate, nonresidentRate, taxableBase. Planner settings fields: federalWithholding, stateWithholding. UI settings fields: incomePrimaryPeriod, darkMode, investmentFavorites, selectedAssetIds.
 Investment row fields: description, account, category, totalInvestment, yearlyIncome, includeIncome, overrideProposal, symbol, newSymbol, newPercent.
 When the user pastes spreadsheet investment rows, map columns like DESC/description -> description, ACCNT/account -> account, total inv. -> totalInvestment, yr inc. -> yearlyIncome, Inc/use checkbox -> includeIncome, override -> overrideProposal, symbol/ticker -> symbol, new symbol -> newSymbol, and new % -> newPercent. Ignore calculated downstream columns such as monthly income, tax status, ordinary, preferred, state, non taxable, cash/stocks/bonds rollups, filtered, and total.
@@ -2161,22 +2168,18 @@ export const handler = async (
     if (!state) {
       return jsonResponse(400, { error: "STATE_TAX_2025 requires state" }, origin);
     }
+    if (!stateTaxProfiles.some((profile) => profile.code === state)) {
+      return jsonResponse(400, { error: `Unsupported state: ${state}` }, origin);
+    }
 
-    const rawBrackets = (body as any).brackets;
-    if (rawBrackets !== undefined && !Array.isArray(rawBrackets)) {
-      return jsonResponse(400, { error: "STATE_TAX_2025 brackets must be an array" }, origin);
-    }
-    const brackets = Array.isArray(rawBrackets)
-      ? rawBrackets.map((bracket) => ({
-          threshold: Number(bracket?.threshold),
-          rate: Number(bracket?.rate),
-        }))
-      : [];
-    if (brackets.some((bracket) => !Number.isFinite(bracket.threshold) || bracket.threshold < 0 || !Number.isFinite(bracket.rate) || bracket.rate < 0)) {
-      return jsonResponse(400, { error: "STATE_TAX_2025 brackets require threshold and rate >= 0" }, origin);
-    }
-    const result = brackets.length ? localProgressiveTax(taxableIncome.value, brackets) : { tax: 0, effectiveRate: 0, marginalRate: 0 };
-    return jsonResponse(200, { calc, state, filingStatus, taxableIncome: taxableIncome.value, ...result }, origin);
+    const result = calculateStateTax2025({
+      state,
+      filingStatus,
+      grossIncome: taxableIncome.value,
+      deductionMode: "standard",
+      standardDeduction: 0,
+    });
+    return jsonResponse(200, { calc, ...result }, origin);
   }
 
   if (calc === "FED_PREF_TAX_2024" || calc === "FED_PREF_TAX_2025") {
@@ -2300,6 +2303,33 @@ export const handler = async (
     );
   }
 
+  if (calc === "TAX_CONFIG_2025") {
+    return jsonResponse(200, {
+      calc,
+      taxYear: 2025,
+      states: stateTaxProfiles,
+      localities: localTaxProfiles2025,
+    }, origin);
+  }
+
+  if (calc === "TAX_PLAN_2025") {
+    const filingStatus = String((body as any).filingStatus || "").toLowerCase();
+    if (!isFilingStatus(filingStatus)) {
+      return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
+    }
+    const state = String((body as any).state || "").trim().toUpperCase();
+    if (!state) return jsonResponse(400, { error: "TAX_PLAN_2025 requires state" }, origin);
+    if (!stateTaxProfiles.some((profile) => profile.code === state)) {
+      return jsonResponse(400, { error: `Unsupported state: ${state}` }, origin);
+    }
+    const localityId = String((body as any).local?.localityId || "none");
+    if ((body as any).local?.enabled === true && !localTaxProfiles2025.some((profile) => profile.id === localityId)) {
+      return jsonResponse(400, { error: `Unsupported locality: ${localityId}` }, origin);
+    }
+    const result = calculateTaxPlan2025({ ...(body as any), filingStatus, state });
+    return jsonResponse(200, result, origin);
+  }
+
   if (calc === "LOCAL_TAX") {
     const taxableIncome = readNonNegativeNumber((body as any).taxableIncome, "taxableIncome");
     if ("error" in taxableIncome) {
@@ -2353,6 +2383,8 @@ export const handler = async (
         "CA_TAX_2025_MFJ",
         "STATE_TAX_2025",
         "STATE_TAX_2025_CA_MFJ",
+        "TAX_CONFIG_2025",
+        "TAX_PLAN_2025",
         "LOCAL_TAX",
         "PORTFOLIO_CHAT",
       ],

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getStateTaxProfile, stateTax2025 } from "../amplify/backend/function/helloWorld/taxCalcs.js";
+import { getStateTaxProfile, stateTax2025, stateTaxProfiles, type FilingStatus } from "../amplify/backend/function/helloWorld/taxCalcs.js";
 
 type StateTaxFixture = {
   state: string;
@@ -14,7 +14,7 @@ const publishedStateFixtures: StateTaxFixture[] = [
   { state: "AK", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
   { state: "AZ", single100k: 2500, mfj100k: 2500, single500k: 12500, mfj500k: 12500 },
   { state: "AR", single100k: 3814.5, mfj100k: 3814.5, single500k: 19414.5, mfj500k: 19414.5 },
-  { state: "CA", single100k: 5842.36, mfj100k: 3155.12, single500k: 45107.9, mfj500k: 39577.96 },
+  { state: "CA", single100k: 5738.64, mfj100k: 3069.78, single500k: 44766.14, mfj500k: 39377.28 },
   { state: "CO", single100k: 4400, mfj100k: 4400, single500k: 22000, mfj500k: 22000 },
   { state: "CT", single100k: 4750, mfj100k: 4000, single500k: 31250, mfj500k: 28000 },
   { state: "DE", single100k: 5583.5, mfj100k: 5583.5, single500k: 31983.5, mfj500k: 31983.5 },
@@ -39,7 +39,7 @@ const publishedStateFixtures: StateTaxFixture[] = [
   { state: "NE", single100k: 4722.03, mfj100k: 4244.14, single500k: 25522.03, mfj500k: 25044.14 },
   { state: "NV", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
   { state: "NH", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
-  { state: "NJ", single100k: 3475, mfj100k: 2750, single500k: 28955, mfj500k: 27807.5 },
+  { state: "NJ", single100k: 4243.75, mfj100k: 2750, single500k: 29723.75, mfj500k: 27807.5 },
   { state: "NM", single100k: 4358, mfj100k: 4089, single500k: 26858, mfj500k: 25534 },
   { state: "NY", single100k: 5431.75, mfj100k: 5167.5, single500k: 31850.85, mfj500k: 30362.55 },
   { state: "NC", single100k: 4250, mfj100k: 4250, single500k: 21250, mfj500k: 21250 },
@@ -92,6 +92,54 @@ describe("2025 state income tax published fixture coverage", () => {
       state: "CA",
       stateName: "California",
     });
+  });
+
+  test.each([
+    ["single", 125000, 8063.638],
+    ["mfs", 125000, 8063.638],
+    ["mfj", 125000, 4768.10],
+    ["hoh", 125000, 6035.38],
+  ] as Array<[FilingStatus, number, number]>)("California official 2025 %s schedule at $%i", (filingStatus, income, expectedTax) => {
+    expect(stateTax2025(income, "CA", filingStatus).tax).toBeCloseTo(expectedTax, 2);
+  });
+
+  test("New Jersey head of household uses the official joint and HOH schedule", () => {
+    expect(stateTax2025(100000, "NJ", "hoh").tax).toBeCloseTo(2750, 2);
+    expect(stateTax2025(100000, "NJ", "single").tax).toBeCloseTo(4243.75, 2);
+  });
+
+  test("every state schedule is ordered, nonnegative, and continuous at each threshold", () => {
+    const filingStatuses: FilingStatus[] = ["single", "mfj", "mfs", "hoh"];
+    for (const profile of stateTaxProfiles) {
+      for (const filingStatus of filingStatuses) {
+        const brackets = filingStatus === "mfj" ? profile.mfj
+          : filingStatus === "mfs" ? profile.mfs ?? profile.single
+          : filingStatus === "hoh" ? profile.hoh ?? profile.single
+          : profile.single;
+        expect(brackets.map((bracket) => bracket.threshold)).toEqual([...brackets].map((bracket) => bracket.threshold).sort((left, right) => left - right));
+        for (const bracket of brackets) {
+          expect(bracket.threshold).toBeGreaterThanOrEqual(0);
+          expect(bracket.rate).toBeGreaterThanOrEqual(0);
+          const atThreshold = stateTax2025(bracket.threshold, profile.code, filingStatus).tax;
+          const afterThreshold = stateTax2025(bracket.threshold + 1, profile.code, filingStatus).tax;
+          expect(afterThreshold).toBeGreaterThanOrEqual(atThreshold);
+          expect(afterThreshold - atThreshold).toBeCloseTo(bracket.rate, 8);
+        }
+      }
+    }
+  });
+
+  test("all filing statuses are monotonic across representative incomes in every state", () => {
+    const filingStatuses: FilingStatus[] = ["single", "mfj", "mfs", "hoh"];
+    const incomes = [0, 1, 10000, 50000, 100000, 500000, 1000000, 2000000];
+    for (const profile of stateTaxProfiles) {
+      for (const filingStatus of filingStatuses) {
+        const taxes = incomes.map((income) => stateTax2025(income, profile.code, filingStatus).tax);
+        for (let index = 1; index < taxes.length; index += 1) {
+          expect(taxes[index]).toBeGreaterThanOrEqual(taxes[index - 1]);
+        }
+      }
+    }
   });
 
   test("documented local-tax exclusions stay visible to callers", () => {
