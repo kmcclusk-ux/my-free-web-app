@@ -2199,6 +2199,13 @@
   margin: 0;
   color: var(--pm-muted);
 }
+.account-picker__option--action {
+  margin-bottom: 5px;
+  border-bottom: 1px solid rgba(17, 24, 39, .1);
+  border-radius: 8px 8px 3px 3px;
+  color: #0b63f6;
+  font-weight: 800;
+}
 .auth-required-panel__actions {
   display: flex;
   flex: 0 0 auto;
