@@ -7398,12 +7398,14 @@ export default function App() {
         <div><span>W2 Social Security</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.socialSecurity)}</strong></div>
         <div><span>W2 Medicare</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.medicare)}</strong></div>
         <div><span>W2 additional Medicare</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.additionalMedicare)}</strong></div>
-        <div><span>Federal total</span><strong>{formatCurrencyDetailed(federalTaxTotal)}</strong></div>
+        <div><span>Employee FICA total</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.total)}</strong></div>
+        <div><span>Federal income tax + FICA</span><strong>{formatCurrencyDetailed(federalTaxTotal)}</strong></div>
         <div><span>{selectedStateCode} state income tax</span><strong>{formatCurrencyDetailed(displayedStateResult.tax)}</strong></div>
         {w2PayrollTax.state.components.map((component) => (
           <div key={component.label}><span>{component.label}</span><strong>{formatCurrencyDetailed(component.tax)}</strong></div>
         ))}
-        <div><span>{selectedStateCode} W2 payroll withholding</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
+        <div><span>{selectedStateCode} employee payroll contributions</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
+        <div><span>{selectedStateCode} income tax + payroll</span><strong>{formatCurrencyDetailed(stateTaxWithPayroll)}</strong></div>
         <div><span>Local income tax</span><strong>{formatCurrencyDetailed(localTaxTotal)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Total tax removed</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
       </div>
@@ -7452,8 +7454,12 @@ export default function App() {
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Effective rate</h4>
-        <div><span>Federal tax and payroll</span><strong>{formatCurrencyDetailed(federalTaxWithPayroll)}</strong></div>
-        <div><span>{selectedStateCode} tax and payroll</span><strong>{formatCurrencyDetailed(stateTaxWithPayroll)}</strong></div>
+        <div><span>Federal income tax</span><strong>{formatCurrencyDetailed(federalIncomeTaxTotal)}</strong></div>
+        <div><span>Employee FICA</span><strong>{formatCurrencyDetailed(w2PayrollTax.federal.total)}</strong></div>
+        <div><span>Federal income tax + FICA</span><strong>{formatCurrencyDetailed(federalTaxWithPayroll)}</strong></div>
+        <div><span>{selectedStateCode} income tax</span><strong>{formatCurrencyDetailed(displayedStateResult.tax)}</strong></div>
+        <div><span>{selectedStateCode} employee payroll contributions</span><strong>{formatCurrencyDetailed(w2PayrollTax.state.total)}</strong></div>
+        <div><span>{selectedStateCode} income tax + payroll</span><strong>{formatCurrencyDetailed(stateTaxWithPayroll)}</strong></div>
         {localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" && <div><span>{localSummaryName} tax</span><strong>{formatCurrencyDetailed(localTaxTotal)}</strong></div>}
         <div><span>Total included income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
         <div><span>Total tax</span><strong>{formatCurrencyDetailed(totalTax)}</strong></div>
@@ -7861,7 +7867,8 @@ export default function App() {
     const scenarioText = payload.scenarios.map((scenario) => {
       const taxRate = scenario.income > 0 ? Math.max(0, Math.min(scenario.totalTax / scenario.income, 1)) : 0;
       const centsKept = ((1 - taxRate) * 100).toFixed(1);
-      return `For an income of ${formatCurrency(scenario.income)}\nGovernment takes ${formatPercent(taxRate)}. You get to keep ${centsKept} cents for every dollar earned.`;
+      const stateName = scenario.stateName || payload.stateName || scenario.stateCode || payload.stateCode;
+      return `For a ${stateName} taxpayer with income of ${formatCurrency(scenario.income)}, the government takes ${formatPercent(taxRate)}. You get to keep ${centsKept} cents for every dollar earned.`;
     }).join("\n\n");
     setPublishedReportPlainTextCopied(false);
     setPublishedReportPlainText({ name, text: scenarioText });
@@ -9673,6 +9680,7 @@ export default function App() {
               <TaxSummaryRow label="Employee Social Security" value={formatCurrencyDetailed(w2PayrollTax.federal.socialSecurity)} />
               <TaxSummaryRow label="Employee Medicare" value={formatCurrencyDetailed(w2PayrollTax.federal.medicare)} />
               <TaxSummaryRow label="Additional Medicare" value={formatCurrencyDetailed(w2PayrollTax.federal.additionalMedicare)} />
+              <TaxSummaryRow label="Employee FICA total" value={formatCurrencyDetailed(w2PayrollTax.federal.total)} note="Social Security, Medicare, and Additional Medicare included in the total below." emphasis />
               <TaxSummaryRow label="Total federal tax and payroll" value={formatCurrencyDetailed(federalTaxWithPayroll)} emphasis />
               <TaxSummaryRow label="Effective federal income-tax rate" value={formatPercent(grossFederalTaxable > 0 ? federalIncomeTaxTotal / grossFederalTaxable : 0)} note="Federal income tax divided by gross modeled federal taxable income, before deductions." />
               <TaxSummaryRow label="Effective federal tax plus FICA rate" value={formatPercent(flows.totalIncome > 0 ? federalTaxWithPayroll / flows.totalIncome : 0)} note="Federal income tax and employee FICA divided by total modeled income." emphasis />
@@ -9736,6 +9744,7 @@ export default function App() {
               <TaxSummaryRow label={`${selectedStateCode} income tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} emphasis />
               {w2PayrollTax.state.components.map((component) => <TaxSummaryRow key={component.label} label={component.label} value={formatCurrencyDetailed(component.tax)} />)}
               {w2PayrollTax.state.components.length === 0 && <TaxSummaryRow label="State employee payroll contributions" value={formatCurrencyDetailed(0)} note="No state W-2 payroll component is modeled for this state." />}
+              {w2PayrollTax.state.components.length > 0 && <TaxSummaryRow label={`Total ${selectedStateCode} employee payroll contributions`} value={formatCurrencyDetailed(w2PayrollTax.state.total)} note={`Modeled employee-paid state payroll items included in the ${selectedStateCode} total below.`} emphasis />}
               <TaxSummaryRow label={`Total ${selectedStateCode} tax and payroll`} value={formatCurrencyDetailed(stateTaxWithPayroll)} emphasis />
               <TaxSummaryRow label="Effective state income-tax rate" value={formatPercent(stateGross > 0 ? displayedStateResult.tax / stateGross : 0)} />
               <TaxSummaryRow label={`Effective ${selectedStateCode} tax plus payroll rate`} value={formatPercent(flows.totalIncome > 0 ? stateTaxWithPayroll / flows.totalIncome : 0)} note={`State income tax and modeled employee payroll contributions divided by total modeled income.`} emphasis />

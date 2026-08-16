@@ -40,8 +40,10 @@ describe("backend payroll and after-tax calculations", () => {
     });
 
     expect(plan.federal.payrollTax).toBeCloseTo(18773.2, 2);
+    expect(plan.federal.ficaTax).toBeCloseTo(18773.2, 2);
     expect(plan.federal.total).toBeCloseTo(plan.federal.incomeTax + 18773.2, 2);
     expect(plan.state.payrollTax).toBeCloseTo(5160, 2);
+    expect(plan.state.employeePayrollTax).toBeCloseTo(5160, 2);
     expect(plan.state.total).toBeCloseTo(plan.state.incomeTax + 5160, 2);
     expect(plan.totalTax).toBeCloseTo(plan.federal.total + plan.state.total + plan.local.tax, 2);
     expect(plan.afterTaxIncome).toBeCloseTo(430000 - plan.totalTax, 2);

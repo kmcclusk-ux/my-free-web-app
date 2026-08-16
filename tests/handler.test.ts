@@ -252,6 +252,8 @@ describe("Lambda handler", () => {
     expect(json.federal.taxableIncome).toBe(423500);
     expect(json.federal.incomeTax).toBe(89646);
     expect(json.federal.payrollTax).toBe(0);
+    expect(json.federal.ficaTax).toBe(0);
+    expect(json.state.employeePayrollTax).toBe(json.state.payrollTax);
     expect(json.state.incomeTax).toBeGreaterThan(0);
     expect(json.totalTax).toBe(json.federal.total + json.state.total + json.local.tax);
     expect(json.afterTaxIncome).toBe(455000 - json.totalTax);
