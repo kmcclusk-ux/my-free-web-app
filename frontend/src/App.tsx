@@ -449,7 +449,7 @@ const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const PUBLIC_USERNAME_STORAGE_KEY = "aftertaxus-public-username";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths-compact-v2";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 78, minWidth: 76 },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 108, minWidth: 106 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 30, minWidth: 28 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 28, minWidth: 26 },
   { id: "account", label: "Account", defaultWidth: 116, minWidth: 82 },
@@ -3595,7 +3595,7 @@ function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
   );
 }
 
-function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
+function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | "find" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
   if (name === "add") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3621,6 +3621,15 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "find" | 
         <path d="M14 12.5h5v5h-5z" />
         <path d="M10 9h2.5a4 4 0 0 1 4 4" />
         <path d="m14.5 10.75 2 2.25 2-2.25" />
+      </svg>
+    );
+  }
+
+  if (name === "edit") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m5.5 15.5-1 4 4-1L18 9l-3-3-9.5 9.5Z" />
+        <path d="m13.5 7.5 3 3" />
       </svg>
     );
   }
@@ -4837,7 +4846,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onCreateInvestment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const [columnView, setColumnView] = useState<InvestmentColumnView>("main");
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
@@ -4907,6 +4916,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const [incomePeriod, setIncomePeriod] = useState<"annual" | "monthly">("annual");
   const [isAddEntryOpen, setIsAddEntryOpen] = useState(false);
   const [addEntryKind, setAddEntryKind] = useState<"income" | "investment" | null>(null);
+  const [editTarget, setEditTarget] = useState<InvestmentRow | null>(null);
   const [investmentDraft, setInvestmentDraft] = useState({
     name: "",
     account: accountOptions[1] || "",
@@ -5250,6 +5260,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     closeIncomeDialog();
   };
   const openAddEntryDialog = () => {
+    setEditTarget(null);
     setAddEntryKind(null);
     setIncomeSourceName("");
     setIncomeAmount(0);
@@ -5270,15 +5281,47 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     });
     setIsAddEntryOpen(true);
   };
+  const openEditEntryDialog = (row: InvestmentRow) => {
+    const derived = derivedMap[row.id];
+    const ticker = tickerMap[normalizeLookupKey(row.symbol)];
+    setEditTarget(row);
+    if (derived?.incomeItem || isIncomeAssetType(ticker?.assetType || "")) {
+      setAddEntryKind("income");
+      setIncomeSourceName(row.description.trim());
+      setIncomeAmount(Math.max(0, toNumber(derived?.yearlyIncome || row.yearlyIncome)));
+      setIncomePeriod("annual");
+    } else {
+      setAddEntryKind("investment");
+      setInvestmentDraft({
+        name: row.description,
+        account: row.account,
+        symbol: row.symbol,
+        amount: Math.max(0, toNumber(row.totalInvestment)),
+        dividendPercent: normalizeRate(ticker?.percentReturn ?? derived?.currentPercent ?? 0) * 100,
+        assetType: ticker?.assetType || "ETF",
+        assetClass: ticker?.category || row.category,
+        taxTreatment: ticker?.taxTreatment || taxTreatmentOptions.find((value) => normalizeLookupKey(value) === "income") || taxTreatmentOptions.find(Boolean) || "income",
+        extraData: toNumber(ticker?.extraData || 0),
+        assetDescription: ticker?.description || row.description,
+        exDividend: ticker?.exDividend || "",
+        divPayout: ticker?.divPayout || "",
+      });
+    }
+    setIsAddEntryOpen(true);
+  };
   const closeAddEntryDialog = () => {
     setIsAddEntryOpen(false);
     setAddEntryKind(null);
+    setEditTarget(null);
   };
   const updateInvestmentDraft = (field: keyof typeof investmentDraft, value: string | number) => {
     setInvestmentDraft((current) => ({ ...current, [field]: value }));
   };
   const normalizedDraftSymbol = normalizeLookupKey(investmentDraft.symbol);
-  const investmentAssetAlreadyExists = Boolean(normalizedDraftSymbol) && symbolOptions.some((symbol) => normalizeLookupKey(symbol) === normalizedDraftSymbol);
+  const originalEditSymbol = normalizeLookupKey(editTarget?.symbol || "");
+  const investmentAssetAlreadyExists = Boolean(normalizedDraftSymbol) && symbolOptions.some((symbol) => (
+    normalizeLookupKey(symbol) === normalizedDraftSymbol && normalizedDraftSymbol !== originalEditSymbol
+  ));
   const canCreateInvestment = Boolean(
     investmentDraft.name.trim() &&
     investmentDraft.account.trim() &&
@@ -5286,20 +5329,22 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     investmentDraft.assetType.trim() &&
     investmentDraft.assetClass.trim() &&
     investmentDraft.taxTreatment.trim() &&
-    investmentDraft.amount > 0 &&
+    (editTarget ? investmentDraft.amount >= 0 : investmentDraft.amount > 0) &&
     !investmentAssetAlreadyExists
   );
   const confirmCreateNewIncome = () => {
     if (!canCreateIncome) return;
-    onCreateNewIncome({
+    const input = {
       sourceName: incomeSourceName.trim(),
       annualAmount: Math.round(annualizedIncomeAmount * 100) / 100,
-    });
+    };
+    if (editTarget) onEditIncome(editTarget.id, input);
+    else onCreateNewIncome(input);
     closeAddEntryDialog();
   };
   const confirmCreateInvestment = () => {
     if (!canCreateInvestment) return;
-    onCreateInvestment({
+    const input = {
       name: investmentDraft.name.trim(),
       account: investmentDraft.account.trim(),
       symbol: investmentDraft.symbol.trim(),
@@ -5312,7 +5357,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       assetDescription: investmentDraft.assetDescription.trim() || investmentDraft.name.trim(),
       exDividend: investmentDraft.exDividend,
       divPayout: investmentDraft.divPayout.trim(),
-    });
+    };
+    if (editTarget) onEditInvestment(editTarget.id, editTarget.symbol, input);
+    else onCreateInvestment(input);
     closeAddEntryDialog();
   };
   useEffect(() => {
@@ -5845,7 +5892,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             <div className="income-entry-panel__header">
               <div>
                 <p className="eyebrow">Investments</p>
-                <h3 id="add-entry-title">{addEntryKind ? `Add ${addEntryKind}` : "What would you like to add?"}</h3>
+                <h3 id="add-entry-title">{editTarget ? `Edit ${addEntryKind}` : addEntryKind ? `Add ${addEntryKind}` : "What would you like to add?"}</h3>
               </div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={closeAddEntryDialog}>Close</button>
             </div>
@@ -5865,7 +5912,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             )}
             {addEntryKind === "income" && (
               <form onSubmit={(event) => { event.preventDefault(); confirmCreateNewIncome(); }}>
-                <p className="income-entry-panel__copy">Enter the source and payment amount. The matching Income asset and investment row will be created together.</p>
+                <p className="income-entry-panel__copy">{editTarget ? "Update this income source and its annual payment amount." : "Enter the source and payment amount. The matching Income asset and investment row will be created together."}</p>
                 <label className="income-entry-panel__field">
                   <span>Name of income source</span>
                   <input type="text" value={incomeSourceName} onChange={(event) => setIncomeSourceName(event.target.value)} placeholder="Salary, pension, rental income..." autoFocus />
@@ -5891,14 +5938,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   <strong>{formatCurrencyDetailed(annualizedIncomeAmount)}</strong>
                 </div>
                 <div className="income-entry-panel__actions">
-                  <button className="ghost-button" type="button" onClick={() => setAddEntryKind(null)}>Back</button>
-                  <button className="primary-button" type="submit" disabled={!canCreateIncome}>Add income source</button>
+                  <button className="ghost-button" type="button" onClick={editTarget ? closeAddEntryDialog : () => setAddEntryKind(null)}>{editTarget ? "Cancel" : "Back"}</button>
+                  <button className="primary-button" type="submit" disabled={!canCreateIncome}>{editTarget ? "Save income changes" : "Add income source"}</button>
                 </div>
               </form>
             )}
             {addEntryKind === "investment" && (
               <form onSubmit={(event) => { event.preventDefault(); confirmCreateInvestment(); }}>
-                <p className="income-entry-panel__copy">Define the holding and its reusable Asset record. Fields marked required must be completed before adding it.</p>
+                <p className="income-entry-panel__copy">{editTarget ? "Update the holding and its reusable Asset record. Fields marked required must be completed before saving." : "Define the holding and its reusable Asset record. Fields marked required must be completed before adding it."}</p>
                 <div className="add-investment-form-grid">
                   <label className="income-entry-panel__field">
                     <span>Investment name *</span>
@@ -5965,8 +6012,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                 </div>
                 <div className="income-entry-panel__actions add-entry-panel__actions">
-                  <button className="ghost-button" type="button" onClick={() => setAddEntryKind(null)}>Back</button>
-                  <button className="primary-button" type="submit" disabled={!canCreateInvestment}>Add investment and asset</button>
+                  <button className="ghost-button" type="button" onClick={editTarget ? closeAddEntryDialog : () => setAddEntryKind(null)}>{editTarget ? "Cancel" : "Back"}</button>
+                  <button className="primary-button" type="submit" disabled={!canCreateInvestment}>{editTarget ? "Save investment and asset" : "Add investment and asset"}</button>
                 </div>
               </form>
             )}
@@ -6035,7 +6082,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
               const rowTaxStatus = accountTaxStatusByName[normalizeLookupKey(row.account)] || "";
               const hasDifferentWhatIfAsset = normalizeLookupKey(row.newSymbol) !== "" && normalizeLookupKey(row.newSymbol) !== normalizeLookupKey(row.symbol);
               const investmentCells = {
-                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
+                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-edit-button" type="button" title="Edit row" aria-label={`Edit ${row.description || "investment row"}`} onClick={() => openEditEntryDialog(row)}><RowActionIcon name="edit" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} excludedFromAfterTaxIncome={excludedAfterTaxAccountNames.has(normalizeLookupKey(row.account))} onChange={(value) => onChange(row.id, "account", value)} onAddIncome={() => openIncomeDialog(row)} onJumpToAccount={onJumpToAccount} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
@@ -7216,6 +7263,20 @@ export default function App() {
         : [...current, incomeRow];
     });
   };
+  const editIncomeForInvestment = (investmentId: number, input: IncomeEntryInput) => {
+    recordUndoCheckpoint();
+    const targetRow = investments.find((row) => row.id === investmentId);
+    const targetSymbolKey = normalizeLookupKey(targetRow?.symbol || "");
+    const assetReferenceCount = investments.filter((row) => normalizeLookupKey(row.symbol) === targetSymbolKey).length;
+    if (targetSymbolKey && assetReferenceCount <= 1) {
+      setTickers((current) => current.map((ticker) => normalizeLookupKey(ticker.symbol) === targetSymbolKey
+        ? { ...ticker, description: input.sourceName.trim() }
+        : ticker));
+    }
+    setInvestments((current) => current.map((row) => row.id === investmentId
+      ? { ...row, description: input.sourceName.trim(), yearlyIncome: input.annualAmount }
+      : row));
+  };
   const createInvestmentWithAsset = (input: InvestmentEntryInput) => {
     recordUndoCheckpoint();
     const assetId = Date.now();
@@ -7245,6 +7306,51 @@ export default function App() {
       newSymbol: input.symbol,
       newPercent: normalizeRate(input.dividendRate),
     }]);
+  };
+  const editInvestmentWithAsset = (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => {
+    recordUndoCheckpoint();
+    const originalSymbolKey = normalizeLookupKey(originalSymbol);
+    const nextSymbolKey = normalizeLookupKey(input.symbol);
+    const originalAssetReferenceCount = investments.filter((row) => normalizeLookupKey(row.symbol) === originalSymbolKey).length;
+    const nextAsset = {
+      symbol: input.symbol,
+      percentReturn: normalizeRate(input.dividendRate),
+      assetType: input.assetType,
+      category: input.assetClass,
+      taxTreatment: input.taxTreatment,
+      incomeItem: false,
+      extraData: input.extraData,
+      description: input.assetDescription,
+      exDividend: input.exDividend,
+      divPayout: input.divPayout,
+    };
+    setTickers((current) => {
+      const originalAssetIndex = current.findIndex((ticker) => normalizeLookupKey(ticker.symbol) === originalSymbolKey);
+      const nextAssetIndex = current.findIndex((ticker) => normalizeLookupKey(ticker.symbol) === nextSymbolKey);
+      if (originalAssetIndex >= 0 && (originalSymbolKey === nextSymbolKey || originalAssetReferenceCount <= 1)) {
+        return current.map((ticker, index) => index === originalAssetIndex ? { ...ticker, ...nextAsset } : ticker);
+      }
+      if (nextAssetIndex >= 0) return current;
+      return [...current, {
+        id: Math.max(Date.now(), ...current.map((ticker) => ticker.id + 1)),
+        ...nextAsset,
+      }];
+    });
+    setInvestments((current) => current.map((row) => {
+      if (row.id !== investmentId) return row;
+      const hasSeparateWhatIfAsset = Boolean(normalizeLookupKey(row.newSymbol)) && normalizeLookupKey(row.newSymbol) !== originalSymbolKey;
+      return {
+        ...row,
+        description: input.name,
+        account: input.account,
+        category: input.assetClass,
+        totalInvestment: input.amount,
+        yearlyIncome: input.amount * normalizeRate(input.dividendRate),
+        symbol: input.symbol,
+        newSymbol: hasSeparateWhatIfAsset ? row.newSymbol : input.symbol,
+        newPercent: hasSeparateWhatIfAsset ? row.newPercent : normalizeRate(input.dividendRate),
+      };
+    }));
   };
   const effectiveExtraStateIncome = isStateTaxWhatIfOpen ? stateSettings.extraStateIncome : 0;
   const socialSecurityRows = derivedRows.filter((row) => normalizeTaxTreatmentKey(row.taxTreatment) === "ss85fed");
@@ -10457,7 +10563,9 @@ export default function App() {
             onChange={updateInvestmentRow}
             onCreateIncome={createIncomeForInvestment}
             onCreateNewIncome={(input) => createIncomeForInvestment(Date.now(), input)}
+            onEditIncome={editIncomeForInvestment}
             onCreateInvestment={createInvestmentWithAsset}
+            onEditInvestment={editInvestmentWithAsset}
             onRemove={(id) => {
               setInvestments((current) => current.filter((row) => row.id !== id));
               setSelectedInvestmentIds((current) => current.filter((selectedId) => selectedId !== id));
