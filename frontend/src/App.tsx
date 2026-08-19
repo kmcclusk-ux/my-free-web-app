@@ -5319,19 +5319,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   };
   const normalizedDraftSymbol = normalizeLookupKey(investmentDraft.symbol);
   const originalEditSymbol = normalizeLookupKey(editTarget?.symbol || "");
-  const investmentAssetAlreadyExists = Boolean(normalizedDraftSymbol) && symbolOptions.some((symbol) => (
-    normalizeLookupKey(symbol) === normalizedDraftSymbol && normalizedDraftSymbol !== originalEditSymbol
-  ));
-  const canCreateInvestment = Boolean(
-    investmentDraft.name.trim() &&
-    investmentDraft.account.trim() &&
-    investmentDraft.symbol.trim() &&
-    investmentDraft.assetType.trim() &&
-    investmentDraft.assetClass.trim() &&
-    investmentDraft.taxTreatment.trim() &&
-    (editTarget ? investmentDraft.amount >= 0 : investmentDraft.amount > 0) &&
-    !investmentAssetAlreadyExists
-  );
+  const matchedDraftAsset = normalizedDraftSymbol ? tickerMap[normalizedDraftSymbol] : undefined;
+  const reusesDifferentExistingAsset = Boolean(matchedDraftAsset && normalizedDraftSymbol !== originalEditSymbol);
   const confirmCreateNewIncome = () => {
     if (!canCreateIncome) return;
     const input = {
@@ -5343,20 +5332,32 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     closeAddEntryDialog();
   };
   const confirmCreateInvestment = () => {
-    if (!canCreateInvestment) return;
+    const usedAssetKeys = new Set(symbolOptions.map(normalizeLookupKey));
+    const fallbackSymbolBase = investmentDraft.name.trim() || "New Asset";
+    let resolvedSymbol = investmentDraft.symbol.trim() || editTarget?.symbol.trim() || fallbackSymbolBase;
+    if (!investmentDraft.symbol.trim() && !editTarget?.symbol.trim()) {
+      let suffix = 2;
+      while (usedAssetKeys.has(normalizeLookupKey(resolvedSymbol))) {
+        resolvedSymbol = `${fallbackSymbolBase} ${suffix}`;
+        suffix += 1;
+      }
+    }
+    const matchedAsset = tickerMap[normalizeLookupKey(resolvedSymbol)];
+    const shouldReuseMatchedAsset = Boolean(matchedAsset && normalizeLookupKey(resolvedSymbol) !== originalEditSymbol);
+    const name = investmentDraft.name.trim() || editTarget?.description.trim() || resolvedSymbol || "New investment";
     const input = {
-      name: investmentDraft.name.trim(),
-      account: investmentDraft.account.trim(),
-      symbol: investmentDraft.symbol.trim(),
+      name,
+      account: investmentDraft.account.trim() || editTarget?.account.trim() || accountOptions.find(Boolean) || "Unassigned",
+      symbol: matchedAsset?.symbol && shouldReuseMatchedAsset ? matchedAsset.symbol : resolvedSymbol,
       amount: Math.round(investmentDraft.amount * 100) / 100,
-      dividendRate: investmentDraft.dividendPercent / 100,
-      assetType: investmentDraft.assetType,
-      assetClass: investmentDraft.assetClass,
-      taxTreatment: investmentDraft.taxTreatment,
-      extraData: investmentDraft.extraData,
-      assetDescription: investmentDraft.assetDescription.trim() || investmentDraft.name.trim(),
-      exDividend: investmentDraft.exDividend,
-      divPayout: investmentDraft.divPayout.trim(),
+      dividendRate: shouldReuseMatchedAsset ? normalizeRate(matchedAsset?.percentReturn || 0) : investmentDraft.dividendPercent / 100,
+      assetType: shouldReuseMatchedAsset ? matchedAsset?.assetType || "ETF" : investmentDraft.assetType.trim() || matchedAsset?.assetType || "ETF",
+      assetClass: shouldReuseMatchedAsset ? matchedAsset?.category || "Uncategorized" : investmentDraft.assetClass.trim() || matchedAsset?.category || categoryOptions.find(Boolean) || "Uncategorized",
+      taxTreatment: shouldReuseMatchedAsset ? matchedAsset?.taxTreatment || "income" : investmentDraft.taxTreatment.trim() || matchedAsset?.taxTreatment || "income",
+      extraData: shouldReuseMatchedAsset ? toNumber(matchedAsset?.extraData || 0) : investmentDraft.extraData,
+      assetDescription: shouldReuseMatchedAsset ? matchedAsset?.description || name : investmentDraft.assetDescription.trim() || matchedAsset?.description || name,
+      exDividend: shouldReuseMatchedAsset ? matchedAsset?.exDividend || "" : investmentDraft.exDividend || matchedAsset?.exDividend || "",
+      divPayout: shouldReuseMatchedAsset ? matchedAsset?.divPayout || "" : investmentDraft.divPayout.trim() || matchedAsset?.divPayout || "",
     };
     if (editTarget) onEditInvestment(editTarget.id, editTarget.symbol, input);
     else onCreateInvestment(input);
@@ -5945,26 +5946,26 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             )}
             {addEntryKind === "investment" && (
               <form onSubmit={(event) => { event.preventDefault(); confirmCreateInvestment(); }}>
-                <p className="income-entry-panel__copy">{editTarget ? "Update the holding and its reusable Asset record. Fields marked required must be completed before saving." : "Define the holding and its reusable Asset record. Fields marked required must be completed before adding it."}</p>
+                <p className="income-entry-panel__copy">{editTarget ? "Update any details you have for this holding and its reusable Asset record. Missing values keep sensible defaults." : "Enter whatever details you have for the holding. Missing values receive sensible defaults and can be completed later."}</p>
                 <div className="add-investment-form-grid">
                   <label className="income-entry-panel__field">
-                    <span>Investment name *</span>
+                    <span>Investment name</span>
                     <input type="text" value={investmentDraft.name} onChange={(event) => updateInvestmentDraft("name", event.target.value)} placeholder="Municipal bond fund" autoFocus />
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Account *</span>
+                    <span>Account</span>
                     <select value={investmentDraft.account} onChange={(event) => updateInvestmentDraft("account", event.target.value)}>
                       <option value="">Select account</option>
                       {accountOptions.filter(Boolean).map((account) => <option key={account} value={account}>{account}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset ID / ticker *</span>
-                    <input type="text" value={investmentDraft.symbol} onChange={(event) => updateInvestmentDraft("symbol", event.target.value)} placeholder="MUB" aria-invalid={investmentAssetAlreadyExists} />
-                    {investmentAssetAlreadyExists && <small className="add-entry-field-error">This Asset ID already exists. Enter a unique ID.</small>}
+                    <span>Asset ID / ticker</span>
+                    <input type="text" value={investmentDraft.symbol} onChange={(event) => updateInvestmentDraft("symbol", event.target.value)} placeholder="MUB" />
+                    {reusesDifferentExistingAsset && <small>This Asset ID already exists. The row will use its existing Asset record.</small>}
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Investment amount *</span>
+                    <span>Investment amount</span>
                     <div className="income-entry-panel__money-input">
                       <span aria-hidden="true">$</span>
                       <MoneyInput value={investmentDraft.amount} onChange={(value) => updateInvestmentDraft("amount", Math.max(0, toNumber(value)))} ariaLabel="Investment amount" />
@@ -5975,20 +5976,20 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                     <input type="number" min="0" step="0.01" value={investmentDraft.dividendPercent} onChange={(event) => updateInvestmentDraft("dividendPercent", Math.max(0, toNumber(event.target.value)))} />
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset type *</span>
+                    <span>Asset type</span>
                     <select value={investmentDraft.assetType} onChange={(event) => updateInvestmentDraft("assetType", event.target.value)}>
                       {assetTypeOptions.filter((type) => !isIncomeAssetType(type)).map((type) => <option key={type} value={type}>{type}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset class *</span>
+                    <span>Asset class</span>
                     <select value={investmentDraft.assetClass} onChange={(event) => updateInvestmentDraft("assetClass", event.target.value)}>
                       <option value="">Select asset class</option>
                       {categoryOptions.filter(Boolean).map((category) => <option key={category} value={category}>{category}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Tax treatment *</span>
+                    <span>Tax treatment</span>
                     <select value={investmentDraft.taxTreatment} onChange={(event) => updateInvestmentDraft("taxTreatment", event.target.value)}>
                       <option value="">Select tax treatment</option>
                       {taxTreatmentOptions.filter(Boolean).map((treatment) => <option key={treatment} value={treatment}>{treatment}</option>)}
@@ -6013,7 +6014,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                 </div>
                 <div className="income-entry-panel__actions add-entry-panel__actions">
                   <button className="ghost-button" type="button" onClick={editTarget ? closeAddEntryDialog : () => setAddEntryKind(null)}>{editTarget ? "Cancel" : "Back"}</button>
-                  <button className="primary-button" type="submit" disabled={!canCreateInvestment}>{editTarget ? "Save investment and asset" : "Add investment and asset"}</button>
+                  <button className="primary-button" type="submit">{editTarget ? "Save investment and asset" : "Add investment and asset"}</button>
                 </div>
               </form>
             )}
@@ -7280,19 +7281,21 @@ export default function App() {
   const createInvestmentWithAsset = (input: InvestmentEntryInput) => {
     recordUndoCheckpoint();
     const assetId = Date.now();
-    setTickers((current) => [...current, {
-      id: Math.max(assetId, ...current.map((ticker) => ticker.id + 1)),
-      symbol: input.symbol,
-      percentReturn: normalizeRate(input.dividendRate),
-      assetType: input.assetType,
-      category: input.assetClass,
-      taxTreatment: input.taxTreatment,
-      incomeItem: false,
-      extraData: input.extraData,
-      description: input.assetDescription,
-      exDividend: input.exDividend,
-      divPayout: input.divPayout,
-    }]);
+    setTickers((current) => current.some((ticker) => normalizeLookupKey(ticker.symbol) === normalizeLookupKey(input.symbol))
+      ? current
+      : [...current, {
+          id: Math.max(assetId, ...current.map((ticker) => ticker.id + 1)),
+          symbol: input.symbol,
+          percentReturn: normalizeRate(input.dividendRate),
+          assetType: input.assetType,
+          category: input.assetClass,
+          taxTreatment: input.taxTreatment,
+          incomeItem: false,
+          extraData: input.extraData,
+          description: input.assetDescription,
+          exDividend: input.exDividend,
+          divPayout: input.divPayout,
+        }]);
     setInvestments((current) => [...current, {
       id: Math.max(assetId, ...current.map((row) => row.id + 1)),
       description: input.name,
