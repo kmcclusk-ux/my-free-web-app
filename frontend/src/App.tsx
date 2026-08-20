@@ -3526,13 +3526,10 @@ function getThermometerScale(values: ThermometerValue[], markers: ThermometerMar
   const nearbyCeiling = Math.max(valueMax * 1.35, valueMax + 75000);
   const nextMarker = sortedMarkers.find((marker) => marker.amount > valueMax);
   const nearbyMarkers = sortedMarkers.filter((marker) => marker.amount <= nearbyCeiling);
-  const shouldIncludeNext =
-    nextMarker &&
-    (nearbyMarkers.length === 0 || nextMarker.amount <= Math.max(valueMax * 1.75, valueMax + 125000));
   const scaleBase = Math.max(
     valueMax,
     ...nearbyMarkers.map((marker) => marker.amount),
-    ...(shouldIncludeNext ? [nextMarker.amount] : [])
+    ...(nextMarker ? [nextMarker.amount] : [])
   );
   const increment = scaleBase <= 100000 ? 10000 : scaleBase <= 500000 ? 25000 : 50000;
   const scaleMax = Math.ceil((scaleBase * 1.08) / increment) * increment;
