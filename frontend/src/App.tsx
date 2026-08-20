@@ -1040,7 +1040,7 @@ export function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "i
 }
 export const defaultTaxTreatmentLabels = ["tax-free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"] as const;
 const initialTaxTreatments: TaxTreatmentRow[] = defaultTaxTreatmentLabels.map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label), includeInAllocation: true }));
-const assetTypeOptions = ["ETF", "Stock", "Income"];
+const defaultAssetTypeOptions = ["ETF", "Stock", "Income"];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus, includeInAllocation: true }));
 const initialAccountTypes: AccountTypeRow[] = [
   { id: 1, name: "IRA", taxStatus: "deferred", includeInAllocation: true },
@@ -4946,7 +4946,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     exDividend: "",
     divPayout: "",
   });
-  const [quickAddKind, setQuickAddKind] = useState<"account" | "asset" | "taxTreatment" | null>(null);
+  const [quickAddKind, setQuickAddKind] = useState<"account" | "asset" | "assetType" | "taxTreatment" | null>(null);
+  const [newAssetTypes, setNewAssetTypes] = useState<string[]>([]);
+  const investmentAssetTypeOptions = useMemo(() => Array.from(new Set([
+    ...defaultAssetTypeOptions,
+    ...Object.values(tickerMap).map((row) => String(row.assetType || "").trim()).filter(Boolean),
+    ...newAssetTypes,
+  ])), [tickerMap, newAssetTypes]);
   const [quickAddValue, setQuickAddValue] = useState("");
   const [quickAddTargetRowId, setQuickAddTargetRowId] = useState<number | null>(null);
   const quickAddSelectRef = useRef<((value: string) => void) | null>(null);
@@ -4959,7 +4965,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     window.addEventListener("aftertax:quick-add", handleQuickAdd);
     return () => window.removeEventListener("aftertax:quick-add", handleQuickAdd);
   }, []);
-  const openQuickAdd = (kind: "account" | "asset" | "taxTreatment", targetRowId: number | null = null) => {
+  const openQuickAdd = (kind: "account" | "asset" | "assetType" | "taxTreatment", targetRowId: number | null = null) => {
     setQuickAddKind(kind);
     setQuickAddTargetRowId(targetRowId);
     setQuickAddValue("");
@@ -4974,6 +4980,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     } else if (quickAddKind === "asset") {
       onCreateAsset(value);
       if (quickAddTargetRowId !== null) onChange(quickAddTargetRowId, "symbol", value);
+    } else if (quickAddKind === "assetType") {
+      setNewAssetTypes((current) => current.some((item) => normalizeLookupKey(item) === normalizeLookupKey(value)) ? current : [...current, value]);
+      updateInvestmentDraft("assetType", value);
     } else {
       onCreateTaxTreatment(value);
       updateInvestmentDraft("taxTreatment", value);
@@ -5953,13 +5962,13 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
         <div className="income-entry-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickAddKind(null); }}>
           <div className="add-entry-panel" role="dialog" aria-modal="true" aria-labelledby="quick-add-title">
             <div className="income-entry-panel__header">
-              <div><p className="eyebrow">New lookup item</p><h3 id="quick-add-title">Add {quickAddKind === "taxTreatment" ? "tax treatment" : quickAddKind}</h3></div>
+              <div><p className="eyebrow">New lookup item</p><h3 id="quick-add-title">Add {quickAddKind === "taxTreatment" ? "tax treatment" : quickAddKind === "assetType" ? "asset type" : quickAddKind}</h3></div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={() => setQuickAddKind(null)}>Close</button>
             </div>
             <form onSubmit={(event) => { event.preventDefault(); confirmQuickAdd(); }}>
               <p className="income-entry-panel__copy">Create this item here and select it immediately. You can edit its additional settings on the {quickAddKind === "taxTreatment" ? "Tax Treatments" : quickAddKind === "account" ? "Accounts" : "Assets"} tab.</p>
               <label className="income-entry-panel__field">
-                <span>{quickAddKind === "taxTreatment" ? "Treatment ID" : quickAddKind === "account" ? "Account name" : "Asset ID / ticker"} <em className="add-entry-required">Required</em></span>
+                <span>{quickAddKind === "taxTreatment" ? "Treatment ID" : quickAddKind === "account" ? "Account name" : quickAddKind === "assetType" ? "Asset type name" : "Asset ID / ticker"} <em className="add-entry-required">Required</em></span>
                 <input type="text" required value={quickAddValue} onChange={(event) => setQuickAddValue(event.target.value)} autoFocus />
               </label>
               <div className="income-entry-panel__actions">
@@ -6062,8 +6071,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                   <label className="income-entry-panel__field">
                     <span>Asset type <em className="add-entry-required">Required</em></span>
-                    <select required value={investmentDraft.assetType} onChange={(event) => updateInvestmentDraft("assetType", event.target.value)}>
-                      {assetTypeOptions.filter((type) => !isIncomeAssetType(type)).map((type) => <option key={type} value={type}>{type}</option>)}
+                    <select required value={investmentDraft.assetType} onChange={(event) => event.target.value === "__add_new__" ? openQuickAdd("assetType") : updateInvestmentDraft("assetType", event.target.value)}>
+                      {investmentAssetTypeOptions.filter((type) => !isIncomeAssetType(type)).map((type) => <option key={type} value={type}>{type}</option>)}
+                      <option value="__add_new__">＋ Add new asset type…</option>
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
@@ -6515,6 +6525,10 @@ export default function App() {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [accountTaxTypes, setAccountTaxTypes] = useState(initialAccountTaxTypes);
   const [accountTypes, setAccountTypes] = useState(initialAccountTypes);
+  const assetTypeOptions = useMemo(() => Array.from(new Set([
+    ...defaultAssetTypeOptions,
+    ...tickers.map((row) => String(row.assetType || "").trim()).filter(Boolean),
+  ])), [tickers]);
   const [federalSettings, setFederalSettings] = useState(initialFederalSettings);
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [localTaxSettings, setLocalTaxSettings] = useState(initialLocalTaxSettings);
