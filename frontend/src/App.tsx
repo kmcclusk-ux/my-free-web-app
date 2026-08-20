@@ -9037,10 +9037,6 @@ export default function App() {
                   <TopbarActionIcon name="report" />
                   <span>Create a Scenario</span>
                 </button>
-                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setClearAllConfirmation(""); setClearAllError(""); setIsClearAllDialogOpen(true); }}>
-                  <TopbarActionIcon name="delete" />
-                  <span className="topbar-menu__label"><span>Clear all</span><small>Permanently wipe account data</small></span>
-                </button>
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
                   <TopbarActionIcon name="report" />
                   <span>Manage Scenarios</span>
@@ -9056,6 +9052,10 @@ export default function App() {
               </div>
             )}
           </div>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setClearAllConfirmation(""); setClearAllError(""); setIsClearAllDialogOpen(true); }}>
+            <TopbarActionIcon name="delete" />
+            <span className="topbar-menu__label"><span>Clear all</span><small>Permanently wipe account data</small></span>
+          </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
             <span>Save Version</span>
