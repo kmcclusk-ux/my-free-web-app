@@ -6472,6 +6472,7 @@ export default function App() {
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isClearAllDialogOpen, setIsClearAllDialogOpen] = useState(false);
   const [clearAllConfirmation, setClearAllConfirmation] = useState("");
+  const [clearAllReferenceMode, setClearAllReferenceMode] = useState<"keep" | "clean">("keep");
   const [clearAllError, setClearAllError] = useState("");
   const [isClearingAll, setIsClearingAll] = useState(false);
   const [settingsUsernameDraft, setSettingsUsernameDraft] = useState("");
@@ -8876,11 +8877,11 @@ export default function App() {
       if (authToken) await Promise.all(scenarioLandingPages.map((page) => deletePublicSummaryReport(page.id, authToken)));
       setInvestments([]);
       setTickers([]);
-      setCategories([]);
-      setTaxTreatments([]);
+      setCategories(clearAllReferenceMode === "keep" ? categories : []);
+      setTaxTreatments(clearAllReferenceMode === "keep" ? taxTreatments : []);
       setAccounts([]);
-      setAccountTaxTypes([]);
-      setAccountTypes([]);
+      setAccountTaxTypes(clearAllReferenceMode === "keep" ? accountTaxTypes : []);
+      setAccountTypes(clearAllReferenceMode === "keep" ? accountTypes : []);
       setFederalSettings(initialFederalSettings);
       setStateSettings(initialStateSettings);
       setLocalTaxSettings(initialLocalTaxSettings);
@@ -8910,7 +8911,18 @@ export default function App() {
           <div><p className="eyebrow">Danger zone</p><h3 id="clear-all-dialog-title">Clear the entire account?</h3></div>
           <button type="button" disabled={isClearingAll} onClick={() => setIsClearAllDialogOpen(false)} aria-label="Close clear account dialog">&times;</button>
         </header>
-        <div className="status-card status-card--error" id="clear-all-dialog-warning"><strong>Permanent account wipe.</strong> This deletes all investments, assets, accounts, tax settings, saved versions, scenarios, and published scenario pages. This cannot be undone.</div>
+        <div className="status-card status-card--error" id="clear-all-dialog-warning"><strong>Permanent account wipe.</strong> This deletes all investments, assets, accounts, tax settings, saved versions, scenarios, and published scenario pages. {clearAllReferenceMode === "clean" ? "The reference lists below will also be deleted." : "The selected reference defaults below will be retained."} This cannot be undone.</div>
+        <fieldset className="auth-required-panel__form">
+          <legend><strong>Choose the starting point after the wipe</strong></legend>
+          <label className="summary-report-dialog__publish-selector">
+            <input type="radio" name="clear-reference-mode" value="keep" checked={clearAllReferenceMode === "keep"} onChange={() => setClearAllReferenceMode("keep")} />
+            <span><strong>Keep current lookup defaults</strong><small>Retain {categories.length} asset classes, {taxTreatments.length} tax treatments, {accountTaxTypes.length} account tax categories, and {accountTypes.length} account types from the currently loaded sheet.</small></span>
+          </label>
+          <label className="summary-report-dialog__publish-selector">
+            <input type="radio" name="clear-reference-mode" value="clean" checked={clearAllReferenceMode === "clean"} onChange={() => setClearAllReferenceMode("clean")} />
+            <span><strong>Clean slate</strong><small>Delete all lookup lists too. You will need to define every class, treatment, tax category, and account type again.</small></span>
+          </label>
+        </fieldset>
         <label className="auth-required-panel__username">
           <span>Type <strong>DELETE EVERYTHING</strong> to confirm</span>
           <input value={clearAllConfirmation} autoComplete="off" onChange={(event) => { setClearAllConfirmation(event.target.value); setClearAllError(""); }} autoFocus />
@@ -9053,7 +9065,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setClearAllConfirmation(""); setClearAllError(""); setIsClearAllDialogOpen(true); }}>
+          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setClearAllConfirmation(""); setClearAllReferenceMode("keep"); setClearAllError(""); setIsClearAllDialogOpen(true); }}>
             <TopbarActionIcon name="delete" />
             <span className="topbar-menu__label"><span>Clear all</span><small>Wipe account data</small></span>
           </button>
