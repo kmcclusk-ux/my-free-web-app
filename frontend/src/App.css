@@ -4405,6 +4405,19 @@
   box-shadow: 0 8px 22px rgba(15, 23, 42, .18);
 }
 
+.sheet-table tbody tr:has(.row-action-drawer:hover),
+.sheet-table tbody tr:has(.row-action-drawer:focus-within) {
+  position: relative;
+  z-index: 40;
+}
+
+.sheet-table tbody .drag-handle-cell:has(.row-action-drawer:hover),
+.sheet-table tbody .drag-handle-cell:has(.row-action-drawer:focus-within),
+.sheet-table--lookup tbody .lookup-drag-cell:has(.row-action-drawer:hover),
+.sheet-table--lookup tbody .lookup-drag-cell:has(.row-action-drawer:focus-within) {
+  z-index: 60 !important;
+}
+
 .row-action-drawer > .drag-handle { flex: 0 0 auto; }
 .row-action-drawer > button:not(.drag-handle) {
   flex: 0 0 auto;
