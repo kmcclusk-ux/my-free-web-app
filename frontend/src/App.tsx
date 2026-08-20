@@ -3703,7 +3703,7 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | 
   );
 }
 
-function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" | "report" | "settings" }) {
+function TopbarActionIcon({ name }: { name: "copy" | "delete" | "signIn" | "signOut" | "assistant" | "sheet" | "chat" | "menu" | "history" | "theme" | "report" | "settings" }) {
   if (name === "menu") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3739,6 +3739,10 @@ function TopbarActionIcon({ name }: { name: "copy" | "signIn" | "signOut" | "ass
         <path d="M15.5 3.5a7.5 7.5 0 1 0 5 9.4 6 6 0 0 1-7.4-7.4 7.6 7.6 0 0 1 2.4-2z" />
       </svg>
     );
+  }
+
+  if (name === "delete") {
+    return <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 7h14M9 7V4h6v3M8 10v8m4-8v8m4-8v8M7 7l1 13h8l1-13" /></svg>;
   }
 
   if (name === "settings") {
@@ -6466,6 +6470,10 @@ export default function App() {
   const [signInPublicUsernameError, setSignInPublicUsernameError] = useState("");
   const signInUsernameInputRef = useRef<HTMLInputElement>(null);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [isClearAllDialogOpen, setIsClearAllDialogOpen] = useState(false);
+  const [clearAllConfirmation, setClearAllConfirmation] = useState("");
+  const [clearAllError, setClearAllError] = useState("");
+  const [isClearingAll, setIsClearingAll] = useState(false);
   const [settingsUsernameDraft, setSettingsUsernameDraft] = useState("");
   const [settingsUsernameError, setSettingsUsernameError] = useState("");
   const [isUsernameRequestPending, setIsUsernameRequestPending] = useState(false);
@@ -8859,6 +8867,61 @@ export default function App() {
     </div>,
     document.body
   ) : null;
+  const clearEntireAccount = async () => {
+    if (clearAllConfirmation !== "DELETE EVERYTHING" || isClearingAll) return;
+    setIsClearingAll(true);
+    setClearAllError("");
+    try {
+      if (authToken) await Promise.all(scenarioLandingPages.map((page) => deletePublicSummaryReport(page.id, authToken)));
+      setInvestments([]);
+      setTickers([]);
+      setCategories([]);
+      setTaxTreatments([]);
+      setAccounts([]);
+      setAccountTaxTypes([]);
+      setAccountTypes([]);
+      setFederalSettings(initialFederalSettings);
+      setStateSettings(initialStateSettings);
+      setLocalTaxSettings(initialLocalTaxSettings);
+      setPlannerSettings(initialPlannerSettings);
+      setUiSettings(initialUiSettings);
+      setSelectedInvestmentIds([]);
+      setIsWhatIfActive(false);
+      setScenarioLandingPages([]);
+      setSummaryPublishScenarioIds([]);
+      setSummaryReportDialogMode(null);
+      historyRef.current = { past: [], present: "", future: [] };
+      historyInitialized.current = false;
+      setHistoryVersion((version) => version + 1);
+      setIsClearAllDialogOpen(false);
+      setClearAllConfirmation("");
+      setMcpTokenMessage("All account data was cleared.");
+    } catch (error) {
+      setClearAllError(error instanceof Error ? error.message : "The account could not be completely cleared.");
+    } finally {
+      setIsClearingAll(false);
+    }
+  };
+  const clearAllDialog = isClearAllDialogOpen ? createPortal(
+    <div className="auth-entry-dialog__backdrop" role="presentation" onMouseDown={(event) => { if (!isClearingAll && event.target === event.currentTarget) setIsClearAllDialogOpen(false); }}>
+      <section className="auth-entry-dialog" role="alertdialog" aria-modal="true" aria-labelledby="clear-all-dialog-title" aria-describedby="clear-all-dialog-warning">
+        <header className="auth-entry-dialog__header">
+          <div><p className="eyebrow">Danger zone</p><h3 id="clear-all-dialog-title">Clear the entire account?</h3></div>
+          <button type="button" disabled={isClearingAll} onClick={() => setIsClearAllDialogOpen(false)} aria-label="Close clear account dialog">&times;</button>
+        </header>
+        <div className="status-card status-card--error" id="clear-all-dialog-warning"><strong>Permanent account wipe.</strong> This deletes all investments, assets, accounts, tax settings, saved versions, scenarios, and published scenario pages. This cannot be undone.</div>
+        <label className="auth-required-panel__username">
+          <span>Type <strong>DELETE EVERYTHING</strong> to confirm</span>
+          <input value={clearAllConfirmation} autoComplete="off" onChange={(event) => { setClearAllConfirmation(event.target.value); setClearAllError(""); }} autoFocus />
+        </label>
+        {clearAllError && <div className="auth-required-panel__error" role="alert">{clearAllError}</div>}
+        <div className="settings-dialog__actions">
+          <button className="ghost-button" type="button" disabled={isClearingAll} onClick={() => setIsClearAllDialogOpen(false)}>Cancel</button>
+          <button className="primary-button" type="button" disabled={clearAllConfirmation !== "DELETE EVERYTHING" || isClearingAll} onClick={() => { void clearEntireAccount(); }}>{isClearingAll ? "Wiping account…" : "Permanently wipe account"}</button>
+        </div>
+      </section>
+    </div>, document.body
+  ) : null;
   const settingsDialog = isSettingsDialogOpen ? createPortal(
     <div className="auth-entry-dialog__backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) setIsSettingsDialogOpen(false);
@@ -8973,6 +9036,10 @@ export default function App() {
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("create")}>
                   <TopbarActionIcon name="report" />
                   <span>Create a Scenario</span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setClearAllConfirmation(""); setClearAllError(""); setIsClearAllDialogOpen(true); }}>
+                  <TopbarActionIcon name="delete" />
+                  <span className="topbar-menu__label"><span>Clear all</span><small>Permanently wipe account data</small></span>
                 </button>
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => openSummaryReportDialog("manage")}>
                   <TopbarActionIcon name="report" />
@@ -10524,6 +10591,7 @@ export default function App() {
       )}
       {authEntryDialog}
       {settingsDialog}
+      {clearAllDialog}
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
           {actionMenu}
