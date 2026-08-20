@@ -1040,7 +1040,6 @@ export function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "i
 }
 export const defaultTaxTreatmentLabels = ["tax-free", "state tax free", "fed tax free", "index-60-40", "income", "ss-85-fed", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "real estate", "hold"] as const;
 const initialTaxTreatments: TaxTreatmentRow[] = defaultTaxTreatmentLabels.map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label), includeInAllocation: true }));
-const defaultAssetTypeOptions = ["ETF", "Stock", "Income"];
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred", "tax-deduction"].map((taxStatus, index) => ({ id: index + 1, taxStatus, includeInAllocation: true }));
 const initialAccountTypes: AccountTypeRow[] = [
   { id: 1, name: "IRA", taxStatus: "deferred", includeInAllocation: true },
@@ -4938,7 +4937,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     symbol: "",
     amount: 0,
     dividendPercent: 0,
-    assetType: "ETF",
+    assetType: categoryOptions[1] || "",
     assetClass: categoryOptions[1] || "",
     taxTreatment: taxTreatmentOptions.find(Boolean) || "income",
     extraData: 0,
@@ -4947,12 +4946,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     divPayout: "",
   });
   const [quickAddKind, setQuickAddKind] = useState<"account" | "asset" | "assetType" | "taxTreatment" | null>(null);
-  const [newAssetTypes, setNewAssetTypes] = useState<string[]>([]);
-  const investmentAssetTypeOptions = useMemo(() => Array.from(new Set([
-    ...defaultAssetTypeOptions,
-    ...Object.values(tickerMap).map((row) => String(row.assetType || "").trim()).filter(Boolean),
-    ...newAssetTypes,
-  ])), [tickerMap, newAssetTypes]);
   const [quickAddValue, setQuickAddValue] = useState("");
   const [quickAddTargetRowId, setQuickAddTargetRowId] = useState<number | null>(null);
   const quickAddSelectRef = useRef<((value: string) => void) | null>(null);
@@ -4981,8 +4974,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       onCreateAsset(value);
       if (quickAddTargetRowId !== null) onChange(quickAddTargetRowId, "symbol", value);
     } else if (quickAddKind === "assetType") {
-      setNewAssetTypes((current) => current.some((item) => normalizeLookupKey(item) === normalizeLookupKey(value)) ? current : [...current, value]);
       updateInvestmentDraft("assetType", value);
+      updateInvestmentDraft("assetClass", value);
     } else {
       onCreateTaxTreatment(value);
       updateInvestmentDraft("taxTreatment", value);
@@ -5331,7 +5324,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       symbol: "",
       amount: 0,
       dividendPercent: 0,
-      assetType: "ETF",
+      assetType: categoryOptions[1] || "",
       assetClass: categoryOptions[1] || "",
       taxTreatment: taxTreatmentOptions.find((value) => normalizeLookupKey(value) === "income") || taxTreatmentOptions.find(Boolean) || "income",
       extraData: 0,
@@ -5358,7 +5351,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
         symbol: row.symbol,
         amount: Math.max(0, toNumber(row.totalInvestment)),
         dividendPercent: normalizeRate(ticker?.percentReturn ?? derived?.currentPercent ?? 0) * 100,
-        assetType: ticker?.assetType || "ETF",
+        assetType: ticker?.category || row.category || ticker?.assetType || "",
         assetClass: ticker?.category || row.category,
         taxTreatment: ticker?.taxTreatment || taxTreatmentOptions.find((value) => normalizeLookupKey(value) === "income") || taxTreatmentOptions.find(Boolean) || "income",
         extraData: toNumber(ticker?.extraData || 0),
@@ -6070,9 +6063,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                     <input type="number" required min="0" step="0.01" value={investmentDraft.dividendPercent} onChange={(event) => updateInvestmentDraft("dividendPercent", Math.max(0, toNumber(event.target.value)))} />
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset type <em className="add-entry-required">Required</em></span>
-                    <select required value={investmentDraft.assetType} onChange={(event) => event.target.value === "__add_new__" ? openQuickAdd("assetType") : updateInvestmentDraft("assetType", event.target.value)}>
-                      {investmentAssetTypeOptions.filter((type) => !isIncomeAssetType(type)).map((type) => <option key={type} value={type}>{type}</option>)}
+                    <span>Asset type / class <em className="add-entry-required">Required</em></span>
+                    <select required value={investmentDraft.assetType} onChange={(event) => { if (event.target.value === "__add_new__") openQuickAdd("assetType"); else { updateInvestmentDraft("assetType", event.target.value); updateInvestmentDraft("assetClass", event.target.value); } }}>
+                      {categoryOptions.filter((type) => !isIncomeAssetType(type)).map((type) => <option key={type} value={type}>{type}</option>)}
                       <option value="__add_new__">＋ Add new asset type…</option>
                     </select>
                   </label>
@@ -6086,15 +6079,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                 </div>
                 <details className="add-investment-optional">
-                  <summary><span>Optional details</span><small>Asset class, dividend details, and description</small></summary>
+                  <summary><span>Optional details</span><small>Dividend details and description</small></summary>
                   <div className="add-investment-form-grid">
-                    <label className="income-entry-panel__field">
-                      <span>Asset class <em className="add-entry-optional">Optional</em></span>
-                      <select value={investmentDraft.assetClass} onChange={(event) => updateInvestmentDraft("assetClass", event.target.value)}>
-                        <option value="">Select asset class</option>
-                        {categoryOptions.filter(Boolean).map((category) => <option key={category} value={category}>{category}</option>)}
-                      </select>
-                    </label>
                     <label className="income-entry-panel__field">
                       <span>Ex-dividend date <em className="add-entry-optional">Optional</em></span>
                       <input type="date" value={investmentDraft.exDividend} onChange={(event) => updateInvestmentDraft("exDividend", event.target.value)} />
@@ -6525,10 +6511,6 @@ export default function App() {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [accountTaxTypes, setAccountTaxTypes] = useState(initialAccountTaxTypes);
   const [accountTypes, setAccountTypes] = useState(initialAccountTypes);
-  const assetTypeOptions = useMemo(() => Array.from(new Set([
-    ...defaultAssetTypeOptions,
-    ...tickers.map((row) => String(row.assetType || "").trim()).filter(Boolean),
-  ])), [tickers]);
   const [federalSettings, setFederalSettings] = useState(initialFederalSettings);
   const [stateSettings, setStateSettings] = useState(initialStateSettings);
   const [localTaxSettings, setLocalTaxSettings] = useState(initialLocalTaxSettings);
@@ -6979,6 +6961,7 @@ export default function App() {
       .filter(Boolean);
     return ["", ...new Set([...values, ...fromTickers])];
   }, [categories, tickers]);
+  const assetTypeOptions = categoryOptions;
   const accountOptions = useMemo(() => ["", ...accounts.map((row) => row.account).filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)], [accounts]);
   const symbolOptions = useMemo(
     () => [
@@ -7382,6 +7365,8 @@ export default function App() {
   };
   const createInvestmentWithAsset = (input: InvestmentEntryInput) => {
     recordUndoCheckpoint();
+    const unifiedAssetClass = input.assetClass || input.assetType;
+    if (unifiedAssetClass) setCategories((current) => current.some((row) => normalizeLookupKey(row.name) === normalizeLookupKey(unifiedAssetClass)) ? current : [...current, { id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), name: unifiedAssetClass, includeInAllocation: true }]);
     const assetId = Date.now();
     setTickers((current) => current.some((ticker) => normalizeLookupKey(ticker.symbol) === normalizeLookupKey(input.symbol))
       ? current
@@ -7389,8 +7374,8 @@ export default function App() {
           id: Math.max(assetId, ...current.map((ticker) => ticker.id + 1)),
           symbol: input.symbol,
           percentReturn: normalizeRate(input.dividendRate),
-          assetType: input.assetType,
-          category: input.assetClass,
+          assetType: unifiedAssetClass,
+          category: unifiedAssetClass,
           taxTreatment: input.taxTreatment,
           incomeItem: false,
           extraData: input.extraData,
@@ -7402,7 +7387,7 @@ export default function App() {
       id: Math.max(assetId, ...current.map((row) => row.id + 1)),
       description: input.name,
       account: input.account,
-      category: input.assetClass,
+      category: unifiedAssetClass,
       totalInvestment: input.amount,
       yearlyIncome: input.amount * normalizeRate(input.dividendRate),
       includeIncome: true,
@@ -7421,7 +7406,7 @@ export default function App() {
   const createQuickAsset = (symbol: string) => {
     recordUndoCheckpoint();
     setTickers((current) => current.some((row) => normalizeLookupKey(row.symbol) === normalizeLookupKey(symbol)) ? current : [...current, {
-      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), symbol, percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "",
+      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), symbol, percentReturn: 0, assetType: categoryOptions[1] || "", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "",
     }]);
   };
   const createQuickTaxTreatment = (label: string) => {
@@ -7432,14 +7417,16 @@ export default function App() {
   };
   const editInvestmentWithAsset = (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => {
     recordUndoCheckpoint();
+    const unifiedAssetClass = input.assetClass || input.assetType;
+    if (unifiedAssetClass) setCategories((current) => current.some((row) => normalizeLookupKey(row.name) === normalizeLookupKey(unifiedAssetClass)) ? current : [...current, { id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), name: unifiedAssetClass, includeInAllocation: true }]);
     const originalSymbolKey = normalizeLookupKey(originalSymbol);
     const nextSymbolKey = normalizeLookupKey(input.symbol);
     const originalAssetReferenceCount = investments.filter((row) => normalizeLookupKey(row.symbol) === originalSymbolKey).length;
     const nextAsset = {
       symbol: input.symbol,
       percentReturn: normalizeRate(input.dividendRate),
-      assetType: input.assetType,
-      category: input.assetClass,
+      assetType: unifiedAssetClass,
+      category: unifiedAssetClass,
       taxTreatment: input.taxTreatment,
       incomeItem: false,
       extraData: input.extraData,
@@ -7466,7 +7453,7 @@ export default function App() {
         ...row,
         description: input.name,
         account: input.account,
-        category: input.assetClass,
+        category: unifiedAssetClass,
         totalInvestment: input.amount,
         yearlyIncome: input.amount * normalizeRate(input.dividendRate),
         symbol: input.symbol,
@@ -9244,7 +9231,7 @@ export default function App() {
     if (config.tableId === "tickers" && field === "assetType") {
       if (typeof value === "boolean") return value ? "Income" : "ETF";
       const normalized = normalizeLookupKey(value);
-      const option = assetTypeOptions.find((candidate) => normalizeLookupKey(candidate) === normalized);
+      const option = categoryOptions.find((candidate) => normalizeLookupKey(candidate) === normalized);
       return option || String(value ?? "");
     }
     if (config.numericFields.includes(field)) return toNumber(value as string | number | boolean | null | undefined);
@@ -9456,7 +9443,7 @@ export default function App() {
           allowedFields: ["symbol", "percentReturn", "assetType", "category", "taxTreatment", "extraData", "description", "exDividend", "divPayout"],
           numericFields: ["percentReturn", "extraData"],
           booleanFields: [],
-          defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" }),
+          defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, assetType: categoryOptions[1] || "", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" }),
         };
       case "accounts":
         return {
