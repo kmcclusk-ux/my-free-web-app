@@ -4411,11 +4411,17 @@
   z-index: 40;
 }
 
+.sheet-table tbody tr:has(.row-action-drawer:hover) > td,
+.sheet-table tbody tr:has(.row-action-drawer:focus-within) > td {
+  position: relative;
+  z-index: 60 !important;
+}
+
 .sheet-table tbody .drag-handle-cell:has(.row-action-drawer:hover),
 .sheet-table tbody .drag-handle-cell:has(.row-action-drawer:focus-within),
 .sheet-table--lookup tbody .lookup-drag-cell:has(.row-action-drawer:hover),
 .sheet-table--lookup tbody .lookup-drag-cell:has(.row-action-drawer:focus-within) {
-  z-index: 60 !important;
+  z-index: 80 !important;
 }
 
 .row-action-drawer > .drag-handle { flex: 0 0 auto; }
