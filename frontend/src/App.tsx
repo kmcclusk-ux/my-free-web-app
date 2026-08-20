@@ -459,7 +459,7 @@ const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const PUBLIC_USERNAME_STORAGE_KEY = "aftertaxus-public-username";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths-compact-v2";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 108, minWidth: 106 },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 42, minWidth: 42 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 30, minWidth: 28 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 28, minWidth: 26 },
   { id: "account", label: "Account", defaultWidth: 116, minWidth: 82 },
@@ -5068,7 +5068,9 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
         const storedWidth = Number(stored[column.id]);
         const migratedStoredWidth = column.id === "normalPercent" && storedWidth === 58
           ? DEFAULT_INVESTMENT_COLUMN_WIDTHS[column.id]
-          : storedWidth;
+          : column.id === "move" && storedWidth >= 100
+            ? DEFAULT_INVESTMENT_COLUMN_WIDTHS[column.id]
+            : storedWidth;
         acc[column.id] = Number.isFinite(storedWidth)
           ? Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(INVESTMENT_COLUMN_MIN_WIDTHS[column.id], migratedStoredWidth))
           : DEFAULT_INVESTMENT_COLUMN_WIDTHS[column.id];

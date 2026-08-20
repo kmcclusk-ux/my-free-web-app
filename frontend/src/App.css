@@ -4391,6 +4391,10 @@
   transition: max-width 180ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
+.investment-row-actions.row-action-drawer {
+  justify-content: flex-start;
+}
+
 .row-action-drawer:hover,
 .row-action-drawer:focus-within {
   z-index: 30;
