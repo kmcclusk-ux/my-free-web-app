@@ -5321,6 +5321,18 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const originalEditSymbol = normalizeLookupKey(editTarget?.symbol || "");
   const matchedDraftAsset = normalizedDraftSymbol ? tickerMap[normalizedDraftSymbol] : undefined;
   const reusesDifferentExistingAsset = Boolean(matchedDraftAsset && normalizedDraftSymbol !== originalEditSymbol);
+  const investmentRequiredFields = {
+    name: investmentDraft.name.trim().length > 0,
+    account: investmentDraft.account.trim().length > 0,
+    symbol: investmentDraft.symbol.trim().length > 0,
+    amount: Number.isFinite(investmentDraft.amount) && investmentDraft.amount > 0,
+    dividendPercent: Number.isFinite(investmentDraft.dividendPercent) && investmentDraft.dividendPercent >= 0,
+    assetType: investmentDraft.assetType.trim().length > 0,
+    assetClass: investmentDraft.assetClass.trim().length > 0,
+    taxTreatment: investmentDraft.taxTreatment.trim().length > 0,
+    extraData: Number.isFinite(investmentDraft.extraData),
+  };
+  const canCreateInvestment = Object.values(investmentRequiredFields).every(Boolean);
   const confirmCreateNewIncome = () => {
     if (!canCreateIncome) return;
     const input = {
@@ -5332,6 +5344,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     closeAddEntryDialog();
   };
   const confirmCreateInvestment = () => {
+    if (!canCreateInvestment) return;
     const usedAssetKeys = new Set(symbolOptions.map(normalizeLookupKey));
     const fallbackSymbolBase = investmentDraft.name.trim() || "New Asset";
     let resolvedSymbol = investmentDraft.symbol.trim() || editTarget?.symbol.trim() || fallbackSymbolBase;
@@ -5946,75 +5959,81 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             )}
             {addEntryKind === "investment" && (
               <form onSubmit={(event) => { event.preventDefault(); confirmCreateInvestment(); }}>
-                <p className="income-entry-panel__copy">{editTarget ? "Update any details you have for this holding and its reusable Asset record. Missing values keep sensible defaults." : "Enter whatever details you have for the holding. Missing values receive sensible defaults and can be completed later."}</p>
+                <p className="income-entry-panel__copy">{editTarget ? "Update the required investment and Asset fields. Optional dividend details can be expanded below." : "Complete the required fields to create the investment and its reusable Asset record. Optional dividend details can be added now or later."}</p>
                 <div className="add-investment-form-grid">
                   <label className="income-entry-panel__field">
-                    <span>Investment name</span>
-                    <input type="text" value={investmentDraft.name} onChange={(event) => updateInvestmentDraft("name", event.target.value)} placeholder="Municipal bond fund" autoFocus />
+                    <span>Investment name <em className="add-entry-required">Required</em></span>
+                    <input type="text" required value={investmentDraft.name} onChange={(event) => updateInvestmentDraft("name", event.target.value)} placeholder="Municipal bond fund" autoFocus />
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Account</span>
-                    <select value={investmentDraft.account} onChange={(event) => updateInvestmentDraft("account", event.target.value)}>
+                    <span>Account <em className="add-entry-required">Required</em></span>
+                    <select required value={investmentDraft.account} onChange={(event) => updateInvestmentDraft("account", event.target.value)}>
                       <option value="">Select account</option>
                       {accountOptions.filter(Boolean).map((account) => <option key={account} value={account}>{account}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset ID / ticker</span>
-                    <input type="text" value={investmentDraft.symbol} onChange={(event) => updateInvestmentDraft("symbol", event.target.value)} placeholder="MUB" />
+                    <span>Asset ID / ticker <em className="add-entry-required">Required</em></span>
+                    <input type="text" required value={investmentDraft.symbol} onChange={(event) => updateInvestmentDraft("symbol", event.target.value)} placeholder="MUB" />
                     {reusesDifferentExistingAsset && <small>This Asset ID already exists. The row will use its existing Asset record.</small>}
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Investment amount</span>
+                    <span>Investment amount <em className="add-entry-required">Required</em></span>
                     <div className="income-entry-panel__money-input">
                       <span aria-hidden="true">$</span>
                       <MoneyInput value={investmentDraft.amount} onChange={(value) => updateInvestmentDraft("amount", Math.max(0, toNumber(value)))} ariaLabel="Investment amount" />
                     </div>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Dividend / annual return %</span>
-                    <input type="number" min="0" step="0.01" value={investmentDraft.dividendPercent} onChange={(event) => updateInvestmentDraft("dividendPercent", Math.max(0, toNumber(event.target.value)))} />
+                    <span>Dividend / annual return % <em className="add-entry-required">Required</em></span>
+                    <input type="number" required min="0" step="0.01" value={investmentDraft.dividendPercent} onChange={(event) => updateInvestmentDraft("dividendPercent", Math.max(0, toNumber(event.target.value)))} />
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset type</span>
-                    <select value={investmentDraft.assetType} onChange={(event) => updateInvestmentDraft("assetType", event.target.value)}>
+                    <span>Asset type <em className="add-entry-required">Required</em></span>
+                    <select required value={investmentDraft.assetType} onChange={(event) => updateInvestmentDraft("assetType", event.target.value)}>
                       {assetTypeOptions.filter((type) => !isIncomeAssetType(type)).map((type) => <option key={type} value={type}>{type}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset class</span>
-                    <select value={investmentDraft.assetClass} onChange={(event) => updateInvestmentDraft("assetClass", event.target.value)}>
+                    <span>Asset class <em className="add-entry-required">Required</em></span>
+                    <select required value={investmentDraft.assetClass} onChange={(event) => updateInvestmentDraft("assetClass", event.target.value)}>
                       <option value="">Select asset class</option>
                       {categoryOptions.filter(Boolean).map((category) => <option key={category} value={category}>{category}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Tax treatment</span>
-                    <select value={investmentDraft.taxTreatment} onChange={(event) => updateInvestmentDraft("taxTreatment", event.target.value)}>
+                    <span>Tax treatment <em className="add-entry-required">Required</em></span>
+                    <select required value={investmentDraft.taxTreatment} onChange={(event) => updateInvestmentDraft("taxTreatment", event.target.value)}>
                       <option value="">Select tax treatment</option>
                       {taxTreatmentOptions.filter(Boolean).map((treatment) => <option key={treatment} value={treatment}>{treatment}</option>)}
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Extra tax data</span>
-                    <input type="number" step="0.01" value={investmentDraft.extraData} onChange={(event) => updateInvestmentDraft("extraData", toNumber(event.target.value))} />
-                  </label>
-                  <label className="income-entry-panel__field">
-                    <span>Ex-dividend date</span>
-                    <input type="date" value={investmentDraft.exDividend} onChange={(event) => updateInvestmentDraft("exDividend", event.target.value)} />
-                  </label>
-                  <label className="income-entry-panel__field add-investment-form-grid__wide">
-                    <span>Asset description</span>
-                    <input type="text" value={investmentDraft.assetDescription} onChange={(event) => updateInvestmentDraft("assetDescription", event.target.value)} placeholder="Defaults to the investment name" />
-                  </label>
-                  <label className="income-entry-panel__field add-investment-form-grid__wide">
-                    <span>Dividend payout schedule</span>
-                    <input type="text" value={investmentDraft.divPayout} onChange={(event) => updateInvestmentDraft("divPayout", event.target.value)} placeholder="Monthly, quarterly, annually..." />
+                    <span>Extra tax data <em className="add-entry-required">Required</em></span>
+                    <input type="number" required step="0.01" value={investmentDraft.extraData} onChange={(event) => updateInvestmentDraft("extraData", toNumber(event.target.value))} />
                   </label>
                 </div>
+                <details className="add-investment-optional">
+                  <summary><span>Optional details</span><small>Dividend dates, payout schedule, and description</small></summary>
+                  <div className="add-investment-form-grid">
+                    <label className="income-entry-panel__field">
+                      <span>Ex-dividend date <em className="add-entry-optional">Optional</em></span>
+                      <input type="date" value={investmentDraft.exDividend} onChange={(event) => updateInvestmentDraft("exDividend", event.target.value)} />
+                    </label>
+                    <label className="income-entry-panel__field">
+                      <span>Dividend payout schedule <em className="add-entry-optional">Optional</em></span>
+                      <input type="text" value={investmentDraft.divPayout} onChange={(event) => updateInvestmentDraft("divPayout", event.target.value)} placeholder="Monthly, quarterly, annually..." />
+                    </label>
+                    <label className="income-entry-panel__field add-investment-form-grid__wide">
+                      <span>Asset description <em className="add-entry-optional">Optional</em></span>
+                      <input type="text" value={investmentDraft.assetDescription} onChange={(event) => updateInvestmentDraft("assetDescription", event.target.value)} placeholder="Defaults to the investment name" />
+                    </label>
+                  </div>
+                </details>
+                {!canCreateInvestment && <p className="add-entry-field-error">Complete every required field and enter an investment amount greater than zero.</p>}
                 <div className="income-entry-panel__actions add-entry-panel__actions">
                   <button className="ghost-button" type="button" onClick={editTarget ? closeAddEntryDialog : () => setAddEntryKind(null)}>{editTarget ? "Cancel" : "Back"}</button>
-                  <button className="primary-button" type="submit">{editTarget ? "Save investment and asset" : "Add investment and asset"}</button>
+                  <button className="primary-button" type="submit" disabled={!canCreateInvestment}>{editTarget ? "Save investment and asset" : "Add investment and asset"}</button>
                 </div>
               </form>
             )}

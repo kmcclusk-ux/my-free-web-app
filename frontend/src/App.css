@@ -8428,6 +8428,46 @@ html.aftertaxus-dark-mode .income-entry-panel__annualized {
   grid-column: 1 / -1;
 }
 
+.add-entry-required,
+.add-entry-optional {
+  margin-left: 5px;
+  font-size: .56rem;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.add-entry-required { color: #b42318; }
+.add-entry-optional { color: #667085; }
+
+.add-investment-optional {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, .72);
+}
+
+.add-investment-optional summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  color: #344054;
+  cursor: pointer;
+  font-size: .74rem;
+  font-weight: 850;
+  list-style: none;
+}
+
+.add-investment-optional summary::-webkit-details-marker { display: none; }
+.add-investment-optional summary::after { content: "+"; font-size: 1rem; }
+.add-investment-optional[open] summary::after { content: "−"; }
+.add-investment-optional summary small { color: #667085; font-size: .62rem; font-weight: 650; }
+.add-investment-optional > .add-investment-form-grid { padding: 0 14px 14px; }
+
 .add-entry-field-error {
   margin-top: -2px;
   color: #b42318;
@@ -8461,6 +8501,12 @@ html.aftertaxus-dark-mode .add-entry-kind-card--investment {
 html.aftertaxus-dark-mode .add-entry-field-error {
   color: #fda4af;
 }
+
+html.aftertaxus-dark-mode .add-entry-required { color: #fda4af; }
+html.aftertaxus-dark-mode .add-entry-optional,
+html.aftertaxus-dark-mode .add-investment-optional summary small { color: #a7b4c7; }
+html.aftertaxus-dark-mode .add-investment-optional { border-color: rgba(110, 231, 183, .2); background: rgba(2, 6, 23, .24); }
+html.aftertaxus-dark-mode .add-investment-optional summary { color: #ecfdf5; }
 
 @media (max-width: 680px) {
   .add-entry-panel { max-height: calc(100vh - 28px); padding: 19px; }
