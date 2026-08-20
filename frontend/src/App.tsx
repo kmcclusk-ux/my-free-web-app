@@ -4619,6 +4619,8 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const [isRemoveAllConfirmOpen, setIsRemoveAllConfirmOpen] = useState(false);
+  const [editRowId, setEditRowId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<T> | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -4634,8 +4636,8 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     });
     return new Set([...counts].filter(([, count]) => count > 1).map(([value]) => value));
   }, [duplicateKey, rows]);
-  const inlineActionCount = (rowDeleteNextToMove ? 1 : 0) + (rowDeleteNextToMove && onLookupRow ? 1 : 0) + (onSplitRow ? 1 : 0) + (onPasteRow ? 2 : 0);
-  const lookupActionColumnWidth = rowDeleteNextToMove ? 0 : LOOKUP_TABLE_ACTION_COLUMN_WIDTH;
+  const inlineActionCount = (rowDeleteNextToMove ? 2 : 0) + (rowDeleteNextToMove && onLookupRow ? 1 : 0) + (onSplitRow ? 1 : 0) + (onPasteRow ? 2 : 0);
+  const lookupActionColumnWidth = rowDeleteNextToMove ? 0 : LOOKUP_TABLE_ACTION_COLUMN_WIDTH * 2;
   const lookupMoveColumnWidth = rowDeleteNextToMove ? LOOKUP_TABLE_DRAG_COLUMN_WIDTH + (LOOKUP_TABLE_ACTION_COLUMN_WIDTH * inlineActionCount) : LOOKUP_TABLE_DRAG_COLUMN_WIDTH;
   const lookupTableWidth = lookupMoveColumnWidth + lookupColumnWidths.reduce((sum, width) => sum + width, 0) + lookupActionColumnWidth;
   const lookupTableStyle = { width: lookupTableWidth, minWidth: lookupTableWidth } as CSSProperties;
@@ -4742,6 +4744,37 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
     onRemoveAll?.();
     setIsRemoveAllConfirmOpen(false);
   };
+  const openRowEditor = (row: T) => {
+    setEditRowId(row.id);
+    setEditDraft({ ...row });
+  };
+  const closeRowEditor = () => {
+    setEditRowId(null);
+    setEditDraft(null);
+  };
+  const updateEditDraft = (column: LookupColumn<T>, value: string | boolean) => {
+    setEditDraft((current) => current ? { ...current, [column.key]: value } : current);
+  };
+  const saveRowEditor = () => {
+    if (editRowId === null || !editDraft) return;
+    columns.forEach((column) => {
+      const value = editDraft[column.key];
+      onChange(editRowId, column.key, typeof value === "boolean" ? value : String(value ?? ""));
+    });
+    closeRowEditor();
+  };
+  const renderEditorField = (column: LookupColumn<T>) => {
+    const rawValue = editDraft?.[column.key];
+    if (column.type === "checkbox" || column.type === "yesNoCheckbox" || column.type === "invertedYesNoCheckbox") {
+      const editableValue = rawValue as string | number | boolean | null | undefined;
+      const normalizedYesNo = normalizeYesNo(editableValue);
+      const checked = column.type === "yesNoCheckbox" ? normalizedYesNo === "yes" : column.type === "invertedYesNoCheckbox" ? normalizedYesNo === "no" : normalizeBoolean(editableValue);
+      return <input type="checkbox" checked={checked} onChange={(event) => updateEditDraft(column, column.type === "yesNoCheckbox" ? (event.target.checked ? "yes" : "no") : column.type === "invertedYesNoCheckbox" ? (event.target.checked ? "no" : "yes") : event.target.checked)} />;
+    }
+    if (column.type === "select") return <select value={String(rawValue ?? "")} onChange={(event) => updateEditDraft(column, event.target.value)}>{(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select>;
+    if (column.type === "percent") return <div className="percent-input"><input type="number" step="0.01" value={formatPercentInputValue(toNumber(String(rawValue ?? "")) * 100)} onChange={(event) => updateEditDraft(column, String(truncatePercentInputValue(toNumber(event.target.value)) / 100))} /><span>%</span></div>;
+    return <input type={column.type === "number" ? "number" : "text"} value={String(rawValue ?? "")} onChange={(event) => updateEditDraft(column, event.target.value)} />;
+  };
   const copyRow = async (row: T) => {
     const values = Object.fromEntries(columns.map((column) => [column.key, row[column.key]])) as Partial<T>;
     copiedRowRef.current = values;
@@ -4826,12 +4859,36 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
           </div>
         </div>
       )}
+      {editDraft && createPortal(
+        <div className="income-entry-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRowEditor(); }}>
+          <div className="add-entry-panel add-entry-panel--wide" role="dialog" aria-modal="true" aria-labelledby="lookup-row-editor-title">
+            <div className="income-entry-panel__header">
+              <div><p className="eyebrow">{title}</p><h3 id="lookup-row-editor-title">Edit row</h3></div>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={closeRowEditor}>Close</button>
+            </div>
+            <form onSubmit={(event) => { event.preventDefault(); saveRowEditor(); }}>
+              <div className="add-investment-form-grid">
+                {columns.map((column) => (
+                  <label className="income-entry-panel__field" key={String(column.key)}>
+                    <span>{column.label}</span>
+                    {renderEditorField(column)}
+                  </label>
+                ))}
+              </div>
+              <div className="income-entry-panel__actions add-entry-panel__actions">
+                <button className="ghost-button" type="button" onClick={closeRowEditor}>Cancel</button>
+                <button className="primary-button" type="submit">Save changes</button>
+              </div>
+            </form>
+          </div>
+        </div>, document.body
+      )}
       <div className="table-wrap table-wrap--tall lookup-table-wrap" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--lookup" style={lookupTableStyle}>
           <colgroup>
             <col style={{ width: lookupMoveColumnWidth }} />
             {lookupColumnWidths.map((width, index) => <col key={String(columns[index].key)} style={{ width }} />)}
-            {!rowDeleteNextToMove && <col style={{ width: LOOKUP_TABLE_ACTION_COLUMN_WIDTH }} />}
+            {!rowDeleteNextToMove && <col style={{ width: lookupActionColumnWidth }} />}
           </colgroup>
           <thead>
             <tr><th className={`drag-handle-heading lookup-drag-heading ${rowDeleteNextToMove ? "lookup-drag-heading--with-delete" : ""}`.trim()} style={lookupMoveHeadingStyle} aria-label="Move row">{showMoveHeaderLabel ? "Move" : ""}</th>{columns.map((column) => <th key={String(column.key)}>{column.label}</th>)}{!rowDeleteNextToMove && <th />}</tr>
@@ -4848,6 +4905,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
               >
                 <td className={`drag-handle-cell lookup-drag-cell ${rowDeleteNextToMove ? "lookup-drag-cell--with-delete" : ""}`.trim()} style={lookupMoveCellStyle}>
                   <button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button>
+                  {rowDeleteNextToMove && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => openRowEditor(row)} aria-label={`Edit ${title} row`} title="Edit row"><RowActionIcon name="edit" /></button>}
                   {rowDeleteNextToMove && <button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger lookup-inline-delete-button" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button>}
                   {onSplitRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => onSplitRow(row.id)} aria-label={`Split ${title} row`} title="Split row"><RowActionIcon name="split" /></button>}
                   {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => void copyRow(row)} aria-label={`Copy ${title} row`} title="Copy row"><RowActionIcon name="copy" /></button>}
@@ -4855,7 +4913,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
                   {rowDeleteNextToMove && onLookupRow && showLookupRow(row) && <button className="ghost-button ghost-button--compact icon-button action-icon-button lookup-inline-lookup-button" type="button" onClick={() => onLookupRow(row)} aria-label={`${lookupRowLabel} ${String((row as Record<string, unknown>).symbol || "")}`.trim()} title={`${lookupRowLabel}${(row as Record<string, unknown>).symbol ? ` ${(row as Record<string, unknown>).symbol}` : ""}`}><RowActionIcon name="lookup" /></button>}
                 </td>
                 {columns.map((column) => <td key={String(column.key)}>{renderCell(row, column)}</td>)}
-                {!rowDeleteNextToMove && <td className="lookup-table__actions"><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td>}
+                {!rowDeleteNextToMove && <td className="lookup-table__actions"><button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => openRowEditor(row)} aria-label={`Edit ${title} row`} title="Edit row"><RowActionIcon name="edit" /></button><button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button></td>}
               </tr>
             ))}
           </tbody>
