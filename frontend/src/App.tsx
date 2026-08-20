@@ -5328,9 +5328,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     amount: Number.isFinite(investmentDraft.amount) && investmentDraft.amount > 0,
     dividendPercent: Number.isFinite(investmentDraft.dividendPercent) && investmentDraft.dividendPercent >= 0,
     assetType: investmentDraft.assetType.trim().length > 0,
-    assetClass: investmentDraft.assetClass.trim().length > 0,
     taxTreatment: investmentDraft.taxTreatment.trim().length > 0,
-    extraData: Number.isFinite(investmentDraft.extraData),
   };
   const canCreateInvestment = Object.values(investmentRequiredFields).every(Boolean);
   const confirmCreateNewIncome = () => {
@@ -5995,27 +5993,27 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
-                    <span>Asset class <em className="add-entry-required">Required</em></span>
-                    <select required value={investmentDraft.assetClass} onChange={(event) => updateInvestmentDraft("assetClass", event.target.value)}>
-                      <option value="">Select asset class</option>
-                      {categoryOptions.filter(Boolean).map((category) => <option key={category} value={category}>{category}</option>)}
-                    </select>
-                  </label>
-                  <label className="income-entry-panel__field">
                     <span>Tax treatment <em className="add-entry-required">Required</em></span>
                     <select required value={investmentDraft.taxTreatment} onChange={(event) => updateInvestmentDraft("taxTreatment", event.target.value)}>
                       <option value="">Select tax treatment</option>
                       {taxTreatmentOptions.filter(Boolean).map((treatment) => <option key={treatment} value={treatment}>{treatment}</option>)}
                     </select>
                   </label>
-                  <label className="income-entry-panel__field">
-                    <span>Extra tax data <em className="add-entry-required">Required</em></span>
-                    <input type="number" required step="0.01" value={investmentDraft.extraData} onChange={(event) => updateInvestmentDraft("extraData", toNumber(event.target.value))} />
-                  </label>
                 </div>
                 <details className="add-investment-optional">
-                  <summary><span>Optional details</span><small>Dividend dates, payout schedule, and description</small></summary>
+                  <summary><span>Optional details</span><small>Classification, tax data, dividend details, and description</small></summary>
                   <div className="add-investment-form-grid">
+                    <label className="income-entry-panel__field">
+                      <span>Asset class <em className="add-entry-optional">Optional</em></span>
+                      <select value={investmentDraft.assetClass} onChange={(event) => updateInvestmentDraft("assetClass", event.target.value)}>
+                        <option value="">Select asset class</option>
+                        {categoryOptions.filter(Boolean).map((category) => <option key={category} value={category}>{category}</option>)}
+                      </select>
+                    </label>
+                    <label className="income-entry-panel__field">
+                      <span>Extra tax data <em className="add-entry-optional">Optional</em></span>
+                      <input type="number" step="0.01" value={investmentDraft.extraData} onChange={(event) => updateInvestmentDraft("extraData", toNumber(event.target.value))} />
+                    </label>
                     <label className="income-entry-panel__field">
                       <span>Ex-dividend date <em className="add-entry-optional">Optional</em></span>
                       <input type="date" value={investmentDraft.exDividend} onChange={(event) => updateInvestmentDraft("exDividend", event.target.value)} />
