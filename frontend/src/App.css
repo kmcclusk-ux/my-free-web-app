@@ -4370,10 +4370,59 @@
   gap: 3px;
 }
 
+.row-action-drawer {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: 34px;
+  min-height: 30px;
+  padding: 2px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-50%);
+  transition: max-width 180ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.row-action-drawer:hover,
+.row-action-drawer:focus-within {
+  z-index: 30;
+  max-width: 260px;
+  overflow: visible;
+  border-color: rgba(148, 163, 184, .42);
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .18);
+}
+
+.row-action-drawer > .drag-handle { flex: 0 0 auto; }
+.row-action-drawer > button:not(.drag-handle) {
+  flex: 0 0 auto;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 110ms ease, transform 180ms ease;
+}
+.row-action-drawer:hover > button:not(.drag-handle),
+.row-action-drawer:focus-within > button:not(.drag-handle) {
+  opacity: 1;
+  transform: translateX(0);
+}
+.drag-handle-cell,
+.sheet-table--lookup .lookup-drag-cell {
+  position: relative;
+  overflow: visible;
+}
+
 .investments-workspace .drag-handle-heading,
 .investments-workspace .drag-handle-cell {
-  width: 108px;
-  min-width: 106px;
+  width: 42px;
+  min-width: 42px;
 }
 
 .row-split-button,
