@@ -1501,7 +1501,7 @@ function floatingPickerMenuStyle(trigger: HTMLElement | null, minimumWidth: numb
   };
 }
 
-function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onChange, onAddIncome, onJumpToAccount, ariaLabel }: { value: string; options: string[]; excludedFromAfterTaxIncome?: boolean; onChange: (value: string) => void; onAddIncome?: () => void; onJumpToAccount?: (accountName: string) => void; ariaLabel: string }) {
+function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onChange, onAddIncome, onAddNew, onJumpToAccount, ariaLabel }: { value: string; options: string[]; excludedFromAfterTaxIncome?: boolean; onChange: (value: string) => void; onAddIncome?: () => void; onAddNew?: () => void; onJumpToAccount?: (accountName: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -1592,6 +1592,14 @@ function AccountSelect({ value, options, excludedFromAfterTaxIncome = false, onC
       </button>
       {isOpen && createPortal(
         <div className="account-picker__menu account-picker__menu--portal" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
+          <button className="account-picker__option account-picker__option--action" type="button" role="option" aria-selected="false" onClick={() => {
+            setIsOpen(false);
+            if (onAddNew) onAddNew();
+            else window.dispatchEvent(new CustomEvent("aftertax:quick-add", { detail: { kind: "account", select: onChange } }));
+          }}>
+              <span className="account-favicon account-favicon--fallback" aria-hidden="true">+</span>
+              <span>Add new account…</span>
+          </button>
           {onAddIncome && (
             <button
               className="account-picker__option account-picker__option--action"
@@ -1655,7 +1663,7 @@ function assetTaxToneLabel(tone: AssetTaxTone) {
   return "Federal and state taxable";
 }
 
-function AssetSelect({ value, options, accountTaxStatus, tickerMap, taxTreatmentMap = {}, stateCode, disabled = false, resetToValue, onChange, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; taxTreatmentMap?: Record<string, TaxTreatmentRow>; stateCode: string; disabled?: boolean; resetToValue?: string; onChange: (value: string) => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
+function AssetSelect({ value, options, accountTaxStatus, tickerMap, taxTreatmentMap = {}, stateCode, disabled = false, resetToValue, onChange, onAddNew, onJumpToAsset, ariaLabel }: { value: string; options: string[]; accountTaxStatus: string; tickerMap: Record<string, TickerRow>; taxTreatmentMap?: Record<string, TaxTreatmentRow>; stateCode: string; disabled?: boolean; resetToValue?: string; onChange: (value: string) => void; onAddNew?: () => void; onJumpToAsset?: (assetSymbol: string) => void; ariaLabel: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -1718,6 +1726,13 @@ function AssetSelect({ value, options, accountTaxStatus, tickerMap, taxTreatment
       </button>
       {isOpen && !disabled && createPortal(
         <div className="account-picker__menu account-picker__menu--portal asset-picker__menu" ref={menuRef} style={menuStyle} role="listbox" aria-label={ariaLabel}>
+          <button className="account-picker__option account-picker__option--action" type="button" role="option" aria-selected="false" onClick={() => {
+            setIsOpen(false);
+            if (onAddNew) onAddNew();
+            else window.dispatchEvent(new CustomEvent("aftertax:quick-add", { detail: { kind: "asset", select: onChange } }));
+          }}>
+              <span>Add new asset…</span>
+          </button>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 7, marginBottom: 4, borderBottom: "1px solid rgba(15, 23, 42, .1)", borderRadius: 8, background: "rgba(248, 250, 252, .98)", color: "#172033" }}>
             <span title={displayedValue} style={{ flex: "1 1 auto", minWidth: 0, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#172033", fontSize: 13, fontWeight: 850, lineHeight: 1.2 }}>
               {displayedValue}
@@ -4846,7 +4861,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const [columnView, setColumnView] = useState<InvestmentColumnView>("main");
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
@@ -4931,6 +4946,42 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     exDividend: "",
     divPayout: "",
   });
+  const [quickAddKind, setQuickAddKind] = useState<"account" | "asset" | "taxTreatment" | null>(null);
+  const [quickAddValue, setQuickAddValue] = useState("");
+  const [quickAddTargetRowId, setQuickAddTargetRowId] = useState<number | null>(null);
+  const quickAddSelectRef = useRef<((value: string) => void) | null>(null);
+  useEffect(() => {
+    const handleQuickAdd = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind: "account" | "asset"; select: (value: string) => void }>).detail;
+      quickAddSelectRef.current = detail.select;
+      openQuickAdd(detail.kind);
+    };
+    window.addEventListener("aftertax:quick-add", handleQuickAdd);
+    return () => window.removeEventListener("aftertax:quick-add", handleQuickAdd);
+  }, []);
+  const openQuickAdd = (kind: "account" | "asset" | "taxTreatment", targetRowId: number | null = null) => {
+    setQuickAddKind(kind);
+    setQuickAddTargetRowId(targetRowId);
+    setQuickAddValue("");
+  };
+  const confirmQuickAdd = () => {
+    const value = quickAddValue.trim();
+    if (!value || !quickAddKind) return;
+    if (quickAddKind === "account") {
+      onCreateAccount(value);
+      if (quickAddTargetRowId !== null) onChange(quickAddTargetRowId, "account", value);
+      else updateInvestmentDraft("account", value);
+    } else if (quickAddKind === "asset") {
+      onCreateAsset(value);
+      if (quickAddTargetRowId !== null) onChange(quickAddTargetRowId, "symbol", value);
+    } else {
+      onCreateTaxTreatment(value);
+      updateInvestmentDraft("taxTreatment", value);
+    }
+    quickAddSelectRef.current?.(value);
+    quickAddSelectRef.current = null;
+    setQuickAddKind(null);
+  };
   const [columnWidths, setColumnWidths] = useState<InvestmentColumnWidths>(() => {
     if (typeof window === "undefined") return DEFAULT_INVESTMENT_COLUMN_WIDTHS;
     try {
@@ -5898,6 +5949,28 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
         </div>,
         document.body
       )}
+      {quickAddKind && createPortal(
+        <div className="income-entry-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickAddKind(null); }}>
+          <div className="add-entry-panel" role="dialog" aria-modal="true" aria-labelledby="quick-add-title">
+            <div className="income-entry-panel__header">
+              <div><p className="eyebrow">New lookup item</p><h3 id="quick-add-title">Add {quickAddKind === "taxTreatment" ? "tax treatment" : quickAddKind}</h3></div>
+              <button className="ghost-button ghost-button--compact" type="button" onClick={() => setQuickAddKind(null)}>Close</button>
+            </div>
+            <form onSubmit={(event) => { event.preventDefault(); confirmQuickAdd(); }}>
+              <p className="income-entry-panel__copy">Create this item here and select it immediately. You can edit its additional settings on the {quickAddKind === "taxTreatment" ? "Tax Treatments" : quickAddKind === "account" ? "Accounts" : "Assets"} tab.</p>
+              <label className="income-entry-panel__field">
+                <span>{quickAddKind === "taxTreatment" ? "Treatment ID" : quickAddKind === "account" ? "Account name" : "Asset ID / ticker"} <em className="add-entry-required">Required</em></span>
+                <input type="text" required value={quickAddValue} onChange={(event) => setQuickAddValue(event.target.value)} autoFocus />
+              </label>
+              <div className="income-entry-panel__actions">
+                <button className="ghost-button" type="button" onClick={() => setQuickAddKind(null)}>Cancel</button>
+                <button className="primary-button" type="submit" disabled={!quickAddValue.trim()}>Add and select</button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
       {isAddEntryOpen && createPortal(
         <div className="income-entry-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAddEntryDialog(); }}>
           <div className={`add-entry-panel ${addEntryKind === "investment" ? "add-entry-panel--wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby="add-entry-title">
@@ -5965,9 +6038,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                   <label className="income-entry-panel__field">
                     <span>Account <em className="add-entry-required">Required</em></span>
-                    <select required value={investmentDraft.account} onChange={(event) => updateInvestmentDraft("account", event.target.value)}>
+                    <select required value={investmentDraft.account} onChange={(event) => event.target.value === "__add_new__" ? openQuickAdd("account") : updateInvestmentDraft("account", event.target.value)}>
                       <option value="">Select account</option>
                       {accountOptions.filter(Boolean).map((account) => <option key={account} value={account}>{account}</option>)}
+                      <option value="__add_new__">＋ Add new account…</option>
                     </select>
                   </label>
                   <label className="income-entry-panel__field">
@@ -5994,9 +6068,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                   <label className="income-entry-panel__field">
                     <span>Tax treatment <em className="add-entry-required">Required</em></span>
-                    <select required value={investmentDraft.taxTreatment} onChange={(event) => updateInvestmentDraft("taxTreatment", event.target.value)}>
+                    <select required value={investmentDraft.taxTreatment} onChange={(event) => event.target.value === "__add_new__" ? openQuickAdd("taxTreatment") : updateInvestmentDraft("taxTreatment", event.target.value)}>
                       <option value="">Select tax treatment</option>
                       {taxTreatmentOptions.filter(Boolean).map((treatment) => <option key={treatment} value={treatment}>{treatment}</option>)}
+                      <option value="__add_new__">＋ Add new tax treatment…</option>
                     </select>
                   </label>
                 </div>
@@ -7321,6 +7396,24 @@ export default function App() {
       symbol: input.symbol,
       newSymbol: input.symbol,
       newPercent: normalizeRate(input.dividendRate),
+    }]);
+  };
+  const createQuickAccount = (name: string) => {
+    recordUndoCheckpoint();
+    setAccounts((current) => current.some((row) => normalizeLookupKey(row.account) === normalizeLookupKey(name)) ? current : [...current, {
+      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), account: name, accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes",
+    }]);
+  };
+  const createQuickAsset = (symbol: string) => {
+    recordUndoCheckpoint();
+    setTickers((current) => current.some((row) => normalizeLookupKey(row.symbol) === normalizeLookupKey(symbol)) ? current : [...current, {
+      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), symbol, percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "",
+    }]);
+  };
+  const createQuickTaxTreatment = (label: string) => {
+    recordUndoCheckpoint();
+    setTaxTreatments((current) => current.some((row) => normalizeLookupKey(row.label) === normalizeLookupKey(label)) ? current : [...current, {
+      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), label, ...defaultTaxTreatmentRule("income"), includeInAllocation: true,
     }]);
   };
   const editInvestmentWithAsset = (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => {
@@ -10582,6 +10675,9 @@ export default function App() {
             onEditIncome={editIncomeForInvestment}
             onCreateInvestment={createInvestmentWithAsset}
             onEditInvestment={editInvestmentWithAsset}
+            onCreateAccount={createQuickAccount}
+            onCreateAsset={createQuickAsset}
+            onCreateTaxTreatment={createQuickTaxTreatment}
             onRemove={(id) => {
               setInvestments((current) => current.filter((row) => row.id !== id));
               setSelectedInvestmentIds((current) => current.filter((selectedId) => selectedId !== id));
