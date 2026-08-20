@@ -104,6 +104,16 @@ type InvestmentEntryInput = {
   divPayout: string;
 };
 
+type QuickAssetInput = {
+  symbol: string;
+  dividendPercent: string;
+  assetClass: string;
+  taxTreatment: string;
+  description: string;
+  exDividend: string;
+  divPayout: string;
+};
+
 type AssetTaxTone = "fully-taxable" | "tax-free" | "federal-taxable-state-free" | "federal-free-state-taxable";
 
 type DerivedInvestmentRow = InvestmentRow & {
@@ -5010,6 +5020,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   });
   const [quickAddKind, setQuickAddKind] = useState<"account" | "asset" | "assetType" | "taxTreatment" | null>(null);
   const [quickAddValue, setQuickAddValue] = useState("");
+  const [quickAssetDraft, setQuickAssetDraft] = useState<QuickAssetInput>({ symbol: "", dividendPercent: "", assetClass: categoryOptions[1] || categoryOptions[0] || "", taxTreatment: taxTreatmentOptions.find(Boolean) || "income", description: "", exDividend: "", divPayout: "" });
   const [quickAddTargetRowId, setQuickAddTargetRowId] = useState<number | null>(null);
   const quickAddSelectRef = useRef<((value: string) => void) | null>(null);
   useEffect(() => {
@@ -5025,16 +5036,17 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     setQuickAddKind(kind);
     setQuickAddTargetRowId(targetRowId);
     setQuickAddValue("");
+    if (kind === "asset") setQuickAssetDraft({ symbol: "", dividendPercent: "", assetClass: categoryOptions[1] || categoryOptions[0] || "", taxTreatment: taxTreatmentOptions.find(Boolean) || "income", description: "", exDividend: "", divPayout: "" });
   };
   const confirmQuickAdd = () => {
-    const value = quickAddValue.trim();
+    const value = quickAddKind === "asset" ? quickAssetDraft.symbol.trim() : quickAddValue.trim();
     if (!value || !quickAddKind) return;
     if (quickAddKind === "account") {
       onCreateAccount(value);
       if (quickAddTargetRowId !== null) onChange(quickAddTargetRowId, "account", value);
       else updateInvestmentDraft("account", value);
     } else if (quickAddKind === "asset") {
-      onCreateAsset(value);
+      onCreateAsset(JSON.stringify({ ...quickAssetDraft, symbol: value }));
       if (quickAddTargetRowId !== null) onChange(quickAddTargetRowId, "symbol", value);
     } else if (quickAddKind === "assetType") {
       updateInvestmentDraft("assetType", value);
@@ -6016,20 +6028,32 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       )}
       {quickAddKind && createPortal(
         <div className="income-entry-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickAddKind(null); }}>
-          <div className="add-entry-panel" role="dialog" aria-modal="true" aria-labelledby="quick-add-title">
+          <div className={`add-entry-panel ${quickAddKind === "asset" ? "add-entry-panel--wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby="quick-add-title">
             <div className="income-entry-panel__header">
               <div><p className="eyebrow">New lookup item</p><h3 id="quick-add-title">Add {quickAddKind === "taxTreatment" ? "tax treatment" : quickAddKind === "assetType" ? "asset type" : quickAddKind}</h3></div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={() => setQuickAddKind(null)}>Close</button>
             </div>
             <form onSubmit={(event) => { event.preventDefault(); confirmQuickAdd(); }}>
-              <p className="income-entry-panel__copy">Create this item here and select it immediately. You can edit its additional settings on the {quickAddKind === "taxTreatment" ? "Tax Treatments" : quickAddKind === "account" ? "Accounts" : "Assets"} tab.</p>
-              <label className="income-entry-panel__field">
-                <span>{quickAddKind === "taxTreatment" ? "Treatment ID" : quickAddKind === "account" ? "Account name" : quickAddKind === "assetType" ? "Asset type name" : "Asset ID / ticker"} <em className="add-entry-required">Required</em></span>
-                <input type="text" required value={quickAddValue} onChange={(event) => setQuickAddValue(event.target.value)} autoFocus />
-              </label>
+              <p className="income-entry-panel__copy">Create this item here and select it immediately.</p>
+              {quickAddKind === "asset" ? (
+                <div className="add-investment-form-grid">
+                  <label className="income-entry-panel__field"><span>Asset ID / ticker <em className="add-entry-required">Required</em></span><input type="text" required value={quickAssetDraft.symbol} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, symbol: event.target.value }))} autoFocus /></label>
+                  <label className="income-entry-panel__field"><span>Dividend / annual return % <em className="add-entry-required">Required</em></span><input type="number" required min="0" step="0.01" value={quickAssetDraft.dividendPercent} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, dividendPercent: event.target.value }))} /></label>
+                  <label className="income-entry-panel__field"><span>Asset type / class <em className="add-entry-required">Required</em></span><select required value={quickAssetDraft.assetClass} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, assetClass: event.target.value }))}><option value="">Select asset class</option>{categoryOptions.filter(Boolean).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                  <label className="income-entry-panel__field"><span>Tax treatment <em className="add-entry-required">Required</em></span><select required value={quickAssetDraft.taxTreatment} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, taxTreatment: event.target.value }))}><option value="">Select tax treatment</option>{taxTreatmentOptions.filter(Boolean).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+                  <label className="income-entry-panel__field"><span>Ex-dividend date</span><input type="date" value={quickAssetDraft.exDividend} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, exDividend: event.target.value }))} /></label>
+                  <label className="income-entry-panel__field"><span>Dividend payout schedule</span><input type="text" value={quickAssetDraft.divPayout} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, divPayout: event.target.value }))} placeholder="Monthly, quarterly, annually..." /></label>
+                  <label className="income-entry-panel__field add-investment-form-grid__wide"><span>Asset description</span><input type="text" value={quickAssetDraft.description} onChange={(event) => setQuickAssetDraft((current) => ({ ...current, description: event.target.value }))} /></label>
+                </div>
+              ) : (
+                <label className="income-entry-panel__field">
+                  <span>{quickAddKind === "taxTreatment" ? "Treatment ID" : quickAddKind === "account" ? "Account name" : "Asset type name"} <em className="add-entry-required">Required</em></span>
+                  <input type="text" required value={quickAddValue} onChange={(event) => setQuickAddValue(event.target.value)} autoFocus />
+                </label>
+              )}
               <div className="income-entry-panel__actions">
                 <button className="ghost-button" type="button" onClick={() => setQuickAddKind(null)}>Cancel</button>
-                <button className="primary-button" type="submit" disabled={!quickAddValue.trim()}>Add and select</button>
+                <button className="primary-button" type="submit" disabled={quickAddKind === "asset" ? !quickAssetDraft.symbol.trim() || quickAssetDraft.dividendPercent.trim() === "" || !quickAssetDraft.assetClass || !quickAssetDraft.taxTreatment : !quickAddValue.trim()}>Add and select</button>
               </div>
             </form>
           </div>
@@ -7471,10 +7495,18 @@ export default function App() {
       id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), account: name, accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes",
     }]);
   };
-  const createQuickAsset = (symbol: string) => {
+  const createQuickAsset = (serializedInput: string) => {
+    let input: QuickAssetInput;
+    try {
+      input = JSON.parse(serializedInput) as QuickAssetInput;
+    } catch {
+      input = { symbol: serializedInput, dividendPercent: "0", assetClass: categoryOptions[1] || categoryOptions[0] || "", taxTreatment: "income", description: "", exDividend: "", divPayout: "" };
+    }
+    const symbol = input.symbol.trim();
     recordUndoCheckpoint();
+    if (input.assetClass) setCategories((current) => current.some((row) => normalizeLookupKey(row.name) === normalizeLookupKey(input.assetClass)) ? current : [...current, { id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), name: input.assetClass, includeInAllocation: true }]);
     setTickers((current) => current.some((row) => normalizeLookupKey(row.symbol) === normalizeLookupKey(symbol)) ? current : [...current, {
-      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), symbol, percentReturn: 0, assetType: categoryOptions[1] || "", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "",
+      id: Math.max(Date.now(), ...current.map((row) => row.id + 1)), symbol, percentReturn: toNumber(input.dividendPercent) / 100, assetType: input.assetClass, category: input.assetClass, taxTreatment: input.taxTreatment, incomeItem: false, extraData: 0, description: input.description, exDividend: input.exDividend, divPayout: input.divPayout,
     }]);
   };
   const createQuickTaxTreatment = (label: string) => {
