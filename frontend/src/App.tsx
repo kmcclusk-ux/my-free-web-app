@@ -4940,7 +4940,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     account: accountOptions[1] || "",
     symbol: "",
     amount: 0,
-    dividendPercent: 0,
+    dividendPercent: 0 as number | string,
     assetType: categoryOptions[1] || "",
     assetClass: categoryOptions[1] || "",
     taxTreatment: taxTreatmentOptions.find(Boolean) || "income",
@@ -5383,7 +5383,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     account: investmentDraft.account.trim().length > 0,
     symbol: investmentDraft.symbol.trim().length > 0,
     amount: Number.isFinite(investmentDraft.amount) && investmentDraft.amount > 0,
-    dividendPercent: Number.isFinite(investmentDraft.dividendPercent) && investmentDraft.dividendPercent >= 0,
+    dividendPercent: String(investmentDraft.dividendPercent).trim() !== "" && Number.isFinite(toNumber(investmentDraft.dividendPercent)) && toNumber(investmentDraft.dividendPercent) >= 0,
     assetType: investmentDraft.assetType.trim().length > 0,
     taxTreatment: investmentDraft.taxTreatment.trim().length > 0,
   };
@@ -5418,7 +5418,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       account: investmentDraft.account.trim() || editTarget?.account.trim() || accountOptions.find(Boolean) || "Unassigned",
       symbol: matchedAsset?.symbol && shouldReuseMatchedAsset ? matchedAsset.symbol : resolvedSymbol,
       amount: Math.round(investmentDraft.amount * 100) / 100,
-      dividendRate: shouldReuseMatchedAsset ? normalizeRate(matchedAsset?.percentReturn || 0) : investmentDraft.dividendPercent / 100,
+      dividendRate: shouldReuseMatchedAsset ? normalizeRate(matchedAsset?.percentReturn || 0) : toNumber(investmentDraft.dividendPercent) / 100,
       assetType: shouldReuseMatchedAsset ? matchedAsset?.assetType || "ETF" : investmentDraft.assetType.trim() || matchedAsset?.assetType || "ETF",
       assetClass: shouldReuseMatchedAsset ? matchedAsset?.category || "Uncategorized" : investmentDraft.assetClass.trim() || matchedAsset?.category || categoryOptions.find(Boolean) || "Uncategorized",
       taxTreatment: shouldReuseMatchedAsset ? matchedAsset?.taxTreatment || "income" : investmentDraft.taxTreatment.trim() || matchedAsset?.taxTreatment || "income",
@@ -6064,7 +6064,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                   <label className="income-entry-panel__field">
                     <span>Dividend / annual return % <em className="add-entry-required">Required</em></span>
-                    <input type="number" required min="0" step="0.01" value={investmentDraft.dividendPercent} onChange={(event) => updateInvestmentDraft("dividendPercent", Math.max(0, toNumber(event.target.value)))} />
+                    <input type="number" required min="0" step="0.01" value={investmentDraft.dividendPercent} onChange={(event) => updateInvestmentDraft("dividendPercent", event.target.value)} />
                   </label>
                   <label className="income-entry-panel__field">
                     <span>Asset type / class <em className="add-entry-required">Required</em></span>
