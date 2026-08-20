@@ -6001,7 +6001,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   </label>
                 </div>
                 <details className="add-investment-optional">
-                  <summary><span>Optional details</span><small>Classification, tax data, dividend details, and description</small></summary>
+                  <summary><span>Optional details</span><small>Asset class, dividend details, and description</small></summary>
                   <div className="add-investment-form-grid">
                     <label className="income-entry-panel__field">
                       <span>Asset class <em className="add-entry-optional">Optional</em></span>
@@ -6009,10 +6009,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                         <option value="">Select asset class</option>
                         {categoryOptions.filter(Boolean).map((category) => <option key={category} value={category}>{category}</option>)}
                       </select>
-                    </label>
-                    <label className="income-entry-panel__field">
-                      <span>Extra tax data <em className="add-entry-optional">Optional</em></span>
-                      <input type="number" step="0.01" value={investmentDraft.extraData} onChange={(event) => updateInvestmentDraft("extraData", toNumber(event.target.value))} />
                     </label>
                     <label className="income-entry-panel__field">
                       <span>Ex-dividend date <em className="add-entry-optional">Optional</em></span>
