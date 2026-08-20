@@ -8867,8 +8867,9 @@ export default function App() {
     </div>,
     document.body
   ) : null;
+  const isClearAllConfirmed = clearAllConfirmation.trim().toUpperCase() === "DELETE EVERYTHING";
   const clearEntireAccount = async () => {
-    if (clearAllConfirmation !== "DELETE EVERYTHING" || isClearingAll) return;
+    if (!isClearAllConfirmed || isClearingAll) return;
     setIsClearingAll(true);
     setClearAllError("");
     try {
@@ -8917,7 +8918,7 @@ export default function App() {
         {clearAllError && <div className="auth-required-panel__error" role="alert">{clearAllError}</div>}
         <div className="settings-dialog__actions">
           <button className="ghost-button" type="button" disabled={isClearingAll} onClick={() => setIsClearAllDialogOpen(false)}>Cancel</button>
-          <button className="primary-button" type="button" disabled={clearAllConfirmation !== "DELETE EVERYTHING" || isClearingAll} onClick={() => { void clearEntireAccount(); }}>{isClearingAll ? "Wiping account…" : "Permanently wipe account"}</button>
+          <button className={isClearAllConfirmed ? "primary-button" : "ghost-button"} type="button" disabled={!isClearAllConfirmed || isClearingAll} onClick={() => { void clearEntireAccount(); }}>{isClearingAll ? "Wiping everything…" : "Wipe everything"}</button>
         </div>
       </section>
     </div>, document.body
@@ -9054,7 +9055,7 @@ export default function App() {
           </div>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { setIsTopbarMenuOpen(false); setClearAllConfirmation(""); setClearAllError(""); setIsClearAllDialogOpen(true); }}>
             <TopbarActionIcon name="delete" />
-            <span className="topbar-menu__label"><span>Clear all</span><small>Permanently wipe account data</small></span>
+            <span className="topbar-menu__label"><span>Clear all</span><small>Wipe account data</small></span>
           </button>
           <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSaveVersionDialog}>
             <TopbarActionIcon name="copy" />
