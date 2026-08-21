@@ -4413,7 +4413,6 @@
 
 .sheet-table tbody tr:has(.row-action-drawer:hover) > td,
 .sheet-table tbody tr:has(.row-action-drawer:focus-within) > td {
-  position: relative;
   z-index: 60 !important;
 }
 
