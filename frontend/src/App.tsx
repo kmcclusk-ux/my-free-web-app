@@ -4631,6 +4631,8 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const [isRemoveAllConfirmOpen, setIsRemoveAllConfirmOpen] = useState(false);
   const [editRowId, setEditRowId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<T> | null>(null);
+  const [rowActionMenu, setRowActionMenu] = useState<{ row: T; left: number; top: number } | null>(null);
+  const rowActionCloseTimer = useRef<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -4652,6 +4654,34 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   const lookupTableStyle = { width: lookupTableWidth, minWidth: lookupTableWidth } as CSSProperties;
   const lookupMoveHeadingStyle = rowDeleteNextToMove ? { width: lookupMoveColumnWidth, minWidth: lookupMoveColumnWidth, maxWidth: lookupMoveColumnWidth } as CSSProperties : undefined;
   const lookupMoveCellStyle = rowDeleteNextToMove ? { ...lookupMoveHeadingStyle, display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 4 } as CSSProperties : undefined;
+  const cancelRowActionClose = () => {
+    if (rowActionCloseTimer.current !== null) {
+      window.clearTimeout(rowActionCloseTimer.current);
+      rowActionCloseTimer.current = null;
+    }
+  };
+  const openRowActionMenu = (row: T, anchor: HTMLElement) => {
+    cancelRowActionClose();
+    const rect = anchor.getBoundingClientRect();
+    setRowActionMenu({ row, left: rect.right + 4, top: rect.top + rect.height / 2 });
+  };
+  const scheduleRowActionClose = () => {
+    cancelRowActionClose();
+    rowActionCloseTimer.current = window.setTimeout(() => setRowActionMenu(null), 180);
+  };
+  useEffect(() => {
+    if (!rowActionMenu) return;
+    const close = () => setRowActionMenu(null);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [rowActionMenu]);
+  useEffect(() => () => {
+    if (rowActionCloseTimer.current !== null) window.clearTimeout(rowActionCloseTimer.current);
+  }, []);
   const stopAutoScroll = () => {
     if (autoScrollFrameRef.current !== null) {
       window.cancelAnimationFrame(autoScrollFrameRef.current);
@@ -4892,6 +4922,24 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
           </div>
         </div>, document.body
       )}
+      {rowActionMenu && createPortal(
+        <div
+          className="row-action-popover lookup-row-action-popover"
+          role="toolbar"
+          aria-label={`${title} row actions`}
+          style={{ left: rowActionMenu.left, top: rowActionMenu.top }}
+          onMouseEnter={cancelRowActionClose}
+          onMouseLeave={scheduleRowActionClose}
+        >
+          <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); openRowEditor(row); }} aria-label={`Edit ${title} row`} title="Edit row"><RowActionIcon name="edit" /></button>
+          <button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger" type="button" onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); onRemove(row.id); }} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button>
+          {onSplitRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); onSplitRow(row.id); }} aria-label={`Split ${title} row`} title="Split row"><RowActionIcon name="split" /></button>}
+          {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => { const row = rowActionMenu.row; void copyRow(row); }} aria-label={`Copy ${title} row`} title="Copy row"><RowActionIcon name="copy" /></button>}
+          {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => { const row = rowActionMenu.row; void pasteRow(row.id); }} aria-label={`Paste into ${title} row`} title="Paste row"><RowActionIcon name="paste" /></button>}
+          {onLookupRow && showLookupRow(rowActionMenu.row) && <button className="ghost-button ghost-button--compact icon-button action-icon-button lookup-inline-lookup-button" type="button" onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); onLookupRow(row); }} aria-label={`${lookupRowLabel} ${String((rowActionMenu.row as Record<string, unknown>).symbol || "")}`.trim()} title={`${lookupRowLabel}${(rowActionMenu.row as Record<string, unknown>).symbol ? ` ${(rowActionMenu.row as Record<string, unknown>).symbol}` : ""}`}><RowActionIcon name="lookup" /></button>}
+        </div>,
+        document.body
+      )}
       <div className="table-wrap table-wrap--tall lookup-table-wrap" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className="sheet-table sheet-table--compact sheet-table--lookup" style={lookupTableStyle}>
           <colgroup>
@@ -4913,14 +4961,8 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
                 onDrop={(event) => handleDrop(event, row.id)}
               >
                 <td className={`drag-handle-cell lookup-drag-cell ${rowDeleteNextToMove ? "lookup-drag-cell--with-delete" : ""}`.trim()} style={lookupMoveCellStyle}>
-                  <div className="row-action-drawer">
-                  <button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button>
-                  {rowDeleteNextToMove && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => openRowEditor(row)} aria-label={`Edit ${title} row`} title="Edit row"><RowActionIcon name="edit" /></button>}
-                  {rowDeleteNextToMove && <button className="ghost-button ghost-button--compact icon-button action-icon-button action-icon-button--danger lookup-inline-delete-button" type="button" onClick={() => onRemove(row.id)} aria-label="Delete row" title="Delete row"><RowActionIcon name="delete" /></button>}
-                  {onSplitRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => onSplitRow(row.id)} aria-label={`Split ${title} row`} title="Split row"><RowActionIcon name="split" /></button>}
-                  {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => void copyRow(row)} aria-label={`Copy ${title} row`} title="Copy row"><RowActionIcon name="copy" /></button>}
-                  {onPasteRow && <button className="ghost-button ghost-button--compact icon-button action-icon-button" type="button" onClick={() => void pasteRow(row.id)} aria-label={`Paste into ${title} row`} title="Paste row"><RowActionIcon name="paste" /></button>}
-                  {rowDeleteNextToMove && onLookupRow && showLookupRow(row) && <button className="ghost-button ghost-button--compact icon-button action-icon-button lookup-inline-lookup-button" type="button" onClick={() => onLookupRow(row)} aria-label={`${lookupRowLabel} ${String((row as Record<string, unknown>).symbol || "")}`.trim()} title={`${lookupRowLabel}${(row as Record<string, unknown>).symbol ? ` ${(row as Record<string, unknown>).symbol}` : ""}`}><RowActionIcon name="lookup" /></button>}
+                  <div className="lookup-row-actions--anchor" onMouseEnter={(event) => openRowActionMenu(row, event.currentTarget)} onMouseLeave={scheduleRowActionClose}>
+                    <button className="drag-handle lookup-drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${title} row`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button>
                   </div>
                 </td>
                 {columns.map((column) => <td key={String(column.key)}>{renderCell(row, column)}</td>)}
@@ -6270,7 +6312,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       )}
       {rowActionMenu && createPortal(
         <div
-          className="investment-row-action-popover"
+          className="row-action-popover investment-row-action-popover"
           role="toolbar"
           aria-label={`Actions for ${rowActionMenu.row.description || "investment row"}`}
           style={{ left: rowActionMenu.left, top: rowActionMenu.top }}
