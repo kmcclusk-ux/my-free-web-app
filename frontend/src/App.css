@@ -4447,6 +4447,34 @@
   min-width: 42px;
 }
 
+.investment-row-actions--anchor {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: max-content;
+  transform: translateY(-50%);
+}
+
+.investment-row-action-popover {
+  position: fixed;
+  z-index: 6000;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(148, 163, 184, .48);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .99);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .24);
+  transform: translateY(-50%);
+  animation: investment-row-action-popover-in 120ms ease-out;
+}
+
+@keyframes investment-row-action-popover-in {
+  from { opacity: 0; transform: translate(-5px, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+
 .row-split-button,
 .row-edit-button,
 .row-delete-button {

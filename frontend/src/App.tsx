@@ -4998,6 +4998,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
   const [splitAllocations, setSplitAllocations] = useState<number[]>([]);
+  const [rowActionMenu, setRowActionMenu] = useState<{ row: InvestmentRow; left: number; top: number } | null>(null);
+  const rowActionCloseTimer = useRef<number | null>(null);
   const [incomeTarget, setIncomeTarget] = useState<InvestmentRow | null>(null);
   const [incomeSourceName, setIncomeSourceName] = useState("");
   const [incomeAmount, setIncomeAmount] = useState(0);
@@ -5768,6 +5770,33 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     });
   }, [isWhatIfActive]);
 
+  const cancelRowActionClose = () => {
+    if (rowActionCloseTimer.current !== null) {
+      window.clearTimeout(rowActionCloseTimer.current);
+      rowActionCloseTimer.current = null;
+    }
+  };
+  const openRowActionMenu = (row: InvestmentRow, anchor: HTMLElement) => {
+    cancelRowActionClose();
+    const rect = anchor.getBoundingClientRect();
+    setRowActionMenu({ row, left: rect.right + 4, top: rect.top + rect.height / 2 });
+  };
+  const scheduleRowActionClose = () => {
+    cancelRowActionClose();
+    rowActionCloseTimer.current = window.setTimeout(() => setRowActionMenu(null), 180);
+  };
+  useEffect(() => {
+    if (!rowActionMenu) return;
+    const close = () => setRowActionMenu(null);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [rowActionMenu]);
+  useEffect(() => () => cancelRowActionClose(), []);
+
   return (
     <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When WhatIf is checked, the new asset and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
       <div className="actions-row">
@@ -6239,6 +6268,21 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
         </div>,
         document.body
       )}
+      {rowActionMenu && createPortal(
+        <div
+          className="investment-row-action-popover"
+          role="toolbar"
+          aria-label={`Actions for ${rowActionMenu.row.description || "investment row"}`}
+          style={{ left: rowActionMenu.left, top: rowActionMenu.top }}
+          onMouseEnter={cancelRowActionClose}
+          onMouseLeave={scheduleRowActionClose}
+        >
+          <button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${rowActionMenu.row.description || "investment row"}`} onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); onRemove(row.id); }}><RowActionIcon name="delete" /></button>
+          <button className="row-edit-button" type="button" title="Edit row" aria-label={`Edit ${rowActionMenu.row.description || "investment row"}`} onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); openEditEntryDialog(row); }}><RowActionIcon name="edit" /></button>
+          <button className="row-split-button" type="button" title="Split row" aria-label={`Split ${rowActionMenu.row.description || "investment row"}`} onClick={() => { const row = rowActionMenu.row; setRowActionMenu(null); openSplitDialog(row); }}><RowActionIcon name="split" /></button>
+        </div>,
+        document.body
+      )}
       <div className="table-wrap table-wrap--tall" ref={tableScrollRef} onDragOver={handleTableDragOver} onDragLeave={handleTableDragLeave}>
         <table className={tableClassName} style={tableStyle}>
           <colgroup>
@@ -6257,7 +6301,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
               const rowTaxStatus = accountTaxStatusByName[normalizeLookupKey(row.account)] || "";
               const hasDifferentWhatIfAsset = normalizeLookupKey(row.newSymbol) !== "" && normalizeLookupKey(row.newSymbol) !== normalizeLookupKey(row.symbol);
               const investmentCells = {
-                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions row-action-drawer"><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button><button className="row-delete-button" type="button" title="Delete row" aria-label={`Delete ${row.description || "investment row"}`} onClick={() => onRemove(row.id)}><RowActionIcon name="delete" /></button><button className="row-edit-button" type="button" title="Edit row" aria-label={`Edit ${row.description || "investment row"}`} onClick={() => openEditEntryDialog(row)}><RowActionIcon name="edit" /></button><button className="row-split-button" type="button" title="Split row" aria-label={`Split ${row.description || "investment row"}`} onClick={() => openSplitDialog(row)}><RowActionIcon name="split" /></button></div></td>,
+                move: <td key="move" className="drag-handle-cell"><div className="investment-row-actions investment-row-actions--anchor" onMouseEnter={(event) => openRowActionMenu(row, event.currentTarget)} onMouseLeave={scheduleRowActionClose}><button className="drag-handle" type="button" draggable title="Drag row" aria-label={`Move ${row.description || "investment row"}`} onDragStart={(event) => handleDragStart(event, row.id)} onDragEnd={handleDragEnd}>::</button></div></td>,
                 row: <td key="row" className="sheet-row-cell"><div className="readonly-cell readonly-cell--row-id">{row.spreadsheetRowNumber ?? ""}</div></td>,
                 included: <td key="included" className="checkbox-cell checkbox-cell--included"><input type="checkbox" checked={row.includeIncome} onChange={(event) => onChange(row.id, "includeIncome", event.target.checked)} aria-label={`Included: ${row.description || "investment row"}`} /></td>,
                 account: <td key="account"><AccountSelect value={row.account} options={accountOptions} excludedFromAfterTaxIncome={excludedAfterTaxAccountNames.has(normalizeLookupKey(row.account))} onChange={(value) => onChange(row.id, "account", value)} onAddIncome={() => openIncomeDialog(row)} onJumpToAccount={onJumpToAccount} ariaLabel={`Account for ${row.description || "investment row"}`} /></td>,
