@@ -58,7 +58,9 @@
 }
 .app-top-nav .kpi-pill strong {
   color: #fff;
-  font-size: .76rem;
+  font-size: 1.08rem;
+  font-weight: 920;
+  letter-spacing: -.055em;
   line-height: 1.05;
 }
 .app-top-nav .kpi-pill__main-line {
@@ -76,11 +78,6 @@
   text-overflow: ellipsis;
   text-transform: none;
   white-space: nowrap;
-}
-.app-top-nav .kpi-pill--primary strong {
-  font-size: 1.08rem;
-  font-weight: 920;
-  letter-spacing: -.055em;
 }
 .app-top-nav .kpi-pill small,
 .app-top-nav .kpi-pill em {
