@@ -435,12 +435,14 @@ const US_FLAG_ICON_URL = "https://commons.wikimedia.org/wiki/Special:FilePath/Fl
 const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN as string | undefined)?.replace(/\/+$/, "") || "";
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined;
 const BROWSER_ROOT_URI = typeof window !== "undefined"
-  ? new URL(
-      "/",
-      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-        ? window.location.origin
-        : `https://${window.location.host}`
-    ).toString()
+  ? window.location.hostname === "127.0.0.1"
+    ? new URL("/", `${window.location.protocol}//localhost${window.location.port ? `:${window.location.port}` : ""}`).toString()
+    : new URL(
+        "/",
+        window.location.hostname === "localhost"
+          ? window.location.origin
+          : `https://${window.location.host}`
+      ).toString()
   : "";
 const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI || BROWSER_ROOT_URI;
 const COGNITO_LOGOUT_URI = import.meta.env.VITE_COGNITO_LOGOUT_URI || COGNITO_REDIRECT_URI;
@@ -3654,24 +3656,6 @@ function rateBandGradientStops(bands: ThermometerRateBand[], scaleMax: number) {
   }).join(", ");
 }
 
-function VisibilityToggleIcon({ variant }: { variant: "show" | "hide" }) {
-  return (
-    <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      {variant === "show" ? (
-        <>
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </>
-      ) : (
-        <>
-          <path d="M6.5 6.5 17.5 17.5" />
-          <path d="M17.5 6.5 6.5 17.5" />
-        </>
-      )}
-    </svg>
-  );
-}
-
 function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | "find" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
   if (name === "add") {
     return (
@@ -3882,7 +3866,7 @@ function TopbarActionIcon({ name }: { name: "copy" | "delete" | "signIn" | "sign
   );
 }
 
-function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, baseRateLabel, currentRateLabel, noTaxStamp, collapsed, onToggle }: { title: React.ReactNode; titleLabel?: string; titleValue?: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; baseRateLabel: string; currentRateLabel?: string; noTaxStamp?: string; collapsed: boolean; onToggle: () => void }) {
+function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, baseRateLabel, currentRateLabel, noTaxStamp }: { title: React.ReactNode; titleLabel?: string; titleValue?: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; baseRateLabel: string; currentRateLabel?: string; noTaxStamp?: string }) {
   const labelText = titleLabel || (typeof title === "string" ? title : "Tax thermometer");
   const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
   const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
@@ -3893,20 +3877,14 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
   const trackStyle = { "--rate-gradient-stops": rateBandGradientStops(rateBands, scaleMax) } as React.CSSProperties;
 
   return (
-    <div className={`tax-thermometer ${collapsed ? "tax-thermometer--collapsed" : ""}`}>
+    <div className="tax-thermometer">
       <div className="tax-thermometer__heading">
         <div>
           <strong>{title}</strong>
           <span>{subtitle}</span>
         </div>
-        <div className="tax-thermometer__heading-actions">
-          <button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? `Show ${labelText}` : `Hide ${labelText}`} title={collapsed ? `Show ${labelText}` : `Hide ${labelText}`}>
-            <VisibilityToggleIcon variant={collapsed ? "show" : "hide"} />
-          </button>
-        </div>
       </div>
-      {!collapsed && (
-        <>
+      <>
           {titleValue && <div className="tax-thermometer__title-value">{titleValue}</div>}
           <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`} style={trackStyle}>
             {noTaxStamp && <div className="tax-thermometer__no-tax-stamp" aria-label={noTaxStamp}>{noTaxStamp}</div>}
@@ -4008,8 +3986,7 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
               <strong>{footerValue}</strong>
             </div>
           )}
-        </>
-      )}
+      </>
     </div>
   );
 }
@@ -4154,18 +4131,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   );
 }
 
-function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federalIncomeTax, federalPayrollTax, stateTax, stateIncomeTax, statePayrollTax, statePayrollLabel, totalIncome, w2Income, marginalPayrollRate, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, stateBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows, initialMode = "allocation" }: { federalTaxable: number; stateTaxable: number; federalTax: number; federalIncomeTax: number; federalPayrollTax: number; stateTax: number; stateIncomeTax: number; statePayrollTax: number; statePayrollLabel: string; totalIncome: number; w2Income: number; marginalPayrollRate: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; stateBrackets: LocalStateTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }>; initialMode?: TaxThermometerMode }) {
-  const [thermometerMode, setThermometerMode] = useState<TaxThermometerMode>(() => loadTaxThermometerMode(initialMode));
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(TAX_THERMOMETER_MODE_STORAGE_KEY, thermometerMode);
-    } catch {
-      // Continue without persistence when browser storage is unavailable.
-    }
-  }, [thermometerMode]);
-
+function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federalIncomeTax, federalPayrollTax, stateTax, stateIncomeTax, statePayrollTax, statePayrollLabel, totalIncome, w2Income, marginalPayrollRate, localTaxable, localTax, localName, localEnabled, localEffectiveRate, localMarginalRate, localBrackets, stateBrackets, filingStatus, stateCode, stateName, allocationRows, accountTaxAllocationRows, accountTypeAllocationRows, taxTreatmentAllocationRows, thermometerMode }: { federalTaxable: number; stateTaxable: number; federalTax: number; federalIncomeTax: number; federalPayrollTax: number; stateTax: number; stateIncomeTax: number; statePayrollTax: number; statePayrollLabel: string; totalIncome: number; w2Income: number; marginalPayrollRate: number; localTaxable: number; localTax: number; localName: string; localEnabled: boolean; localEffectiveRate: number; localMarginalRate: number; localBrackets: LocalTaxBracket[]; stateBrackets: LocalStateTaxBracket[]; filingStatus: FilingStatus; stateCode: string; stateName: string; allocationRows: Array<{ label: string; amount: number }>; accountTaxAllocationRows: Array<{ label: string; amount: number }>; accountTypeAllocationRows: Array<{ label: string; amount: number }>; taxTreatmentAllocationRows: Array<{ label: string; amount: number }>; thermometerMode: TaxThermometerMode }) {
   const totalTax = federalTax + stateTax + (localEnabled ? localTax : 0);
   const federalMarkers = federalOrdinaryRateMarkers[filingStatus];
   const stateMarkers: ThermometerMarker[] = [...stateBrackets]
@@ -4200,6 +4166,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
     ? `conic-gradient(${allocationSegments.map((segment) => `${allocationColors[segment.index % allocationColors.length]} ${segment.start}% ${segment.end}%`).join(", ")})`
     : "conic-gradient(#e5e7eb 0 100%)";
   const allocationViewLabel = thermometerMode === "accountTax" ? "Account tax category" : thermometerMode === "accountType" ? "Account type" : thermometerMode === "taxTreatment" ? "Tax treatment" : "Portfolio";
+  const allocationTitle = thermometerMode === "accountTax" ? "Account Tax Category" : thermometerMode === "accountType" ? "Account Type" : thermometerMode === "taxTreatment" ? "Tax Treatments" : "Portfolio Allocation";
   const allocationTabLabel = thermometerMode === "accountTax" ? "Account Tax Category" : thermometerMode === "accountType" ? "Account Type" : thermometerMode === "taxTreatment" ? "Tax Treatments" : "Asset Classes";
   const federalValues: ThermometerValue[] = [
     {
@@ -4324,14 +4291,13 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
   return (
     <div className="tax-thermometer-panel">
       {thermometerMode === "allocation" || thermometerMode === "accountTax" || thermometerMode === "accountType" || thermometerMode === "taxTreatment" ? (
-        <div className={`tax-thermometer portfolio-allocation ${isCollapsed ? "tax-thermometer--collapsed" : ""}`}>
+        <div className="tax-thermometer portfolio-allocation">
           <div className="tax-thermometer__heading">
-            <div><strong><TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} /></strong><span>{thermometerMode === "accountTax" ? "Checked account tax categories" : thermometerMode === "accountType" ? "Checked account types" : thermometerMode === "taxTreatment" ? "Checked tax treatments" : "Checked asset classes"}</span></div>
-            <div className="tax-thermometer__heading-actions"><button className="ghost-button ghost-button--compact tax-thermometer__toggle icon-button" type="button" onClick={() => setIsCollapsed((current) => !current)} aria-expanded={!isCollapsed} aria-label={isCollapsed ? "Show portfolio allocation" : "Hide portfolio allocation"} title={isCollapsed ? "Show portfolio allocation" : "Hide portfolio allocation"}><VisibilityToggleIcon variant={isCollapsed ? "show" : "hide"} /></button></div>
+            <div><strong>{allocationTitle}</strong><span>{thermometerMode === "accountTax" ? "Checked account tax categories" : thermometerMode === "accountType" ? "Checked account types" : thermometerMode === "taxTreatment" ? "Checked tax treatments" : "Checked asset classes"}</span></div>
           </div>
-          {!isCollapsed && <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{activeAllocationRows.length ? <><div className="portfolio-allocation__pie-stage" role="img" aria-label={`${allocationViewLabel} allocation: ${activeAllocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`}><div className="portfolio-allocation__pie" style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><svg viewBox="0 0 200 200" aria-hidden="true">{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <line key={segment.label} x1={100 + Math.cos(segment.angle) * 57} y1={100 + Math.sin(segment.angle) * 57} x2={100 + Math.cos(segment.angle) * 72} y2={100 + Math.sin(segment.angle) * 72} stroke={allocationColors[segment.index % allocationColors.length]} />)}</svg>{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <span key={segment.label} className="portfolio-allocation__pie-label" style={{ left: `${50 + Math.cos(segment.angle) * 42}%`, top: `${50 + Math.sin(segment.angle) * 42}%`, borderColor: allocationColors[segment.index % allocationColors.length] }} title={`${segment.label}: ${formatPercent(segment.percent)} (${formatCurrencyDetailed(segment.amount)})`}><strong>{segment.label}</strong>{formatPercent(segment.percent)}</span>)}</div><div className="portfolio-allocation__rows">{activeAllocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select categories on the {allocationTabLabel} tab.</div>}</>}
+          <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{activeAllocationRows.length ? <><div className="portfolio-allocation__pie-stage" role="img" aria-label={`${allocationViewLabel} allocation: ${activeAllocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`}><div className="portfolio-allocation__pie" style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><svg viewBox="0 0 200 200" aria-hidden="true">{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <line key={segment.label} x1={100 + Math.cos(segment.angle) * 57} y1={100 + Math.sin(segment.angle) * 57} x2={100 + Math.cos(segment.angle) * 72} y2={100 + Math.sin(segment.angle) * 72} stroke={allocationColors[segment.index % allocationColors.length]} />)}</svg>{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <span key={segment.label} className="portfolio-allocation__pie-label" style={{ left: `${50 + Math.cos(segment.angle) * 42}%`, top: `${50 + Math.sin(segment.angle) * 42}%`, borderColor: allocationColors[segment.index % allocationColors.length] }} title={`${segment.label}: ${formatPercent(segment.percent)} (${formatCurrencyDetailed(segment.amount)})`}><strong>{segment.label}</strong>{formatPercent(segment.percent)}</span>)}</div><div className="portfolio-allocation__rows">{activeAllocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select categories on the {allocationTabLabel} tab.</div>}</>
         </div>
-      ) : <TaxThermometer title={<TaxThermometerModeSelect mode={thermometerMode} onChange={setThermometerMode} stateCode={stateCode} stateName={stateName} />} titleLabel={selectedThermometer.titleLabel} titleValue={formatCurrencyDetailed(selectedThermometer.total)} subtitle={selectedThermometer.subtitle} taxableIncome={selectedThermometer.taxableIncome} values={selectedThermometer.values} markers={selectedThermometer.markers} stats={selectedThermometer.stats} footerLabel={selectedThermometer.footerLabel} footerValue={selectedThermometer.footerValue} baseRateLabel={selectedThermometer.baseRateLabel} currentRateLabel={selectedThermometer.currentRateLabel} noTaxStamp={selectedThermometer.noTaxStamp} collapsed={isCollapsed} onToggle={() => setIsCollapsed((current) => !current)} />}
+      ) : <TaxThermometer title={selectedThermometer.titleLabel} titleLabel={selectedThermometer.titleLabel} titleValue={formatCurrencyDetailed(selectedThermometer.total)} subtitle={selectedThermometer.subtitle} taxableIncome={selectedThermometer.taxableIncome} values={selectedThermometer.values} markers={selectedThermometer.markers} stats={selectedThermometer.stats} footerLabel={selectedThermometer.footerLabel} footerValue={selectedThermometer.footerValue} baseRateLabel={selectedThermometer.baseRateLabel} currentRateLabel={selectedThermometer.currentRateLabel} noTaxStamp={selectedThermometer.noTaxStamp} />}
     </div>
   );
 }
@@ -6701,7 +6667,7 @@ export default function App() {
   const summaryReportRefreshRequestRef = useRef(0);
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [focusGrid, setFocusGrid] = useState(false);
-  const [showThermometerRail, setShowThermometerRail] = useState(true);
+  const [taxThermometerMode, setTaxThermometerMode] = useState<TaxThermometerMode>(() => loadTaxThermometerMode("allocation"));
   const [highlightedAccountRowId, setHighlightedAccountRowId] = useState<number | null>(null);
   const [highlightedAssetRowId, setHighlightedAssetRowId] = useState<number | null>(null);
   const [highlightedTaxTreatmentRowId, setHighlightedTaxTreatmentRowId] = useState<number | null>(null);
@@ -6920,6 +6886,14 @@ export default function App() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [summaryReportPayload]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TAX_THERMOMETER_MODE_STORAGE_KEY, taxThermometerMode);
+    } catch {
+      // Continue without persistence when browser storage is unavailable.
+    }
+  }, [taxThermometerMode]);
 
   useEffect(() => {
     if (!authEnabled) return;
@@ -10879,7 +10853,7 @@ export default function App() {
           <CompactKpiHeader metrics={kpiMetrics} />
         </div>
       </header>
-      <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>
+      <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : ""}`}>
         <aside className="sidebar">
           <nav className="sidebar__nav">
             {navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
@@ -11297,15 +11271,11 @@ export default function App() {
         )}
       </main>
       {!focusGrid && (
-        <aside className={`thermometer-rail ${showThermometerRail ? "" : "thermometer-rail--collapsed"}`} aria-label="Tax panel">
-          {showThermometerRail ? (
-            <>
-              <div className="tax-panel-control">
-                <button className="ghost-button ghost-button--compact icon-button" type="button" onClick={() => setShowThermometerRail(false)} aria-label="Hide tax panel" title="Hide tax panel">
-                  <VisibilityToggleIcon variant="hide" />
-                </button>
-              </div>
-              <TaxThermometerPanel
+        <aside className="thermometer-rail" aria-label="Tax panel">
+          <div className="tax-thermometer-panel__mode-bar">
+            <TaxThermometerModeSelect mode={taxThermometerMode} onChange={setTaxThermometerMode} stateCode={selectedStateCode} stateName={selectedStateName} />
+          </div>
+          <TaxThermometerPanel
                 federalTaxable={federalTaxableAfterDeductions}
                 stateTaxable={stateTaxableAfterDeductions}
                 federalTax={federalTaxWithPayroll}
@@ -11333,13 +11303,8 @@ export default function App() {
                 accountTaxAllocationRows={accountTaxAllocationRows}
                 accountTypeAllocationRows={accountTypeAllocationRows}
                 taxTreatmentAllocationRows={taxTreatmentAllocationRows}
-              />
-            </>
-          ) : (
-            <button className="tax-panel-show-tab" type="button" onClick={() => setShowThermometerRail(true)} aria-label="Show tax panel" title="Show tax panel">
-              <VisibilityToggleIcon variant="show" />
-            </button>
-          )}
+            thermometerMode={taxThermometerMode}
+          />
         </aside>
       )}
       </div>
