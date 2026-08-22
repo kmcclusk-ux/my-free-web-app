@@ -6669,6 +6669,8 @@ export default function App() {
   const [isWhatIfActive, setIsWhatIfActive] = useState(false);
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
+  const [isFederalTaxOutputsOpen, setIsFederalTaxOutputsOpen] = useState(false);
+  const [isStateTaxOutputsOpen, setIsStateTaxOutputsOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
   const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | "publish" | "published" | null>(null);
   const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
@@ -10871,6 +10873,28 @@ export default function App() {
                   Tax summary
                 </button>
               )}
+              {(activeTab === "federal" || activeTab === "state") && (
+                <button
+                  className="tax-summary-trigger tax-panel-header-trigger"
+                  type="button"
+                  aria-expanded={activeTab === "federal" ? isFederalTaxWhatIfOpen : isStateTaxWhatIfOpen}
+                  aria-controls={`${activeTab}-tax-what-if-content`}
+                  onClick={() => activeTab === "federal" ? setIsFederalTaxWhatIfOpen((current) => !current) : setIsStateTaxWhatIfOpen((current) => !current)}
+                >
+                  What-If
+                </button>
+              )}
+              {(activeTab === "federal" || activeTab === "state") && (
+                <button
+                  className="tax-summary-trigger tax-panel-header-trigger"
+                  type="button"
+                  aria-expanded={activeTab === "federal" ? isFederalTaxOutputsOpen : isStateTaxOutputsOpen}
+                  aria-controls={`${activeTab}-tax-outputs-content`}
+                  onClick={() => activeTab === "federal" ? setIsFederalTaxOutputsOpen((current) => !current) : setIsStateTaxOutputsOpen((current) => !current)}
+                >
+                  Tax outputs
+                </button>
+              )}
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
           </div>
@@ -11029,8 +11053,7 @@ export default function App() {
 
         {activeTab === "federal" && (
           <Section title="Federal Tax" subtitle="Continuously recalculated from the workbook-style investment rows, the same row-level tax-adjustment logic used in the sheet, and the live Lambda backend." className="federal-tax-panel">
-            <details className="tax-output-disclosure">
-              <summary>Tax outputs</summary>
+            {isFederalTaxOutputsOpen && <div id="federal-tax-outputs-content" className="tax-output-disclosure tax-output-disclosure__content">
               {federalResult && (
                 <div className="api-grid federal-tax-panel__tiles federal-tax-panel__tiles--result">
                   <MetricCard label="Federal total" value={formatCurrencyDetailed(federalTaxWithPayroll)} />
@@ -11055,10 +11078,9 @@ export default function App() {
                 <MetricCard label={`${selectedStateCode} income tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
                 <MetricCard label="W2 wages" value={formatCurrency(effectiveW2Income)} />
               </div>
-            </details>
+            </div>}
             {federalError && <div className="status-card status-card--error">{federalError}</div>}
-            <details className="tax-what-if-disclosure" open={isFederalTaxWhatIfOpen} onToggle={(event) => setIsFederalTaxWhatIfOpen(event.currentTarget.open)}>
-              <summary>What-If</summary>
+            {isFederalTaxWhatIfOpen && <div id="federal-tax-what-if-content" className="tax-what-if-disclosure tax-what-if-disclosure__content">
               <div className="tax-what-if-disclosure__fields tax-what-if-disclosure__tables">
                 <TaxWhatIfMiniTable
                   title="Extra ordinary income"
@@ -11075,7 +11097,7 @@ export default function App() {
                   onChange={(rows) => updateFederalSettingsUndoable((current) => ({ ...current, extraPreferredItems: rows, extraPreferredIncome: rows.reduce((total, row) => total + toNumber(row.amount), 0) }))}
                 />
               </div>
-            </details>
+            </div>}
             <div className="form-grid">
               <label><span>Filing status</span><select value={federalSettings.filingStatus} onChange={(event) => updateFederalSettingsUndoable((current) => ({ ...current, filingStatus: normalizeFilingStatus(event.target.value) }))}><option value="mfj">Married filing jointly</option><option value="single">Single</option><option value="mfs">Married filing separately</option><option value="hoh">Head of household</option></select></label>
               <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
@@ -11112,8 +11134,7 @@ export default function App() {
         )}
         {activeTab === "state" && (
           <Section title="State Tax" subtitle="State worksheet fed from the investment-sheet state bucket column and the live backend." className="state-tax-panel">
-            <details className="tax-output-disclosure">
-              <summary>Tax outputs</summary>
+            {isStateTaxOutputsOpen && <div id="state-tax-outputs-content" className="tax-output-disclosure tax-output-disclosure__content">
               <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
                 <MetricCard label={`${selectedStateCode} tax`} value={formatCurrencyDetailed(stateTaxWithPayroll)} />
                 <MetricCard label={`${selectedStateCode} income tax`} value={formatCurrencyDetailed(displayedStateResult.tax)} />
@@ -11130,14 +11151,13 @@ export default function App() {
                 <MetricCard label={`${selectedStateCode} deduction used`} value={formatCurrency(stateDeduction)} />
                 <MetricCard label={`${selectedStateCode} taxable after deductions`} value={formatCurrency(stateTaxableAfterDeductions)} />
               </div>
-            </details>
+            </div>}
             {stateError && <div className="status-card status-card--error">{stateError}</div>}
-            <details className="tax-what-if-disclosure" open={isStateTaxWhatIfOpen} onToggle={(event) => setIsStateTaxWhatIfOpen(event.currentTarget.open)}>
-              <summary>What-If</summary>
+            {isStateTaxWhatIfOpen && <div id="state-tax-what-if-content" className="tax-what-if-disclosure tax-what-if-disclosure__content">
               <div className="form-grid tax-what-if-disclosure__fields">
                 <label><span>Extra {selectedStateCode} income</span><CurrencyInput value={stateSettings.extraStateIncome} onChange={(value) => updateStateSettingsUndoable((current) => ({ ...current, extraStateIncome: value }))} /></label>
               </div>
-            </details>
+            </div>}
             <div className="form-grid form-grid--compact-wide">
               {selectedStateHasIncomeTax && (
                 <label>
