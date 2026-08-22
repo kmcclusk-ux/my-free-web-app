@@ -3790,10 +3790,10 @@
 .investment-what-if-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   width: fit-content;
-  min-height: 42px;
-  padding: 8px 12px 8px 10px;
+  min-height: 28px;
+  padding: 5px 8px 5px 7px;
   border: 1px solid rgba(34, 131, 107, .42);
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(29, 131, 107, .98), rgba(28, 96, 133, .94));
@@ -3822,19 +3822,19 @@
 }
 
 .investment-what-if-toggle__label {
-  font-size: .86rem;
+  font-size: .58rem;
 }
 
 .investment-what-if-toggle__state {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  padding: 3px 6px;
+  min-width: 27px;
+  padding: 2px 4px;
   border-radius: 999px;
   background: rgba(255, 255, 255, .22);
   color: #fff;
-  font-size: .62rem;
+  font-size: .42rem;
   font-weight: 950;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -3842,8 +3842,8 @@
 
 .what-if-state-icon {
   display: block;
-  width: 34px;
-  height: 20px;
+  width: 23px;
+  height: 14px;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18));
 }
 
@@ -8715,7 +8715,7 @@ html.aftertaxus-dark-mode .income-entry-panel__annualized {
 
 .add-entry-kind-card small {
   color: inherit;
-  font-size: .78rem;
+  font-size: .52rem;
   line-height: 1.5;
   opacity: .78;
 }
