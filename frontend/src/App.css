@@ -1284,19 +1284,28 @@
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select__button { width: 100%; justify-content: flex-start; }
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select__chevron { margin-left: auto; }
 .tax-thermometer-panel__visibility-toggle {
-  min-width: 42px;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
   min-height: 30px;
-  padding: 5px 7px;
+  padding: 5px;
   border: 1px solid rgba(17, 24, 39, .14);
   border-radius: 9px;
   background: #fff;
   color: #344054;
-  font-size: .64rem;
-  font-weight: 800;
-  line-height: 1;
 }
 .tax-thermometer-panel__visibility-toggle:hover { border-color: rgba(11, 99, 246, .32); background: #eff6ff; color: #0b63f6; }
 .app-shell--dark .tax-thermometer-panel__visibility-toggle { border-color: rgba(226, 232, 240, .18); background: rgba(15, 23, 42, .9); color: #e2e8f0; }
+.tax-thermometer-panel__visibility-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .workspace-shell.workspace-shell--thermometer-collapsed { grid-template-columns: 132px minmax(0, 1fr) 52px; }
 .thermometer-rail--collapsed {
   padding-right: 6px;
@@ -1312,10 +1321,8 @@
   padding-left: 4px;
 }
 .tax-thermometer-panel__mode-bar--collapsed .tax-thermometer-panel__visibility-toggle {
-  width: 42px;
-  min-width: 42px;
-  padding-right: 3px;
-  padding-left: 3px;
+  width: 32px;
+  min-width: 32px;
 }
 
 @media (max-width: 1180px) and (min-width: 981px) {
