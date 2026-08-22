@@ -865,7 +865,7 @@ function authHeaders(idToken?: string): HeadersInit {
 }
 
 const navItems: Array<{ key: TabKey; label: string; meta: string }> = [
-  { key: "investments", label: "Investments", meta: "workbook grid" },
+  { key: "investments", label: "Investments / Income", meta: "workbook grid" },
   { key: "accounts", label: "Accounts", meta: "tax status" },
   { key: "tickers", label: "Assets", meta: "asset lookups" },
   { key: "federal", label: "Federal Tax", meta: "live backend" },
@@ -5849,7 +5849,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   useEffect(() => () => cancelRowActionClose(), []);
 
   return (
-    <Section title="Investments" subtitle="Workbook-style grid with checkbox overrides. When WhatIf is checked, the new asset and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
+    <Section title="Investments / Income" subtitle="Workbook-style grid with checkbox overrides. When WhatIf is checked, the new asset and return replace the current holding in the downstream tax logic." className="investments-workspace" hideHeading>
       <div className="actions-row">
         <button className="primary-button icon-button action-icon-button" type="button" onClick={openAddEntryDialog} aria-label="Add income or investment" title="Add income or investment"><RowActionIcon name="add" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
@@ -6141,7 +6141,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
           <div className={`add-entry-panel ${addEntryKind === "investment" ? "add-entry-panel--wide" : ""}`} role="dialog" aria-modal="true" aria-labelledby="add-entry-title">
             <div className="income-entry-panel__header">
               <div>
-                <p className="eyebrow">Investments</p>
+                <p className="eyebrow">Investments / Income</p>
                 <h3 id="add-entry-title">{editTarget ? `Edit ${addEntryKind}` : addEntryKind ? `Add ${addEntryKind}` : "What would you like to add?"}</h3>
               </div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={closeAddEntryDialog}>Close</button>
@@ -10951,7 +10951,7 @@ export default function App() {
         ) : (
           <>
         {activeTab === "investments" && storageState === "loading" && (
-          <Section title="Investments" subtitle="Loading workbook data from storage...">
+          <Section title="Investments / Income" subtitle="Loading workbook data from storage...">
             <div className="status-card status-card--note">Loading account and tax-status mappings...</div>
           </Section>
         )}
