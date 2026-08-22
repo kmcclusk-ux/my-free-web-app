@@ -4067,12 +4067,12 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement | null>(null);
   const options: Array<{ mode: TaxThermometerMode; label: string; icons: React.ReactNode }> = [
-    { mode: "allocation", label: "Portfolio allocation", icons: null },
-    { mode: "accountTax", label: "Account tax category", icons: null },
-    { mode: "accountType", label: "Account type", icons: null },
     { mode: "combined", label: "All taxes", icons: <><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /><span>+</span><StateFlagImage stateCode={stateCode} stateName={stateName} /></> },
     { mode: "federal", label: "Federal Tax", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
     { mode: "state", label: "State Tax", icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
+    { mode: "allocation", label: "Portfolio allocation", icons: null },
+    { mode: "accountTax", label: "Account tax category", icons: null },
+    { mode: "accountType", label: "Account type", icons: null },
     { mode: "local", label: "Local Tax", icons: null },
     { mode: "taxTreatment", label: "Tax treatments", icons: null },
   ];
