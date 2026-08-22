@@ -4977,6 +4977,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
+  const [showRowNumbers, setShowRowNumbers] = useState(false);
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const filteredAndSortedRows = useMemo(() => {
@@ -5732,15 +5733,17 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     return true;
   };
   const visibleInvestmentColumns = INVESTMENT_COLUMN_DEFS.filter(isColumnVisible);
-  const visibleTableWidth = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => sum + (isColumnVisible(column) ? columnWidths[column.id] : 0), 0);
+  const visibleTableWidth = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => sum + (isColumnVisible(column) ? columnWidths[column.id] : 0), 0)
+    - (showRowNumbers ? 0 : columnWidths.row);
+  const visibleRowNumberWidth = showRowNumbers ? columnWidths.row : 0;
   const tableStyle = {
     width: visibleTableWidth,
     minWidth: visibleTableWidth,
-    "--investment-col-2-left": `${columnWidths.row}px`,
-    "--investment-col-3-left": `${columnWidths.row + columnWidths.move}px`,
-    "--investment-col-4-left": `${columnWidths.row + columnWidths.move + columnWidths.included}px`,
-    "--investment-col-5-left": `${columnWidths.row + columnWidths.move + columnWidths.included + columnWidths.account}px`,
-    "--investment-col-6-left": `${columnWidths.row + columnWidths.move + columnWidths.included + columnWidths.account + columnWidths.symbol}px`,
+    "--investment-col-2-left": `${visibleRowNumberWidth}px`,
+    "--investment-col-3-left": `${visibleRowNumberWidth + columnWidths.move}px`,
+    "--investment-col-4-left": `${visibleRowNumberWidth + columnWidths.move + columnWidths.included}px`,
+    "--investment-col-5-left": `${visibleRowNumberWidth + columnWidths.move + columnWidths.included + columnWidths.account}px`,
+    "--investment-col-6-left": `${visibleRowNumberWidth + columnWidths.move + columnWidths.included + columnWidths.account + columnWidths.symbol}px`,
   } as CSSProperties;
   const handleColumnResizeStart = (event: ReactPointerEvent<HTMLButtonElement>, columnId: InvestmentColumnId) => {
     event.preventDefault();
@@ -5788,6 +5791,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     "sheet-table",
     "sheet-table--compact",
     "sheet-table--workbook",
+    !showRowNumbers ? "sheet-table--hide-row-numbers" : "",
     isWhatIfRevealAnimating ? "sheet-table--what-if-reveal" : "",
   ].filter(Boolean).join(" ");
 
@@ -5851,7 +5855,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("next")} aria-label="Next highlighted row" title="Next highlighted row" disabled={!canNavigateActiveRows}><RowActionIcon name="next" /></button>
           </div>
         )}
-        <div className="column-toggle-group" role="group" aria-label="WhatIf columns">
+        <div className="column-toggle-group" role="group" aria-label="Investment display controls">
+          <button className={`row-number-toggle ${showRowNumbers ? "row-number-toggle--active" : ""}`} type="button" aria-pressed={showRowNumbers} onClick={() => setShowRowNumbers((current) => !current)}>
+            <span>Row numbers</span>
+            <strong>{showRowNumbers ? "Shown" : "Hidden"}</strong>
+          </button>
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__label">WhatIf</span>
             <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "Click to close WhatIf columns" : "Click to open WhatIf columns"} title={isWhatIfActive ? "Close WhatIf columns" : "Open WhatIf columns"}><WhatIfStateIcon isOpen={!isWhatIfActive} /></span>
