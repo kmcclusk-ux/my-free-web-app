@@ -459,8 +459,8 @@ const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const PUBLIC_USERNAME_STORAGE_KEY = "aftertaxus-public-username";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths-compact-v2";
 const INVESTMENT_COLUMN_DEFS = [
-  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 42, minWidth: 42 },
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 30, minWidth: 28 },
+  { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 42, minWidth: 42 },
   { id: "included", label: "Inc", ariaLabel: "Included", title: "Included", className: "included-heading", defaultWidth: 28, minWidth: 26 },
   { id: "account", label: "Account", defaultWidth: 116, minWidth: 82 },
   { id: "symbol", label: "Asset", defaultWidth: 86, minWidth: 70 },
@@ -5738,11 +5738,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const tableStyle = {
     width: visibleTableWidth,
     minWidth: visibleTableWidth,
-    "--investment-col-2-left": `${columnWidths.move}px`,
-    "--investment-col-3-left": `${columnWidths.move + columnWidths.row}px`,
-    "--investment-col-4-left": `${columnWidths.move + columnWidths.row + columnWidths.included}px`,
-    "--investment-col-5-left": `${columnWidths.move + columnWidths.row + columnWidths.included + columnWidths.account}px`,
-    "--investment-col-6-left": `${columnWidths.move + columnWidths.row + columnWidths.included + columnWidths.account + columnWidths.symbol}px`,
+    "--investment-col-2-left": `${columnWidths.row}px`,
+    "--investment-col-3-left": `${columnWidths.row + columnWidths.move}px`,
+    "--investment-col-4-left": `${columnWidths.row + columnWidths.move + columnWidths.included}px`,
+    "--investment-col-5-left": `${columnWidths.row + columnWidths.move + columnWidths.included + columnWidths.account}px`,
+    "--investment-col-6-left": `${columnWidths.row + columnWidths.move + columnWidths.included + columnWidths.account + columnWidths.symbol}px`,
   } as CSSProperties;
   const handleColumnResizeStart = (event: ReactPointerEvent<HTMLButtonElement>, columnId: InvestmentColumnId) => {
     event.preventDefault();

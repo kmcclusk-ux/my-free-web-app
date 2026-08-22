@@ -4065,8 +4065,8 @@
   position: sticky;
   z-index: 6;
 }
-.investments-workspace .sheet-table--workbook :is(th, td).investment-column--move { left: 0; }
-.investments-workspace .sheet-table--workbook :is(th, td).investment-column--row { left: var(--investment-col-2-left, 78px); }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--row { left: 0; }
+.investments-workspace .sheet-table--workbook :is(th, td).investment-column--move { left: var(--investment-col-2-left, 30px); }
 .investments-workspace .sheet-table--workbook :is(th, td).investment-column--included { left: var(--investment-col-3-left, 108px); }
 .investments-workspace .sheet-table--workbook :is(th, td).investment-column--account { left: var(--investment-col-4-left, 136px); }
 .investments-workspace .sheet-table--workbook :is(th, td).investment-column--symbol { left: var(--investment-col-5-left, 252px); }
