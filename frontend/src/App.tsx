@@ -3124,6 +3124,8 @@ type KpiMetricConfig = {
   tone?: "default" | "accent" | "warning" | "sync";
   details?: React.ReactNode;
   badge?: React.ReactNode;
+  alternateContent?: React.ReactNode;
+  alternateAriaLabel?: string;
 };
 
 type IncomeSnapshotValues = {
@@ -3209,13 +3211,15 @@ function TumblingCurrency({ value, className = "" }: { value: number; className?
   );
 }
 
-function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge }: KpiMetricConfig) {
+function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge, alternateContent, alternateAriaLabel }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
   const [odometerValue, setOdometerValue] = useState({ previous: value, current: value });
   const [isAnimatingValue, setIsAnimatingValue] = useState(false);
+  const [isAlternateVisible, setIsAlternateVisible] = useState(false);
   const isPrimaryMetric = primary ?? label.toLowerCase() === "after-tax income";
+  const isFlippable = Boolean(alternateContent);
 
   useEffect(() => {
     if (typeof numericValue !== "number" || !Number.isFinite(numericValue)) return;
@@ -3246,19 +3250,45 @@ function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, prima
         ? formatPercent(Math.abs(deltaValue))
         : formatCurrency(Math.abs(deltaValue));
 
+  const toggleAlternateView = () => {
+    if (!isFlippable) return;
+    setIsAlternateVisible((current) => !current);
+  };
+
   return (
-    <div className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()} tabIndex={details ? 0 : undefined}>
-      <span className="kpi-pill__label-line">{label}{badge}</span>
-      <span className="kpi-pill__main-line">
-        <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
-        {valueLabel && <span className="kpi-pill__value-label">{valueLabel}</span>}
-      </span>
-      {secondaryValue && <small>{secondaryValue}</small>}
-      {formattedDelta && deltaValue !== null && (
-        <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
-          {deltaValue >= 0 ? "↑" : "↓"} {deltaValue >= 0 ? "+" : "-"}{formattedDelta}
-        </em>
-      )}
+    <div
+      className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isFlippable ? "kpi-pill--flippable" : ""} ${isAlternateVisible ? "kpi-pill--flipped" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}
+      tabIndex={details || isFlippable ? 0 : undefined}
+      role={isFlippable ? "button" : undefined}
+      aria-pressed={isFlippable ? isAlternateVisible : undefined}
+      aria-label={isFlippable ? (isAlternateVisible ? `Show ${label}` : alternateAriaLabel) : undefined}
+      onClick={toggleAlternateView}
+      onKeyDown={(event) => {
+        if (!isFlippable || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        toggleAlternateView();
+      }}
+    >
+      <div className="kpi-pill__flip-stage">
+        <div className="kpi-pill__face kpi-pill__face--front" aria-hidden={isAlternateVisible}>
+          <span className="kpi-pill__label-line">{label}{badge}</span>
+          <span className="kpi-pill__main-line">
+            <OdometerValue value={odometerValue.current} previousValue={odometerValue.previous} spinning={isAnimatingValue} />
+            {valueLabel && <span className="kpi-pill__value-label">{valueLabel}</span>}
+          </span>
+          {secondaryValue && <small>{secondaryValue}</small>}
+          {formattedDelta && deltaValue !== null && (
+            <em className={`kpi-pill__delta ${deltaValue >= 0 ? "kpi-pill__delta--up" : "kpi-pill__delta--down"}`}>
+              {deltaValue >= 0 ? "↑" : "↓"} {deltaValue >= 0 ? "+" : "-"}{formattedDelta}
+            </em>
+          )}
+        </div>
+        {alternateContent && (
+          <div className="kpi-pill__face kpi-pill__face--back" aria-hidden={!isAlternateVisible}>
+            {alternateContent}
+          </div>
+        )}
+      </div>
       {details && <div className="kpi-pill__details" role="tooltip">{details}</div>}
     </div>
   );
@@ -9280,6 +9310,17 @@ export default function App() {
       tone: "warning",
       details: incomeBreakdownDetails,
       badge: excludedIncomeBadge,
+      alternateAriaLabel: `Show ${isMonthlyIncomePrimary ? "monthly" : "annual"} pre-tax income`,
+      alternateContent: (
+        <>
+          <span className="kpi-pill__alternate-label">{isMonthlyIncomePrimary ? "Monthly" : "Annual"} pre-tax income</span>
+          <span className="kpi-pill__alternate-main-line">
+            <strong>{formatCurrency(isMonthlyIncomePrimary ? monthlyIncome : totalIncome)}</strong>
+            <span>{isMonthlyIncomePrimary ? "monthly before tax" : "annual before tax"}</span>
+          </span>
+          <small>{formatCurrency(isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome)} after tax</small>
+        </>
+      ),
     },
     {
       label: "Tax rate",
@@ -9289,6 +9330,18 @@ export default function App() {
       numericValue: allInMarginalTaxRate,
       deltaKind: "percent",
       details: taxRateBreakdownDetails,
+      alternateAriaLabel: "Show federal, state, and local effective and marginal tax rates",
+      alternateContent: (
+        <>
+          <span className="kpi-pill__alternate-label">Effective / marginal by jurisdiction</span>
+          <span className="kpi-pill__alternate-rate-headings"><span>Effective</span><span>Marginal</span></span>
+          <span className="kpi-pill__alternate-rates">
+            <span><b>Federal</b><strong>{formatPercent(totalIncome > 0 ? federalTaxWithPayroll / totalIncome : 0)}</strong><strong>{formatPercent(marginalFederalRate + marginalW2PayrollRate + marginalNiitRate)}</strong></span>
+            <span><b>{selectedStateCode}</b><strong>{formatPercent(totalIncome > 0 ? stateTaxWithPayroll / totalIncome : 0)}</strong><strong>{formatPercent(marginalStateRate)}</strong></span>
+            <span><b>Local</b><strong>{formatPercent(totalIncome > 0 ? localTaxTotal / totalIncome : 0)}</strong><strong>{formatPercent(marginalLocalRate)}</strong></span>
+          </span>
+        </>
+      ),
     },
     {
       label: "Total investment",
@@ -9298,6 +9351,16 @@ export default function App() {
       numericValue: flows.totalInvestmentAmount,
       tone: "accent",
       details: investmentYieldBreakdownDetails,
+      alternateAriaLabel: "Show before-tax yield and after-tax return",
+      alternateContent: (
+        <>
+          <span className="kpi-pill__alternate-label">Portfolio return</span>
+          <span className="kpi-pill__alternate-yields">
+            <span><b>After-tax return</b><strong>{formatPercent(portfolioAfterTaxYield)}</strong></span>
+            <span><b>Before-tax yield</b><strong>{formatPercent(portfolioBeforeTaxYield)}</strong></span>
+          </span>
+        </>
+      ),
     },
   ];
   const portfolioSnapshot = buildPortfolioSnapshot({
