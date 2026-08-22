@@ -182,6 +182,14 @@
   align-items: center;
   min-width: 220px;
 }
+.income-snapshot--inline .income-snapshot__body {
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+.income-snapshot--inline .income-snapshot__body:focus-visible {
+  box-shadow: 0 0 0 2px rgba(11, 99, 246, .34);
+}
 .income-snapshot--empty .income-snapshot__body {
   min-width: 0;
 }
@@ -309,6 +317,24 @@
   border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 7px;
   background: rgba(255, 255, 255, .06);
+}
+.income-snapshot__rollout {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 104px;
+  opacity: 1;
+  transform: translateX(0);
+  transition: max-width 220ms ease, opacity 150ms ease, transform 220ms ease, visibility 0s linear 0s;
+}
+.income-snapshot--inline:not(.income-snapshot--controls-open) .income-snapshot__rollout {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateX(-8px);
+  visibility: hidden;
+  transition-delay: 0s, 0s, 0s, 220ms;
 }
 .income-snapshot__toggle-button {
   width: 20px;

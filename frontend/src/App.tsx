@@ -3406,6 +3406,7 @@ function IncomeSnapshotControl({
   const [snapshotView, setSnapshotView] = useState<"monthly" | "yearly">("monthly");
   const [snapshotBasis, setSnapshotBasis] = useState<"afterTax" | "beforeTax">("afterTax");
   const [snapshotTooltip, setSnapshotTooltip] = useState("");
+  const [areSnapshotControlsOpen, setAreSnapshotControlsOpen] = useState(false);
   const capturedLabel = snapshot
     ? new Date(snapshot.capturedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "";
@@ -3423,7 +3424,14 @@ function IncomeSnapshotControl({
   const selectedSuffix = snapshotView === "monthly" ? "/ month" : "/ year";
 
   return (
-    <div className={`income-snapshot ${!snapshot ? "income-snapshot--empty" : ""} ${className}`.trim()} aria-label="Income snapshot comparison">
+    <div
+      className={`income-snapshot ${!snapshot ? "income-snapshot--empty" : ""} ${areSnapshotControlsOpen ? "income-snapshot--controls-open" : ""} ${className}`.trim()}
+      aria-label="Income snapshot comparison"
+      onMouseLeave={() => setAreSnapshotControlsOpen(false)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAreSnapshotControlsOpen(false);
+      }}
+    >
       <button
         className="income-snapshot__button"
         type="button"
@@ -3444,7 +3452,22 @@ function IncomeSnapshotControl({
         </svg>
         <span>Snapshot</span>
       </button>
-      <div className="income-snapshot__body" aria-live="polite">
+      <div
+        className="income-snapshot__body"
+        aria-live="polite"
+        aria-expanded={areSnapshotControlsOpen}
+        aria-label="Show baseline comparison options"
+        role="button"
+        tabIndex={0}
+        onMouseEnter={() => setAreSnapshotControlsOpen(true)}
+        onClick={() => setAreSnapshotControlsOpen(true)}
+        onFocus={() => setAreSnapshotControlsOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          setAreSnapshotControlsOpen(true);
+        }}
+      >
         {snapshot ? (
           <div className="income-snapshot__single-line">
             <SnapshotValue label={selectedLabel} delta={selectedDelta} suffix={selectedSuffix} />
@@ -3456,61 +3479,63 @@ function IncomeSnapshotControl({
           </div>
         )}
       </div>
-      <div className="income-snapshot__toggle income-snapshot__toggle--basis" role="group" aria-label="Snapshot tax basis">
-        <button
-          className={`income-snapshot__toggle-button ${snapshotBasis === "afterTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
-          type="button"
-          onClick={() => setSnapshotBasis("afterTax")}
-          aria-label="Show after-tax change"
-          title="Show after-tax income change"
-          onMouseEnter={() => setSnapshotTooltip("Show after-tax income change")}
-          onMouseLeave={() => setSnapshotTooltip("")}
-          onFocus={() => setSnapshotTooltip("Show after-tax income change")}
-          onBlur={() => setSnapshotTooltip("")}
-        >
-          <SnapshotToggleIcon type="afterTax" />
-        </button>
-        <button
-          className={`income-snapshot__toggle-button ${snapshotBasis === "beforeTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
-          type="button"
-          onClick={() => setSnapshotBasis("beforeTax")}
-          aria-label="Show before-tax change"
-          title="Show before-tax income change"
-          onMouseEnter={() => setSnapshotTooltip("Show before-tax income change")}
-          onMouseLeave={() => setSnapshotTooltip("")}
-          onFocus={() => setSnapshotTooltip("Show before-tax income change")}
-          onBlur={() => setSnapshotTooltip("")}
-        >
-          <SnapshotToggleIcon type="beforeTax" />
-        </button>
-      </div>
-      <div className="income-snapshot__toggle" role="group" aria-label="Snapshot period">
-        <button
-          className={`income-snapshot__toggle-button ${snapshotView === "monthly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
-          type="button"
-          onClick={() => setSnapshotView("monthly")}
-          aria-label="Show monthly change"
-          title="Show monthly change"
-          onMouseEnter={() => setSnapshotTooltip("Show monthly change")}
-          onMouseLeave={() => setSnapshotTooltip("")}
-          onFocus={() => setSnapshotTooltip("Show monthly change")}
-          onBlur={() => setSnapshotTooltip("")}
-        >
-          <SnapshotToggleIcon type="monthly" />
-        </button>
-        <button
-          className={`income-snapshot__toggle-button ${snapshotView === "yearly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
-          type="button"
-          onClick={() => setSnapshotView("yearly")}
-          aria-label="Show yearly change"
-          title="Show yearly change"
-          onMouseEnter={() => setSnapshotTooltip("Show yearly change")}
-          onMouseLeave={() => setSnapshotTooltip("")}
-          onFocus={() => setSnapshotTooltip("Show yearly change")}
-          onBlur={() => setSnapshotTooltip("")}
-        >
-          <SnapshotToggleIcon type="yearly" />
-        </button>
+      <div className="income-snapshot__rollout" aria-hidden={!areSnapshotControlsOpen}>
+        <div className="income-snapshot__toggle income-snapshot__toggle--basis" role="group" aria-label="Snapshot tax basis">
+          <button
+            className={`income-snapshot__toggle-button ${snapshotBasis === "afterTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+            type="button"
+            onClick={() => setSnapshotBasis("afterTax")}
+            aria-label="Show after-tax change"
+            title="Show after-tax income change"
+            onMouseEnter={() => setSnapshotTooltip("Show after-tax income change")}
+            onMouseLeave={() => setSnapshotTooltip("")}
+            onFocus={() => setSnapshotTooltip("Show after-tax income change")}
+            onBlur={() => setSnapshotTooltip("")}
+          >
+            <SnapshotToggleIcon type="afterTax" />
+          </button>
+          <button
+            className={`income-snapshot__toggle-button ${snapshotBasis === "beforeTax" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+            type="button"
+            onClick={() => setSnapshotBasis("beforeTax")}
+            aria-label="Show before-tax change"
+            title="Show before-tax income change"
+            onMouseEnter={() => setSnapshotTooltip("Show before-tax income change")}
+            onMouseLeave={() => setSnapshotTooltip("")}
+            onFocus={() => setSnapshotTooltip("Show before-tax income change")}
+            onBlur={() => setSnapshotTooltip("")}
+          >
+            <SnapshotToggleIcon type="beforeTax" />
+          </button>
+        </div>
+        <div className="income-snapshot__toggle" role="group" aria-label="Snapshot period">
+          <button
+            className={`income-snapshot__toggle-button ${snapshotView === "monthly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+            type="button"
+            onClick={() => setSnapshotView("monthly")}
+            aria-label="Show monthly change"
+            title="Show monthly change"
+            onMouseEnter={() => setSnapshotTooltip("Show monthly change")}
+            onMouseLeave={() => setSnapshotTooltip("")}
+            onFocus={() => setSnapshotTooltip("Show monthly change")}
+            onBlur={() => setSnapshotTooltip("")}
+          >
+            <SnapshotToggleIcon type="monthly" />
+          </button>
+          <button
+            className={`income-snapshot__toggle-button ${snapshotView === "yearly" ? "income-snapshot__toggle-button--active" : ""}`.trim()}
+            type="button"
+            onClick={() => setSnapshotView("yearly")}
+            aria-label="Show yearly change"
+            title="Show yearly change"
+            onMouseEnter={() => setSnapshotTooltip("Show yearly change")}
+            onMouseLeave={() => setSnapshotTooltip("")}
+            onFocus={() => setSnapshotTooltip("Show yearly change")}
+            onBlur={() => setSnapshotTooltip("")}
+          >
+            <SnapshotToggleIcon type="yearly" />
+          </button>
+        </div>
       </div>
       {snapshotTooltip && <div className="income-snapshot__tooltip" role="tooltip">{snapshotTooltip}</div>}
     </div>
