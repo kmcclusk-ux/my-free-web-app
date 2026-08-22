@@ -4975,9 +4975,8 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, showRowNumbers, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; showRowNumbers: boolean; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
-  const [showRowNumbers, setShowRowNumbers] = useState(false);
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const filteredAndSortedRows = useMemo(() => {
@@ -5855,10 +5854,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
           </div>
         )}
         <div className="column-toggle-group" role="group" aria-label="Investment display controls">
-          <button className={`row-number-toggle ${showRowNumbers ? "row-number-toggle--active" : ""}`} type="button" aria-pressed={showRowNumbers} onClick={() => setShowRowNumbers((current) => !current)}>
-            <span>Row numbers</span>
-            <strong>{showRowNumbers ? "Shown" : "Hidden"}</strong>
-          </button>
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__label">WhatIf</span>
             <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "Click to close WhatIf columns" : "Click to open WhatIf columns"} title={isWhatIfActive ? "Close WhatIf columns" : "Open WhatIf columns"}><WhatIfStateIcon isOpen={!isWhatIfActive} /></span>
@@ -6660,6 +6655,7 @@ export default function App() {
   const [investmentFilters, setInvestmentFilters] = useState<InvestmentFilters>({ account: "", category: "", asset: "" });
   const [investmentSort, setInvestmentSort] = useState<InvestmentSort>({ tableId: "investments", column: "", direction: "asc" });
   const [selectedInvestmentIds, setSelectedInvestmentIds] = useState<number[]>([]);
+  const [showInvestmentRowNumbers, setShowInvestmentRowNumbers] = useState(false);
   const [isWhatIfActive, setIsWhatIfActive] = useState(false);
   const [isFederalTaxWhatIfOpen, setIsFederalTaxWhatIfOpen] = useState(false);
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
@@ -9212,6 +9208,10 @@ export default function App() {
             <TopbarActionIcon name="sheet" />
             <span>{isSheetPanelOpen ? "Close Spreadsheet" : "Spreadsheet"}</span>
           </button>
+          <button className="topbar-menu__item" type="button" role="menuitemcheckbox" aria-checked={showInvestmentRowNumbers} onClick={() => { setShowInvestmentRowNumbers((current) => !current); setIsTopbarMenuOpen(false); }}>
+            <TopbarActionIcon name="sheet" />
+            <span>{showInvestmentRowNumbers ? "Hide row numbers" : "Show row numbers"}</span>
+          </button>
           <button className="topbar-menu__item" type="button" role="menuitemcheckbox" aria-checked={uiSettings.darkMode} onClick={toggleDarkMode}>
             <TopbarActionIcon name="theme" />
             <span>{uiSettings.darkMode ? "Light Mode" : "Dark Mode"}</span>
@@ -10923,6 +10923,7 @@ export default function App() {
             filters={investmentFilters}
             sort={investmentSort}
             selectedAssetIds={selectedInvestmentIds}
+            showRowNumbers={showInvestmentRowNumbers}
             isWhatIfActive={isWhatIfActive}
             onToggleWhatIf={toggleInvestmentWhatIf}
             onSaveFavorite={saveFavorite}
