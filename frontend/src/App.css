@@ -4110,9 +4110,6 @@
   left: var(--investment-col-6-left, 338px);
   box-shadow: 8px 0 14px rgba(24,49,58,.06);
 }
-.investments-workspace .sheet-table--workbook.sheet-table--hide-row-numbers :is(th, td).investment-column--row {
-  display: none;
-}
 .investments-workspace .sheet-table--workbook thead :is(th, td).investment-column {
   z-index: 9;
   background: rgba(228,239,241,.98);

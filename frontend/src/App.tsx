@@ -5726,6 +5726,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const renderTotalCell = (key: InvestmentColumnId, value: number) => <td key={key} className={investmentColumnClassName(key)}><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
   const renderEmptyTotalCell = (key: InvestmentColumnId) => <td key={key} className={investmentColumnClassName(key)} />;
   const isColumnVisible = (column: typeof INVESTMENT_COLUMN_DEFS[number]) => {
+    if (column.id === "row") return showRowNumbers;
     const group = "group" in column ? column.group : undefined;
     if (group === "override") return isWhatIfActive;
     if (group === "tax") return false;
@@ -5733,8 +5734,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     return true;
   };
   const visibleInvestmentColumns = INVESTMENT_COLUMN_DEFS.filter(isColumnVisible);
-  const visibleTableWidth = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => sum + (isColumnVisible(column) ? columnWidths[column.id] : 0), 0)
-    - (showRowNumbers ? 0 : columnWidths.row);
+  const visibleTableWidth = INVESTMENT_COLUMN_DEFS.reduce((sum, column) => sum + (isColumnVisible(column) ? columnWidths[column.id] : 0), 0);
   const visibleRowNumberWidth = showRowNumbers ? columnWidths.row : 0;
   const tableStyle = {
     width: visibleTableWidth,
@@ -5791,7 +5791,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     "sheet-table",
     "sheet-table--compact",
     "sheet-table--workbook",
-    !showRowNumbers ? "sheet-table--hide-row-numbers" : "",
     isWhatIfRevealAnimating ? "sheet-table--what-if-reveal" : "",
   ].filter(Boolean).join(" ");
 
