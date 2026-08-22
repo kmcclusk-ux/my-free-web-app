@@ -4071,9 +4071,9 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
     { mode: "accountTax", label: "Account tax category", icons: <span aria-hidden="true">%</span> },
     { mode: "accountType", label: "Account type", icons: <span aria-hidden="true">%</span> },
     { mode: "combined", label: "All taxes", icons: <><img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /><span>+</span><StateFlagImage stateCode={stateCode} stateName={stateName} /></> },
-    { mode: "federal", label: "Federal", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
-    { mode: "state", label: stateName, icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
-    { mode: "local", label: "Local tax", icons: <span aria-hidden="true">L</span> },
+    { mode: "federal", label: "Federal Tax", icons: <img className="tax-thermometer__title-flag" src={US_FLAG_ICON_URL} alt="United States flag" width={18} height={12} loading="lazy" referrerPolicy="no-referrer" /> },
+    { mode: "state", label: "State Tax", icons: <StateFlagImage stateCode={stateCode} stateName={stateName} /> },
+    { mode: "local", label: "Local Tax", icons: null },
     { mode: "taxTreatment", label: "Tax treatments", icons: <span aria-hidden="true">%</span> },
   ];
   const selected = options.find((option) => option.mode === mode) || options[0];
@@ -4097,7 +4097,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
   return (
     <div className="tax-thermometer-mode-select" ref={selectRef}>
       <button className="tax-thermometer-mode-select__button" type="button" aria-haspopup="listbox" aria-expanded={isOpen} onClick={() => setIsOpen((current) => !current)}>
-        <span className="tax-thermometer-mode-select__icons">{selected.icons}</span>
+        {selected.icons && <span className="tax-thermometer-mode-select__icons">{selected.icons}</span>}
         <span className="tax-thermometer-mode-select__label">{selected.label}</span>
         <span className="tax-thermometer-mode-select__chevron">▾</span>
       </button>
@@ -4115,7 +4115,7 @@ function TaxThermometerModeSelect({ mode, onChange, stateCode, stateName }: { mo
                 setIsOpen(false);
               }}
             >
-              <span className="tax-thermometer-mode-select__icons">{option.icons}</span>
+              {option.icons && <span className="tax-thermometer-mode-select__icons">{option.icons}</span>}
               <span>{option.label}</span>
             </button>
           ))}
