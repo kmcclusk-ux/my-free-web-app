@@ -3126,6 +3126,7 @@ type KpiMetricConfig = {
   badge?: React.ReactNode;
   alternateContent?: React.ReactNode;
   alternateAriaLabel?: string;
+  inlineControl?: React.ReactNode;
 };
 
 type IncomeSnapshotValues = {
@@ -3211,7 +3212,7 @@ function TumblingCurrency({ value, className = "" }: { value: number; className?
   );
 }
 
-function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge, alternateContent, alternateAriaLabel }: KpiMetricConfig) {
+function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, primary, deltaKind = "currency", tone = "default", details, badge, alternateContent, alternateAriaLabel, inlineControl }: KpiMetricConfig) {
   const previousValue = useRef<number | null>(null);
   const previousDisplayValue = useRef(value);
   const [delta, setDelta] = useState<number | null>(null);
@@ -3257,19 +3258,22 @@ function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, prima
 
   return (
     <div
-      className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isFlippable ? "kpi-pill--flippable" : ""} ${isAlternateVisible ? "kpi-pill--flipped" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}
-      tabIndex={details || isFlippable ? 0 : undefined}
-      role={isFlippable ? "button" : undefined}
-      aria-pressed={isFlippable ? isAlternateVisible : undefined}
-      aria-label={isFlippable ? (isAlternateVisible ? `Show ${label}` : alternateAriaLabel) : undefined}
-      onClick={toggleAlternateView}
-      onKeyDown={(event) => {
-        if (!isFlippable || (event.key !== "Enter" && event.key !== " ")) return;
-        event.preventDefault();
-        toggleAlternateView();
-      }}
+      className={`kpi-pill kpi-pill--${tone} ${isPrimaryMetric ? "kpi-pill--primary" : ""} ${details ? "kpi-pill--has-details" : ""} ${isFlippable ? "kpi-pill--flippable" : ""} ${inlineControl ? "kpi-pill--has-inline-control" : ""} ${isAlternateVisible ? "kpi-pill--flipped" : ""} ${isAnimatingValue ? "kpi-pill--changed" : ""}`.trim()}
+      tabIndex={!isFlippable && details ? 0 : undefined}
     >
-      <div className="kpi-pill__flip-stage">
+      <div
+        className="kpi-pill__flip-stage"
+        tabIndex={isFlippable ? 0 : undefined}
+        role={isFlippable ? "button" : undefined}
+        aria-pressed={isFlippable ? isAlternateVisible : undefined}
+        aria-label={isFlippable ? (isAlternateVisible ? `Show ${label}` : alternateAriaLabel) : undefined}
+        onClick={toggleAlternateView}
+        onKeyDown={(event) => {
+          if (!isFlippable || (event.key !== "Enter" && event.key !== " ")) return;
+          event.preventDefault();
+          toggleAlternateView();
+        }}
+      >
         <div className="kpi-pill__face kpi-pill__face--front" aria-hidden={isAlternateVisible}>
           <span className="kpi-pill__label-line">{label}{badge}</span>
           <span className="kpi-pill__main-line">
@@ -3289,6 +3293,7 @@ function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, prima
           </div>
         )}
       </div>
+      {inlineControl && <div className="kpi-pill__inline-control">{inlineControl}</div>}
       {details && <div className="kpi-pill__details" role="tooltip">{details}</div>}
     </div>
   );
@@ -3512,19 +3517,12 @@ function IncomeSnapshotControl({
   );
 }
 
-function CompactKpiHeader({
-  metrics,
-  children,
-}: {
-  metrics: KpiMetricConfig[];
-  children?: React.ReactNode;
-}) {
+function CompactKpiHeader({ metrics }: { metrics: KpiMetricConfig[] }) {
   return (
     <div className="kpi-header">
       <div className="kpi-header__metrics">
         {metrics.map((metric) => <KpiPill key={metric.label} {...metric} />)}
       </div>
-      {children && <div className="kpi-header__actions">{children}</div>}
     </div>
   );
 }
@@ -9321,6 +9319,12 @@ export default function App() {
           <small>{formatCurrency(isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome)} after tax</small>
         </>
       ),
+      inlineControl: (
+        <IncomePeriodToggle
+          period={uiSettings.incomePrimaryPeriod}
+          onChange={(incomePrimaryPeriod) => setUiSettings((current) => ({ ...current, incomePrimaryPeriod }))}
+        />
+      ),
     },
     {
       label: "Tax rate",
@@ -10847,14 +10851,7 @@ export default function App() {
       <header className="app-top-nav" aria-label="Application menu">
         <div className="app-top-nav__inner">
           {actionMenu}
-          <CompactKpiHeader
-            metrics={kpiMetrics}
-          >
-            <IncomePeriodToggle
-              period={uiSettings.incomePrimaryPeriod}
-              onChange={(incomePrimaryPeriod) => setUiSettings((current) => ({ ...current, incomePrimaryPeriod }))}
-            />
-          </CompactKpiHeader>
+          <CompactKpiHeader metrics={kpiMetrics} />
         </div>
       </header>
       <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerRail ? "workspace-shell--tax-collapsed" : ""}`}>

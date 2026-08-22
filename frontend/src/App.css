@@ -23,7 +23,7 @@
 }
 .app-top-nav .kpi-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   flex: 1 1 auto;
@@ -873,9 +873,10 @@
   perspective: 900px;
 }
 
-.kpi-pill--flippable:focus-visible {
+.kpi-pill__flip-stage:focus-visible {
   outline: 2px solid #60a5fa;
   outline-offset: 2px;
+  border-radius: 7px;
 }
 
 .kpi-pill--flippable::after {
@@ -889,6 +890,40 @@
   font-weight: 900;
   line-height: 1;
   pointer-events: none;
+}
+
+.kpi-pill--has-inline-control::after {
+  right: 58px;
+}
+
+.kpi-pill__inline-control {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 4;
+  display: inline-flex;
+}
+
+.app-top-nav .kpi-pill__inline-control .income-snapshot__toggle {
+  gap: 0;
+  padding: 0;
+  border-color: rgba(255, 255, 255, .18);
+  background: rgba(5, 6, 8, .28);
+}
+
+.app-top-nav .kpi-pill__inline-control .income-snapshot__toggle-button {
+  width: 18px;
+  height: 18px;
+}
+
+.app-top-nav .kpi-pill__inline-control .income-snapshot__toggle-button svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-top-nav .kpi-pill--has-inline-control .kpi-pill__label-line,
+.app-top-nav .kpi-pill--has-inline-control .kpi-pill__alternate-label {
+  padding-right: 68px;
 }
 
 .kpi-pill__flip-stage {
