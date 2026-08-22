@@ -494,7 +494,6 @@ const INVESTMENT_COLUMN_DEFS = [
   { id: "useSymbol", label: "Use asset", defaultWidth: 62, minWidth: 48, group: "debug" },
   { id: "extraData", label: "$", defaultWidth: 48, minWidth: 38, group: "debug" },
 ] as const;
-type InvestmentColumnView = "main" | "debug";
 type TaxSummaryKind = "federal" | "state" | "local";
 type InvestmentColumnId = typeof INVESTMENT_COLUMN_DEFS[number]["id"];
 type InvestmentColumnWidths = Record<InvestmentColumnId, number>;
@@ -4978,7 +4977,6 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, isWhatIfActive, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; isWhatIfActive: boolean; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
-  const [columnView, setColumnView] = useState<InvestmentColumnView>("main");
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const filteredAndSortedRows = useMemo(() => {
@@ -5730,7 +5728,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     const group = "group" in column ? column.group : undefined;
     if (group === "override") return isWhatIfActive;
     if (group === "tax") return false;
-    if (group === "debug") return columnView === "debug";
+    if (group === "debug") return false;
     return true;
   };
   const visibleInvestmentColumns = INVESTMENT_COLUMN_DEFS.filter(isColumnVisible);
@@ -5853,14 +5851,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             <button className="ghost-button icon-button action-icon-button finder-nav-button" type="button" onClick={() => cycleActiveInvestmentRows("next")} aria-label="Next highlighted row" title="Next highlighted row" disabled={!canNavigateActiveRows}><RowActionIcon name="next" /></button>
           </div>
         )}
-        <div className="column-toggle-group" role="group" aria-label="Investment column visibility">
-          <label className="investment-column-view-select">
-            <span>View</span>
-            <select value={columnView} onChange={(event) => setColumnView(event.target.value as InvestmentColumnView)}>
-              <option value="main">Main</option>
-              <option value="debug">Debug</option>
-            </select>
-          </label>
+        <div className="column-toggle-group" role="group" aria-label="WhatIf columns">
           <button className={`investment-what-if-toggle ${isWhatIfActive ? "investment-what-if-toggle--open" : ""}`} type="button" aria-pressed={isWhatIfActive} onClick={onToggleWhatIf}>
             <span className="investment-what-if-toggle__label">WhatIf</span>
             <span className="investment-what-if-toggle__state" aria-label={isWhatIfActive ? "Click to close WhatIf columns" : "Click to open WhatIf columns"} title={isWhatIfActive ? "Close WhatIf columns" : "Open WhatIf columns"}><WhatIfStateIcon isOpen={!isWhatIfActive} /></span>
