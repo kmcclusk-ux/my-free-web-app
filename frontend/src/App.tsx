@@ -3877,13 +3877,7 @@ function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome
   const trackStyle = { "--rate-gradient-stops": rateBandGradientStops(rateBands, scaleMax) } as React.CSSProperties;
 
   return (
-    <div className="tax-thermometer">
-      <div className="tax-thermometer__heading">
-        <div>
-          <strong>{title}</strong>
-          <span>{subtitle}</span>
-        </div>
-      </div>
+    <div className="tax-thermometer" aria-label={`${labelText}. ${subtitle}`}>
       <>
           {titleValue && <div className="tax-thermometer__title-value">{titleValue}</div>}
           <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`} style={trackStyle}>
@@ -4166,7 +4160,6 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
     ? `conic-gradient(${allocationSegments.map((segment) => `${allocationColors[segment.index % allocationColors.length]} ${segment.start}% ${segment.end}%`).join(", ")})`
     : "conic-gradient(#e5e7eb 0 100%)";
   const allocationViewLabel = thermometerMode === "accountTax" ? "Account tax category" : thermometerMode === "accountType" ? "Account type" : thermometerMode === "taxTreatment" ? "Tax treatment" : "Portfolio";
-  const allocationTitle = thermometerMode === "accountTax" ? "Account Tax Category" : thermometerMode === "accountType" ? "Account Type" : thermometerMode === "taxTreatment" ? "Tax Treatments" : "Portfolio Allocation";
   const allocationTabLabel = thermometerMode === "accountTax" ? "Account Tax Category" : thermometerMode === "accountType" ? "Account Type" : thermometerMode === "taxTreatment" ? "Tax Treatments" : "Asset Classes";
   const federalValues: ThermometerValue[] = [
     {
@@ -4291,10 +4284,7 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
   return (
     <div className="tax-thermometer-panel">
       {thermometerMode === "allocation" || thermometerMode === "accountTax" || thermometerMode === "accountType" || thermometerMode === "taxTreatment" ? (
-        <div className="tax-thermometer portfolio-allocation">
-          <div className="tax-thermometer__heading">
-            <div><strong>{allocationTitle}</strong><span>{thermometerMode === "accountTax" ? "Checked account tax categories" : thermometerMode === "accountType" ? "Checked account types" : thermometerMode === "taxTreatment" ? "Checked tax treatments" : "Checked asset classes"}</span></div>
-          </div>
+        <div className="tax-thermometer portfolio-allocation" aria-label={`${allocationViewLabel} allocation`}>
           <><div className="tax-thermometer__title-value">{formatCurrencyDetailed(allocationTotal)}</div>{activeAllocationRows.length ? <><div className="portfolio-allocation__pie-stage" role="img" aria-label={`${allocationViewLabel} allocation: ${activeAllocationRows.map((row) => `${row.label} ${formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}`).join(", ")}`}><div className="portfolio-allocation__pie" style={{ background: allocationGradient }}><span>Total<strong>{formatCurrency(allocationTotal)}</strong></span></div><svg viewBox="0 0 200 200" aria-hidden="true">{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <line key={segment.label} x1={100 + Math.cos(segment.angle) * 57} y1={100 + Math.sin(segment.angle) * 57} x2={100 + Math.cos(segment.angle) * 72} y2={100 + Math.sin(segment.angle) * 72} stroke={allocationColors[segment.index % allocationColors.length]} />)}</svg>{allocationSegments.filter((segment) => segment.percent >= 0.0005).map((segment) => <span key={segment.label} className="portfolio-allocation__pie-label" style={{ left: `${50 + Math.cos(segment.angle) * 42}%`, top: `${50 + Math.sin(segment.angle) * 42}%`, borderColor: allocationColors[segment.index % allocationColors.length] }} title={`${segment.label}: ${formatPercent(segment.percent)} (${formatCurrencyDetailed(segment.amount)})`}><strong>{segment.label}</strong>{formatPercent(segment.percent)}</span>)}</div><div className="portfolio-allocation__rows">{activeAllocationRows.map((row, index) => <div key={row.label}><span><i style={{ background: allocationColors[index % allocationColors.length] }} />{row.label}</span><strong>{formatCurrencyDetailed(row.amount)}</strong><em>{formatPercent(allocationTotal > 0 ? row.amount / allocationTotal : 0)}</em></div>)}</div></> : <div className="portfolio-allocation__empty">Select categories on the {allocationTabLabel} tab.</div>}</>
         </div>
       ) : <TaxThermometer title={selectedThermometer.titleLabel} titleLabel={selectedThermometer.titleLabel} titleValue={formatCurrencyDetailed(selectedThermometer.total)} subtitle={selectedThermometer.subtitle} taxableIncome={selectedThermometer.taxableIncome} values={selectedThermometer.values} markers={selectedThermometer.markers} stats={selectedThermometer.stats} footerLabel={selectedThermometer.footerLabel} footerValue={selectedThermometer.footerValue} baseRateLabel={selectedThermometer.baseRateLabel} currentRateLabel={selectedThermometer.currentRateLabel} noTaxStamp={selectedThermometer.noTaxStamp} />}
