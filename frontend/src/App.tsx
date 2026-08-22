@@ -10854,7 +10854,7 @@ export default function App() {
           <CompactKpiHeader metrics={kpiMetrics} />
         </div>
       </header>
-      <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : ""}`}>
+      <div className={`workspace-shell ${focusGrid ? "workspace-shell--focus-grid" : !showThermometerPanel ? "workspace-shell--thermometer-collapsed" : ""}`}>
         <aside className="sidebar">
           <nav className="sidebar__nav">
             {navItems.map((item) => <button key={item.key} className={`nav-item ${activeTab === item.key ? "nav-item--active" : ""}`} type="button" onClick={() => setActiveTab(item.key)}><strong>{item.label}</strong><span>{item.meta}</span></button>)}
@@ -11272,9 +11272,9 @@ export default function App() {
         )}
       </main>
       {!focusGrid && (
-        <aside className="thermometer-rail" aria-label="Tax panel">
-          <div className="tax-thermometer-panel__mode-bar">
-            <TaxThermometerModeSelect mode={taxThermometerMode} onChange={setTaxThermometerMode} stateCode={selectedStateCode} stateName={selectedStateName} />
+        <aside className={`thermometer-rail ${showThermometerPanel ? "" : "thermometer-rail--collapsed"}`} aria-label="Tax panel">
+          <div className={`tax-thermometer-panel__mode-bar ${showThermometerPanel ? "" : "tax-thermometer-panel__mode-bar--collapsed"}`}>
+            {showThermometerPanel && <TaxThermometerModeSelect mode={taxThermometerMode} onChange={setTaxThermometerMode} stateCode={selectedStateCode} stateName={selectedStateName} />}
             <button
               className="tax-thermometer-panel__visibility-toggle"
               type="button"
