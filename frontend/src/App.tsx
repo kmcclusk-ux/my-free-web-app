@@ -8174,8 +8174,8 @@ export default function App() {
   const afterTaxBreakdownDetails = (
     <div className="tax-breakdown-popover">
       <div className="tax-breakdown-popover__header">
-        <strong>After-tax income breakdown</strong>
-        <span>Annual values from the current workbook and tax settings.</span>
+        <strong>Detailed tax calculation</strong>
+        <span>Income, deductions, taxable bases, and taxes used by the current tax-rate estimate.</span>
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Income math</h4>
@@ -8249,8 +8249,8 @@ export default function App() {
   const incomeBreakdownDetails = (
     <div className="tax-breakdown-popover">
       <div className="tax-breakdown-popover__header">
-        <strong>Income breakdown</strong>
-        <span>Annual and monthly income before taxes from selected rows.</span>
+        <strong>Income and after-tax breakdown</strong>
+        <span>Annual and monthly income before and after taxes from selected rows.</span>
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Annual income</h4>
@@ -8260,14 +8260,14 @@ export default function App() {
         <div><span>Non-investment income</span><strong>{formatCurrencyDetailed(flows.nonInvestmentIncome)}</strong></div>
         <div><span>Tax-free income</span><strong>{formatCurrencyDetailed(flows.nonTaxableIncome)}</strong></div>
         <div><span>Excluded from after-tax calculation</span><strong>{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
-        <div className="tax-breakdown-popover__total"><span>Annual income tile value</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div><span>Total annual income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Annual after-tax income</span><strong>{formatCurrencyDetailed(afterTaxIncome)}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Monthly income</h4>
         <div><span>Total monthly income</span><strong>{formatCurrencyDetailed(monthlyIncome)}</strong></div>
         {hasAnyExcludedAfterTaxIncome && <div><span>Non-excluded monthly income</span><strong>{formatCurrencyDetailed(flows.displayIncome / 12)}</strong></div>}
         <div><span>Monthly after-tax income</span><strong>{formatCurrencyDetailed(afterTaxMonthlyIncome)}</strong></div>
-        <div><span>Monthly tax burden</span><strong>{formatCurrencyDetailed(totalTax / 12)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Displayed period</span><strong>{isMonthlyIncomePrimary ? "Monthly" : "Annual"}</strong></div>
       </div>
     </div>
@@ -8307,6 +8307,12 @@ export default function App() {
         {localTaxSettings.enabled && selectedLocalTaxProfile.kind !== "none" && <div><span>Local taxable income</span><strong>{formatCurrencyDetailed(localTaxableIncome)}</strong></div>}
         <div><span>Thermometer base</span><strong>{formatCurrencyDetailed(marginalCombinedTaxable)}</strong></div>
       </div>
+    </div>
+  );
+  const taxRateBreakdownDetails = (
+    <div className="tax-breakdown-popover-stack">
+      {marginalTaxBreakdownDetails}
+      {afterTaxBreakdownDetails}
     </div>
   );
   const investmentYieldBreakdownDetails = (
@@ -9272,16 +9278,8 @@ export default function App() {
       numericValue: isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome,
       primary: true,
       tone: "warning",
-      details: afterTaxBreakdownDetails,
-      badge: excludedIncomeBadge,
-    },
-    {
-      label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} income`,
-      value: formatCurrency(isMonthlyIncomePrimary ? monthlyIncome : totalIncome),
-      valueLabel: isMonthlyIncomePrimary ? "monthly income" : "annual income",
-      secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? totalIncome : monthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
-      numericValue: isMonthlyIncomePrimary ? monthlyIncome : totalIncome,
       details: incomeBreakdownDetails,
+      badge: excludedIncomeBadge,
     },
     {
       label: "Tax rate",
@@ -9290,7 +9288,7 @@ export default function App() {
       secondaryValue: `${allInEffectiveTaxRateLabel} effective`,
       numericValue: allInMarginalTaxRate,
       deltaKind: "percent",
-      details: marginalTaxBreakdownDetails,
+      details: taxRateBreakdownDetails,
     },
     {
       label: "Total investment",

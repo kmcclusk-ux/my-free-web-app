@@ -31,7 +31,7 @@
 }
 .app-top-nav .kpi-header__metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
   min-width: 0;
 }
@@ -869,6 +869,14 @@
   color: #172033;
   font-size: .76rem;
   line-height: 1.25;
+}
+
+.tax-breakdown-popover-stack {
+  display: grid;
+}
+
+.tax-breakdown-popover-stack > .tax-breakdown-popover + .tax-breakdown-popover {
+  border-top: 1px solid var(--poly-line, rgba(17, 24, 39, .12));
 }
 .tax-breakdown-popover__header {
   display: grid;
