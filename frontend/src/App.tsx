@@ -10864,6 +10864,7 @@ export default function App() {
                   {activeTab === "local" && <TumblingCurrency className="content-topbar__tax-total" value={localTaxTotal} />}
                 </span>
               </h2>
+              {activeTab === "state" && <label className="topbar-state-selector topbar-state-selector--tax-heading" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
               {(activeTab === "federal" || activeTab === "state" || activeTab === "local") && (
                 <button className="tax-summary-trigger" type="button" onClick={() => setTaxSummaryKind(activeTab)} aria-haspopup="dialog">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 2.75h6l3 3v11.5h-9z" /><path d="M11.5 2.75v3h3M7.8 9h4.4M7.8 11.8h4.4M7.8 14.6h3" /></svg>
@@ -11138,7 +11139,6 @@ export default function App() {
               </div>
             </details>
             <div className="form-grid form-grid--compact-wide">
-              <label><span>State</span><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} /></label>
               {selectedStateHasIncomeTax && (
                 <label>
                   <span>Deduction method</span>
