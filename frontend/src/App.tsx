@@ -6668,6 +6668,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("investments");
   const [focusGrid, setFocusGrid] = useState(false);
   const [taxThermometerMode, setTaxThermometerMode] = useState<TaxThermometerMode>(() => loadTaxThermometerMode("allocation"));
+  const [showThermometerPanel, setShowThermometerPanel] = useState(true);
   const [highlightedAccountRowId, setHighlightedAccountRowId] = useState<number | null>(null);
   const [highlightedAssetRowId, setHighlightedAssetRowId] = useState<number | null>(null);
   const [highlightedTaxTreatmentRowId, setHighlightedTaxTreatmentRowId] = useState<number | null>(null);
@@ -11274,8 +11275,18 @@ export default function App() {
         <aside className="thermometer-rail" aria-label="Tax panel">
           <div className="tax-thermometer-panel__mode-bar">
             <TaxThermometerModeSelect mode={taxThermometerMode} onChange={setTaxThermometerMode} stateCode={selectedStateCode} stateName={selectedStateName} />
+            <button
+              className="tax-thermometer-panel__visibility-toggle"
+              type="button"
+              aria-expanded={showThermometerPanel}
+              aria-controls="tax-thermometer-panel-content"
+              onClick={() => setShowThermometerPanel((current) => !current)}
+            >
+              {showThermometerPanel ? "Hide" : "Show"}
+            </button>
           </div>
-          <TaxThermometerPanel
+          {showThermometerPanel && <div id="tax-thermometer-panel-content">
+            <TaxThermometerPanel
                 federalTaxable={federalTaxableAfterDeductions}
                 stateTaxable={stateTaxableAfterDeductions}
                 federalTax={federalTaxWithPayroll}
@@ -11302,9 +11313,10 @@ export default function App() {
                 allocationRows={portfolioAllocationRows}
                 accountTaxAllocationRows={accountTaxAllocationRows}
                 accountTypeAllocationRows={accountTypeAllocationRows}
-                taxTreatmentAllocationRows={taxTreatmentAllocationRows}
+            taxTreatmentAllocationRows={taxTreatmentAllocationRows}
             thermometerMode={taxThermometerMode}
-          />
+            />
+          </div>}
         </aside>
       )}
       </div>

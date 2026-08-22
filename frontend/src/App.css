@@ -1279,10 +1279,24 @@
 .summary-ribbon__group-heading span, .tax-thermometer-panel__summary-heading span { display: block; margin-top: 2px; color: #62767a; font-size: .72rem; }
 .summary-ribbon__metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; }
 .tax-thermometer-panel { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 12px; align-items: stretch; }
-.tax-thermometer-panel__mode-bar { position: relative; z-index: 20; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 8px; padding: 0 2px 8px; }
+.tax-thermometer-panel__mode-bar { position: relative; z-index: 20; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 0 2px 8px; }
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select { width: 100%; min-width: 0; }
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select__button { width: 100%; justify-content: flex-start; }
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select__chevron { margin-left: auto; }
+.tax-thermometer-panel__visibility-toggle {
+  min-width: 42px;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid rgba(17, 24, 39, .14);
+  border-radius: 9px;
+  background: #fff;
+  color: #344054;
+  font-size: .64rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.tax-thermometer-panel__visibility-toggle:hover { border-color: rgba(11, 99, 246, .32); background: #eff6ff; color: #0b63f6; }
+.app-shell--dark .tax-thermometer-panel__visibility-toggle { border-color: rgba(226, 232, 240, .18); background: rgba(15, 23, 42, .9); color: #e2e8f0; }
 
 .thermometer-rail > .tax-thermometer-panel__mode-bar {
   position: sticky;
