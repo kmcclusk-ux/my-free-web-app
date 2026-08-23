@@ -1802,9 +1802,9 @@
 .header-history-controls {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 4px;
-  align-self: center;
+  align-self: flex-start;
   margin: 0;
 }
 .header-history-controls button {
