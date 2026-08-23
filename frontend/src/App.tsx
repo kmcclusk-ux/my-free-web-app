@@ -9193,14 +9193,6 @@ export default function App() {
       </div>
       {isTopbarMenuOpen && (
         <div className="topbar-menu__panel" role="menu" aria-label="Application actions">
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { undoWorkbookChange(); setIsTopbarMenuOpen(false); }} disabled={!canUndo}>
-            <span className="topbar-menu__history-symbol" aria-hidden="true">↶</span>
-            <span className="topbar-menu__label"><span>Undo</span><small>Ctrl+Z</small></span>
-          </button>
-          <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { redoWorkbookChange(); setIsTopbarMenuOpen(false); }} disabled={!canRedo}>
-            <span className="topbar-menu__history-symbol" aria-hidden="true">↷</span>
-            <span className="topbar-menu__label"><span>Redo</span><small>Ctrl+Y</small></span>
-          </button>
           {authEnabled ? (
             authState.status === "signedIn" ? (
               <>
@@ -9210,6 +9202,14 @@ export default function App() {
                     <span>Sign out</span>
                     <small>{authState.user.email || authState.user.sub.slice(0, 8)}</small>
                   </span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { undoWorkbookChange(); setIsTopbarMenuOpen(false); }} disabled={!canUndo}>
+                  <span className="topbar-menu__history-symbol" aria-hidden="true">↶</span>
+                  <span className="topbar-menu__label"><span>Undo</span><small>Ctrl+Z</small></span>
+                </button>
+                <button className="topbar-menu__item" type="button" role="menuitem" onClick={() => { redoWorkbookChange(); setIsTopbarMenuOpen(false); }} disabled={!canRedo}>
+                  <span className="topbar-menu__history-symbol" aria-hidden="true">↷</span>
+                  <span className="topbar-menu__label"><span>Redo</span><small>Ctrl+Y</small></span>
                 </button>
                 <button className="topbar-menu__item" type="button" role="menuitem" onClick={openSettingsDialog}>
                   <TopbarActionIcon name="settings" />
