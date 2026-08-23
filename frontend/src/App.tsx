@@ -6721,6 +6721,8 @@ export default function App() {
   const [isStateTaxWhatIfOpen, setIsStateTaxWhatIfOpen] = useState(false);
   const [isFederalTaxOutputsOpen, setIsFederalTaxOutputsOpen] = useState(false);
   const [isStateTaxOutputsOpen, setIsStateTaxOutputsOpen] = useState(false);
+  const [isLocalTaxOutputsOpen, setIsLocalTaxOutputsOpen] = useState(false);
+  const [isLocalTaxPresetsOpen, setIsLocalTaxPresetsOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
   const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | "publish" | "published" | null>(null);
   const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
@@ -10965,15 +10967,30 @@ export default function App() {
                   What-If
                 </button>
               )}
-              {(activeTab === "federal" || activeTab === "state") && (
+              {(activeTab === "federal" || activeTab === "state" || activeTab === "local") && (
                 <button
                   className="tax-summary-trigger tax-panel-header-trigger"
                   type="button"
-                  aria-expanded={activeTab === "federal" ? isFederalTaxOutputsOpen : isStateTaxOutputsOpen}
+                  aria-expanded={activeTab === "federal" ? isFederalTaxOutputsOpen : activeTab === "state" ? isStateTaxOutputsOpen : isLocalTaxOutputsOpen}
                   aria-controls={`${activeTab}-tax-outputs-content`}
-                  onClick={() => activeTab === "federal" ? setIsFederalTaxOutputsOpen((current) => !current) : setIsStateTaxOutputsOpen((current) => !current)}
+                  onClick={() => activeTab === "federal"
+                    ? setIsFederalTaxOutputsOpen((current) => !current)
+                    : activeTab === "state"
+                      ? setIsStateTaxOutputsOpen((current) => !current)
+                      : setIsLocalTaxOutputsOpen((current) => !current)}
                 >
                   Tax outputs
+                </button>
+              )}
+              {activeTab === "local" && (
+                <button
+                  className="tax-summary-trigger tax-panel-header-trigger"
+                  type="button"
+                  aria-expanded={isLocalTaxPresetsOpen}
+                  aria-controls="local-tax-presets-content"
+                  onClick={() => setIsLocalTaxPresetsOpen((current) => !current)}
+                >
+                  City / Local presets
                 </button>
               )}
             </div>
@@ -11271,8 +11288,7 @@ export default function App() {
         )}
         {activeTab === "local" && (
           <Section title="Local Tax" subtitle="Optional city, county, school-district, or occupational income tax layered on top of federal and state taxes." className="state-tax-panel local-tax-panel">
-            <details className="tax-output-disclosure" open>
-              <summary>Tax outputs</summary>
+            {isLocalTaxOutputsOpen && <div id="local-tax-outputs-content" className="tax-output-disclosure tax-output-disclosure__content">
               <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
                 <MetricCard label="Local tax" value={formatCurrencyDetailed(localTaxTotal)} />
                 <MetricCard label="Taxable local base" value={formatCurrencyDetailed(localTaxableIncome)} />
@@ -11284,8 +11300,8 @@ export default function App() {
                   <MetricCard key={key} label={localTaxBaseLabels[key]} value={formatCurrency(localTaxBaseAmounts[key])} tone={localTaxSettings.taxableBase[key] ? "accent" : "default"} />
                 ))}
               </div>
-            </details>
-            <div className="form-grid form-grid--compact-wide">
+            </div>}
+            {isLocalTaxPresetsOpen && <div id="local-tax-presets-content" className="form-grid form-grid--compact-wide">
               <label>
                 <span>Local tax on/off</span>
                 <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => updateLocalTaxSettingsUndoable((current) => {
@@ -11330,7 +11346,7 @@ export default function App() {
                 <span>Nonresident rate</span>
                 <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.nonresidentRate * 100)} onChange={(event) => updateLocalTaxSettingsUndoable((current) => ({ ...current, nonresidentRate: toNumber(event.target.value) / 100 }))} />
               </label>
-            </div>
+            </div>}
             {showLocalTaxBasePanel && (
               <div className="lookup-card local-tax-base-card">
                 <div className="lookup-card__header">
