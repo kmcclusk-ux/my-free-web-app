@@ -6722,7 +6722,6 @@ export default function App() {
   const [isFederalTaxOutputsOpen, setIsFederalTaxOutputsOpen] = useState(false);
   const [isStateTaxOutputsOpen, setIsStateTaxOutputsOpen] = useState(false);
   const [isLocalTaxOutputsOpen, setIsLocalTaxOutputsOpen] = useState(false);
-  const [isLocalTaxPresetsOpen, setIsLocalTaxPresetsOpen] = useState(false);
   const [taxSummaryKind, setTaxSummaryKind] = useState<TaxSummaryKind | null>(null);
   const [summaryReportDialogMode, setSummaryReportDialogMode] = useState<"create" | "manage" | "publish" | "published" | null>(null);
   const [summaryReportDestination, setSummaryReportDestination] = useState<"new" | "existing">("new");
@@ -10967,7 +10966,7 @@ export default function App() {
                   What-If
                 </button>
               )}
-              {(activeTab === "federal" || activeTab === "state" || activeTab === "local") && (
+              {(activeTab === "federal" || activeTab === "state" || (activeTab === "local" && showLocalTaxBasePanel)) && (
                 <button
                   className="tax-summary-trigger tax-panel-header-trigger"
                   type="button"
@@ -10983,15 +10982,9 @@ export default function App() {
                 </button>
               )}
               {activeTab === "local" && (
-                <button
-                  className="tax-summary-trigger tax-panel-header-trigger"
-                  type="button"
-                  aria-expanded={isLocalTaxPresetsOpen}
-                  aria-controls="local-tax-presets-content"
-                  onClick={() => setIsLocalTaxPresetsOpen((current) => !current)}
-                >
-                  City / Local presets
-                </button>
+                <select className="topbar-local-preset-selector" aria-label="City / Local preset" value={localTaxSettings.localityId} onChange={(event) => updateLocalTaxProfile(event.target.value)}>
+                  {localTaxProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.state ? `${profile.state} - ${profile.locality}` : profile.locality}</option>)}
+                </select>
               )}
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
@@ -11286,7 +11279,7 @@ export default function App() {
             ) : null}
           </Section>
         )}
-        {activeTab === "local" && (
+        {activeTab === "local" && showLocalTaxBasePanel && (
           <Section title="Local Tax" subtitle="Optional city, county, school-district, or occupational income tax layered on top of federal and state taxes." className="state-tax-panel local-tax-panel">
             {isLocalTaxOutputsOpen && <div id="local-tax-outputs-content" className="tax-output-disclosure tax-output-disclosure__content">
               <div className="api-grid state-tax-panel__tiles state-tax-panel__tiles--result">
@@ -11301,32 +11294,11 @@ export default function App() {
                 ))}
               </div>
             </div>}
-            {isLocalTaxPresetsOpen && <div id="local-tax-presets-content" className="form-grid form-grid--compact-wide">
-              <label>
-                <span>Local tax on/off</span>
-                <select value={localTaxSettings.enabled ? "on" : "off"} onChange={(event) => updateLocalTaxSettingsUndoable((current) => {
-                  const profile = getLocalTaxProfile(localTaxProfiles, current.localityId);
-                  const enabled = event.target.value === "on" && profile.kind !== "none";
-                  return {
-                    ...current,
-                    enabled,
-                    taxableBase: enabled ? profile.base : current.taxableBase,
-                  };
-                })}>
-                  <option value="off">Off</option>
-                  <option value="on">On</option>
-                </select>
-              </label>
-              <label>
-                <span>City / locality preset</span>
-                <select value={localTaxSettings.localityId} onChange={(event) => updateLocalTaxProfile(event.target.value)}>
-                  {localTaxProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.state ? `${profile.state} - ${profile.locality}` : profile.locality}</option>)}
-                </select>
-              </label>
-              <label>
+            <div className="form-grid form-grid--compact-wide">
+              {selectedLocalTaxProfile.id === "custom" && <label>
                 <span>Type city/locality</span>
                 <input type="text" value={localTaxSettings.localityName} onChange={(event) => updateLocalTaxSettingsUndoable((current) => ({ ...current, localityId: current.localityId === "none" ? "custom" : current.localityId, localityName: event.target.value }))} placeholder="City, county, or district" />
-              </label>
+              </label>}
               <label>
                 <span>Residency</span>
                 <select value={localTaxSettings.residency} onChange={(event) => {
@@ -11346,9 +11318,8 @@ export default function App() {
                 <span>Nonresident rate</span>
                 <input type="number" step="0.001" value={formatPercentInputValue(localTaxSettings.nonresidentRate * 100)} onChange={(event) => updateLocalTaxSettingsUndoable((current) => ({ ...current, nonresidentRate: toNumber(event.target.value) / 100 }))} />
               </label>
-            </div>}
-            {showLocalTaxBasePanel && (
-              <div className="lookup-card local-tax-base-card">
+            </div>
+            <div className="lookup-card local-tax-base-card">
                 <div className="lookup-card__header">
                   <div>
                     <p className="eyebrow">Tax Base</p>
@@ -11372,8 +11343,7 @@ export default function App() {
                     {selectedLocalTaxProfile.brackets.map((bracket) => <MetricCard key={bracket.threshold} label={`Over ${formatCurrency(bracket.threshold)}`} value={formatPercent(bracket.rate)} />)}
                   </div>
                 )}
-              </div>
-            )}
+            </div>
           </Section>
         )}
           </>

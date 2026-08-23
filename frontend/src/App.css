@@ -6819,6 +6819,26 @@ html.aftertaxus-dark-mode .auth-required-panel__username input {
   min-width: 0;
 }
 
+.topbar-local-preset-selector {
+  align-self: flex-end;
+  min-height: 31px;
+  max-width: min(280px, 38vw);
+  margin-bottom: 1px;
+  padding: 5px 30px 5px 10px;
+  border: 1px solid rgba(35, 97, 201, .22);
+  border-radius: 9px;
+  background-color: rgba(239, 246, 255, .92);
+  color: #1f56a9;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.topbar-local-preset-selector:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .2);
+  outline-offset: 2px;
+}
+
 .tax-summary-trigger {
   display: inline-flex;
   align-items: center;
