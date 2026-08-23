@@ -10949,8 +10949,13 @@ export default function App() {
                 </span>
               </h2>
               {activeTab === "state" && <label className="topbar-state-selector topbar-state-selector--tax-heading" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
+              {activeTab === "local" && (
+                <select className="topbar-local-preset-selector" aria-label="City / Local preset" value={localTaxSettings.localityId} onChange={(event) => updateLocalTaxProfile(event.target.value)}>
+                  {localTaxProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.state ? `${profile.state} - ${profile.locality}` : profile.locality}</option>)}
+                </select>
+              )}
               {(activeTab === "federal" || activeTab === "state" || activeTab === "local") && (
-                <button className="tax-summary-trigger" type="button" onClick={() => setTaxSummaryKind(activeTab)} aria-haspopup="dialog">
+                <button className="tax-summary-trigger" type="button" disabled={activeTab === "local" && !showLocalTaxBasePanel} onClick={() => setTaxSummaryKind(activeTab)} aria-haspopup="dialog">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 2.75h6l3 3v11.5h-9z" /><path d="M11.5 2.75v3h3M7.8 9h4.4M7.8 11.8h4.4M7.8 14.6h3" /></svg>
                   Tax summary
                 </button>
@@ -10980,11 +10985,6 @@ export default function App() {
                 >
                   Tax outputs
                 </button>
-              )}
-              {activeTab === "local" && (
-                <select className="topbar-local-preset-selector" aria-label="City / Local preset" value={localTaxSettings.localityId} onChange={(event) => updateLocalTaxProfile(event.target.value)}>
-                  {localTaxProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.state ? `${profile.state} - ${profile.locality}` : profile.locality}</option>)}
-                </select>
               )}
             </div>
             {activeTab === "investments" && <label className="topbar-state-selector" aria-label="State"><StateFlagSelect value={selectedStateCode} onChange={(stateCode) => updateStateSettingsUndoable((current) => ({ ...current, stateCode: normalizeStateCode(stateCode) }))} className="state-flag-select--toolbar" /></label>}
