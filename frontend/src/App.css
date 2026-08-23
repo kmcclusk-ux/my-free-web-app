@@ -3150,6 +3150,17 @@
   flex: 0 0 auto;
 }
 
+.topbar-menu__history-symbol {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .topbar-menu__label {
   display: inline-flex;
   align-items: baseline;
