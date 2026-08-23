@@ -22,6 +22,18 @@ This MCP server gives ChatGPT access to the existing portfolio workbook data and
 - `update_reference_row`
 - `upsert_reference_rows`
 - `replace_reference_table`
+- `show_model_surface`
+
+`show_model_surface` renders one focused, existing AfterTaxUS tab or edit dialog inside
+ChatGPT instead of opening the full dashboard. Supported surfaces are Investments /
+Income, Assets, Asset Classes, Tax Treatments, Accounts, Account Tax Category,
+Account Type, Federal Tax, State Tax, and Local Tax. For create flows, use the normal
+data tool first and then open the created row with `show_model_surface` and
+`action: "edit"`.
+
+The focused component uses the private app-only `run_model_surface_api` bridge to
+load, calculate, and save against the same workbook authorization as the MCP request.
+It is not intended to be called directly by ChatGPT.
 
 The server reads from the existing live workbook API at:
 
@@ -81,8 +93,9 @@ The public MCP URL will be one of these after deployment:
 - `https://www.aftertaxus.com/mcp-v3`
 - `https://www.aftertaxus.com/mcp-v4`
 - `https://www.aftertaxus.com/mcp-v5`
+- `https://www.aftertaxus.com/mcp-v6`
 
-Use `/mcp-v5` for new ChatGPT connector setup if ChatGPT still shows an older cached tool list for `/mcp`, `/mcp-v2`, `/mcp-v3`, or `/mcp-v4`.
+Use `/mcp-v6` for new ChatGPT connector setup so ChatGPT discovers the focused model UI tools and resource without an older cached tool list.
 
 If `MCP_AUTH_TOKEN` is set and you use the shared admin auth, configure the MCP client with:
 

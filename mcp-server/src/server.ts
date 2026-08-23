@@ -16,6 +16,7 @@ const config = resolvePortfolioConfig({
   defaultWorkspaceId: process.env.PORTFOLIO_WORKSPACE_ID,
   portfolioSyncToken: process.env.PORTFOLIO_SYNC_TOKEN,
   portfolioMcpToken: process.env.PORTFOLIO_MCP_TOKEN,
+  uiAppOrigin: process.env.AFTERTAX_UI_ORIGIN,
 });
 
 const transports = new Map<string, StreamableHTTPServerTransport>();

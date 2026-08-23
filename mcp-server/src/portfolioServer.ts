@@ -5,13 +5,17 @@ export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
 export const DEFAULT_WORKSPACE_ID = "default";
 export const SERVER_NAME = "portfolio-workbook";
-export const SERVER_VERSION = "1.0.14";
+export const SERVER_VERSION = "1.1.0";
+export const MODEL_SURFACE_RESOURCE_URI = "ui://aftertaxus/model-surface-v1.html";
+export const DEFAULT_UI_APP_ORIGIN = "https://www.aftertaxus.com";
 
 export type PortfolioServerConfig = {
   apiBaseUrl?: string;
   defaultWorkspaceId?: string;
   portfolioSyncToken?: string;
   portfolioMcpToken?: string;
+  uiAppOrigin?: string;
+  loadUiHtml?: () => Promise<string>;
 };
 
 type ResolvedPortfolioServerConfig = {
@@ -19,6 +23,8 @@ type ResolvedPortfolioServerConfig = {
   defaultWorkspaceId: string;
   portfolioSyncToken: string;
   portfolioMcpToken: string;
+  uiAppOrigin: string;
+  loadUiHtml?: () => Promise<string>;
 };
 
 type WorkbookResponse = {
@@ -42,7 +48,36 @@ type ReferenceTableName =
   | "categories"
   | "taxTreatment"
   | "accountTaxType"
+  | "accountType"
   | "investmentType";
+
+const modelSurfaceSchema = z.enum([
+  "investmentsIncome",
+  "assets",
+  "assetClasses",
+  "taxTreatments",
+  "accounts",
+  "accountTaxCategories",
+  "accountTypes",
+  "federalTax",
+  "stateTax",
+  "localTax",
+]);
+type ModelSurfaceName = z.infer<typeof modelSurfaceSchema>;
+type ModelSurfaceAction = "view" | "add" | "edit";
+type ModelSurfaceConfig = { title: string; tab: string; workbookTab?: string };
+const modelSurfaceConfigs: Record<ModelSurfaceName, ModelSurfaceConfig> = {
+  investmentsIncome: { title: "Investments / Income", tab: "investments", workbookTab: "investments" },
+  assets: { title: "Assets", tab: "tickers", workbookTab: "tickers" },
+  assetClasses: { title: "Asset Classes", tab: "categories", workbookTab: "categories" },
+  taxTreatments: { title: "Tax Treatments", tab: "taxTreatment", workbookTab: "taxTreatment" },
+  accounts: { title: "Accounts", tab: "accounts", workbookTab: "accounts" },
+  accountTaxCategories: { title: "Account Tax Category", tab: "accountTaxType", workbookTab: "accountTaxType" },
+  accountTypes: { title: "Account Type", tab: "accountType", workbookTab: "accountType" },
+  federalTax: { title: "Federal Tax", tab: "federal" },
+  stateTax: { title: "State Tax", tab: "state" },
+  localTax: { title: "Local Tax", tab: "local" },
+};
 
 const referenceTableNameSchema = z.enum([
   "tickers",
@@ -50,6 +85,7 @@ const referenceTableNameSchema = z.enum([
   "categories",
   "taxTreatment",
   "accountTaxType",
+  "accountType",
   "investmentType",
 ]);
 const referenceValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -102,6 +138,8 @@ export function resolvePortfolioConfig(
     defaultWorkspaceId: config.defaultWorkspaceId || DEFAULT_WORKSPACE_ID,
     portfolioSyncToken: config.portfolioSyncToken || "",
     portfolioMcpToken: config.portfolioMcpToken || "",
+    uiAppOrigin: (config.uiAppOrigin || DEFAULT_UI_APP_ORIGIN).replace(/\/+$/, ""),
+    loadUiHtml: config.loadUiHtml,
   };
 }
 
@@ -244,15 +282,17 @@ const referenceTableConfigs: Record<
   tickers: {
     label: "tickers",
     primaryField: "symbol",
-    allowedFields: ["symbol", "percentReturn", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
+    allowedFields: ["symbol", "percentReturn", "assetType", "category", "taxTreatment", "incomeItem", "extraData", "description", "exDividend", "divPayout"],
     numericFields: ["percentReturn", "extraData"],
     booleanFields: ["incomeItem"],
-    defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, category: "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" }),
+    defaultRow: (id) => ({ id, symbol: "", percentReturn: 0, assetType: "", category: "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" }),
     aliases: {
       ticker: "symbol",
       percentreturn: "percentReturn",
       pctreturn: "percentReturn",
       return: "percentReturn",
+      type: "assetType",
+      assettype: "assetType",
       taxtreatment: "taxTreatment",
       taxstatus: "taxTreatment",
       incomeitem: "incomeItem",
@@ -268,11 +308,12 @@ const referenceTableConfigs: Record<
   accounts: {
     label: "accounts",
     primaryField: "account",
-    allowedFields: ["account", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
-    defaultRow: (id) => ({ id, account: "", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }),
+    allowedFields: ["account", "accountType", "taxStatus", "dividendAccrued", "includeInFreeCashflow"],
+    defaultRow: (id) => ({ id, account: "", accountType: "Brokerage Account", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }),
     aliases: {
       accountname: "account",
       accountnames: "account",
+      accounttype: "accountType",
       taxstatus: "taxStatus",
       taxtreatment: "taxStatus",
       dividendaccrued: "dividendAccrued",
@@ -283,30 +324,43 @@ const referenceTableConfigs: Record<
   categories: {
     label: "categories",
     primaryField: "name",
-    allowedFields: ["name"],
-    defaultRow: (id) => ({ id, name: "" }),
+    allowedFields: ["name", "includeInAllocation"],
+    booleanFields: ["includeInAllocation"],
+    defaultRow: (id) => ({ id, name: "", includeInAllocation: true }),
     aliases: { category: "name", label: "name" },
   },
   taxTreatment: {
     label: "tax treatment",
     primaryField: "label",
-    allowedFields: ["label"],
-    defaultRow: (id) => ({ id, label: "" }),
-    aliases: { taxtreatment: "label", taxstatus: "label", treatment: "label", name: "label" },
+    allowedFields: ["label", "ordinaryShare", "preferredShare", "stateRule", "niitIncluded", "localCategory", "description", "includeInAllocation"],
+    numericFields: ["ordinaryShare", "preferredShare"],
+    booleanFields: ["niitIncluded", "includeInAllocation"],
+    defaultRow: (id) => ({ id, label: "", ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest", description: "", includeInAllocation: true }),
+    aliases: { taxtreatment: "label", taxstatus: "label", treatment: "label", name: "label", ordinaryshare: "ordinaryShare", preferredshare: "preferredShare", staterule: "stateRule", niitincluded: "niitIncluded", localcategory: "localCategory", desc: "description", allocation: "includeInAllocation" },
   },
   accountTaxType: {
     label: "account tax type",
     primaryField: "taxStatus",
-    allowedFields: ["taxStatus"],
-    defaultRow: (id) => ({ id, taxStatus: "" }),
+    allowedFields: ["taxStatus", "includeInAllocation"],
+    booleanFields: ["includeInAllocation"],
+    defaultRow: (id) => ({ id, taxStatus: "", includeInAllocation: true }),
     aliases: { taxstatus: "taxStatus", taxtreatment: "taxStatus", status: "taxStatus", label: "taxStatus", name: "taxStatus" },
   },
-  investmentType: {
-    label: "investment type",
+  accountType: {
+    label: "account type",
     primaryField: "name",
-    allowedFields: ["name"],
-    defaultRow: (id) => ({ id, name: "" }),
-    aliases: { investmenttype: "name", type: "name", assetclass: "name", category: "name", label: "name" },
+    allowedFields: ["name", "taxStatus", "includeInAllocation"],
+    booleanFields: ["includeInAllocation"],
+    defaultRow: (id) => ({ id, name: "", taxStatus: "", includeInAllocation: true }),
+    aliases: { accounttype: "name", investmenttype: "name", type: "name", label: "name", taxstatus: "taxStatus", allocation: "includeInAllocation" },
+  },
+  investmentType: {
+    label: "account type",
+    primaryField: "name",
+    allowedFields: ["name", "taxStatus", "includeInAllocation"],
+    booleanFields: ["includeInAllocation"],
+    defaultRow: (id) => ({ id, name: "", taxStatus: "", includeInAllocation: true }),
+    aliases: { accounttype: "name", investmenttype: "name", type: "name", assetclass: "name", category: "name", label: "name", taxstatus: "taxStatus", allocation: "includeInAllocation" },
   },
 };
 
@@ -363,8 +417,12 @@ function nextWorkbookRowId(rows: WorkbookRow[], preferredId?: unknown) {
   return id;
 }
 
+function referenceWorkbookTabName(tabName: ReferenceTableName) {
+  return tabName === "investmentType" ? "accountType" : tabName;
+}
+
 function referenceRows(workbook: WorkbookResponse, tabName: ReferenceTableName) {
-  return toWorkbookRows(workbook.tabs[tabName]);
+  return toWorkbookRows(workbook.tabs[referenceWorkbookTabName(tabName)]);
 }
 
 function findReferenceRowIndex(rows: WorkbookRow[], tabName: ReferenceTableName, values: WorkbookRow, id?: number, query?: string, matchField?: string) {
@@ -1143,12 +1201,180 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
   };
 }
 
+function makeUiAssetUrlsAbsolute(html: string, origin: string) {
+  return html.replace(/\b(src|href)=(['"])\/(?!\/)/gi, (_match, attribute: string, quote: string) => `${attribute}=${quote}${origin}/`);
+}
+
+async function loadModelSurfaceHtml(config: ResolvedPortfolioServerConfig) {
+  if (config.loadUiHtml) return makeUiAssetUrlsAbsolute(await config.loadUiHtml(), config.uiAppOrigin);
+  const response = await fetch(`${config.uiAppOrigin}/`, { headers: { accept: "text/html" } });
+  if (!response.ok) throw new Error(`Unable to load the AfterTaxUS UI shell (${response.status}).`);
+  return makeUiAssetUrlsAbsolute(await response.text(), config.uiAppOrigin);
+}
+
+function modelSurfaceAppUrl(config: ResolvedPortfolioServerConfig, surface: ModelSurfaceName, action: ModelSurfaceAction, recordId: number | null, editorKind?: "investment" | "income") {
+  const url = new URL(config.uiAppOrigin);
+  url.searchParams.set("mcp_ui", "1");
+  url.searchParams.set("surface", surface);
+  url.searchParams.set("action", action);
+  if (recordId !== null) url.searchParams.set("recordId", String(recordId));
+  if (editorKind) url.searchParams.set("editorKind", editorKind);
+  return url.toString();
+}
+
+function resolveModelSurfaceRecord(workbook: WorkbookResponse, surface: ModelSurfaceName, recordId?: string | number, query?: string) {
+  const config = modelSurfaceConfigs[surface];
+  if (!config.workbookTab) return null;
+  const rows = toWorkbookRows(workbook.tabs[config.workbookTab]);
+  const numericId = Number(recordId);
+  if (recordId !== undefined && Number.isFinite(numericId)) {
+    const idMatch = rows.find((row) => Number(row.id) === numericId || Number(row.spreadsheetRowNumber) === numericId);
+    if (!idMatch) throw new Error(`${config.title} row ${recordId} was not found.`);
+    return idMatch;
+  }
+  if (query) {
+    const matches = rows.filter((row) => rowMatchesQuery(row, query));
+    if (matches.length !== 1) throw new Error(`${config.title} query must match exactly one row; it matched ${matches.length}.`);
+    return matches[0];
+  }
+  return null;
+}
+
 export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   const resolvedConfig = resolvePortfolioConfig(config);
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
+  }, {
+    instructions: "Use data tools to read or change the authoritative AfterTaxUS workbook. When the user wants to inspect, enter, or edit a specific part of the model inside ChatGPT, call show_model_surface after the relevant data tool so only that existing AfterTaxUS tab or editor is rendered.",
   });
+
+  server.registerResource(
+    "aftertaxus-model-surface",
+    MODEL_SURFACE_RESOURCE_URI,
+    {
+      title: "AfterTaxUS focused model editor",
+      description: "A focused existing AfterTaxUS tab or editor without the surrounding dashboard navigation.",
+      mimeType: "text/html;profile=mcp-app",
+    },
+    async () => ({
+      contents: [{
+        uri: MODEL_SURFACE_RESOURCE_URI,
+        mimeType: "text/html;profile=mcp-app",
+        text: await loadModelSurfaceHtml(resolvedConfig),
+        _meta: {
+          ui: {
+            prefersBorder: true,
+            domain: resolvedConfig.uiAppOrigin,
+            csp: {
+              connectDomains: [resolvedConfig.uiAppOrigin, "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com", "https://us-west-2muh8agids.auth.us-west-2.amazoncognito.com"],
+              resourceDomains: [resolvedConfig.uiAppOrigin, "https://commons.wikimedia.org", "https://upload.wikimedia.org"],
+            },
+          },
+          "openai/widgetDescription": "Focused AfterTaxUS model view using the product's existing tab and edit dialog.",
+          "openai/widgetPrefersBorder": true,
+          "openai/widgetDomain": resolvedConfig.uiAppOrigin,
+          "openai/widgetCSP": {
+            connect_domains: [resolvedConfig.uiAppOrigin, "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com", "https://us-west-2muh8agids.auth.us-west-2.amazoncognito.com"],
+            resource_domains: [resolvedConfig.uiAppOrigin, "https://commons.wikimedia.org", "https://upload.wikimedia.org"],
+          },
+        },
+      }],
+    })
+  );
+
+  server.registerTool(
+    "show_model_surface",
+    {
+      title: "Show focused AfterTaxUS editor",
+      description: "Render only one existing AfterTaxUS model tab or editor in ChatGPT. Call this after a data mutation when the user wants to view or edit the result. For a newly created lookup row, pass action='edit' plus its id or a unique query. Use action='add' on investmentsIncome to open the existing add investment/income popup.",
+      inputSchema: {
+        workspaceId: z.string().optional(),
+        surface: modelSurfaceSchema.describe("The exact model area to display."),
+        action: z.enum(["view", "add", "edit"]).default("view"),
+        recordId: z.union([z.number(), z.string()]).optional().describe("Row id to open in the existing editor."),
+        query: z.string().optional().describe("Unique row query to resolve when a record id is not known."),
+        editorKind: z.enum(["investment", "income"]).optional().describe("For investmentsIncome action='add', skip the chooser and open this existing form."),
+      },
+      outputSchema: {
+        surface: modelSurfaceSchema,
+        tab: z.string(),
+        action: z.enum(["view", "add", "edit"]),
+        recordId: z.number().nullable(),
+        editorKind: z.enum(["investment", "income"]).nullable(),
+        workspaceId: z.string(),
+        title: z.string(),
+        appUrl: z.string(),
+        updatedAt: z.string().nullable(),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+      _meta: {
+        ui: { resourceUri: MODEL_SURFACE_RESOURCE_URI },
+        "openai/outputTemplate": MODEL_SURFACE_RESOURCE_URI,
+        "openai/widgetAccessible": true,
+        "openai/toolInvocation/invoking": "Opening focused editor…",
+        "openai/toolInvocation/invoked": "Focused editor opened.",
+      },
+    },
+    async ({ workspaceId, surface, action, recordId, query, editorKind }) => {
+      const workbook = await getWorkbook(resolvedConfig, workspaceId);
+      const surfaceConfig = modelSurfaceConfigs[surface];
+      const matchedRow = action === "edit" ? resolveModelSurfaceRecord(workbook, surface, recordId, query) : null;
+      if (action === "edit" && surfaceConfig.workbookTab && !matchedRow) {
+        throw new Error(`action='edit' for ${surfaceConfig.title} requires a valid recordId or unique query.`);
+      }
+      const numericRecordId = matchedRow ? Number(matchedRow.id) : Number(recordId);
+      const resolvedRecordId = Number.isFinite(numericRecordId) ? numericRecordId : null;
+      const resolvedEditorKind = surface === "investmentsIncome" ? editorKind ?? null : null;
+      const structuredContent = {
+        surface,
+        tab: surfaceConfig.tab,
+        action,
+        recordId: resolvedRecordId,
+        editorKind: resolvedEditorKind,
+        workspaceId: workbook.workspaceId,
+        title: surfaceConfig.title,
+        appUrl: modelSurfaceAppUrl(resolvedConfig, surface, action, resolvedRecordId, resolvedEditorKind ?? undefined),
+        updatedAt: workbook.updatedAt,
+      };
+      return {
+        structuredContent,
+        content: [{ type: "text" as const, text: `Showing only the ${surfaceConfig.title} ${action === "edit" ? "editor" : "view"}.` }],
+      };
+    }
+  );
+
+  server.registerTool(
+    "run_model_surface_api",
+    {
+      title: "Run focused UI data request",
+      description: "UI-only bridge used by the focused AfterTaxUS component to load, calculate, and save the authorized workbook.",
+      inputSchema: {
+        body: z.record(z.unknown()),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: false },
+      _meta: {
+        ui: { visibility: ["app"] },
+        "openai/visibility": "private",
+      },
+    },
+    async ({ body }) => {
+      const calc = String(body.calc || "");
+      const allowedCalculations = new Set([
+        "WORKBOOK_GET",
+        "WORKBOOK_SAVE",
+        "TAX_CONFIG_2025",
+        "TAX_PLAN_2025",
+        "STATE_TAX_2025",
+      ]);
+      if (!allowedCalculations.has(calc)) throw new Error(`${calc || "Missing calc"} is not available to the focused model UI.`);
+      const response = await postPortfolioApi<Record<string, unknown>>(resolvedConfig, body);
+      return {
+        structuredContent: { status: 200, body: response },
+        content: [{ type: "text" as const, text: `${calc} completed for the focused model UI.` }],
+      };
+    }
+  );
 
   server.tool(
     "get_workbook_overview",
@@ -2349,7 +2575,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const updatedRows = rows.map((row, rowIndex) =>
         rowIndex === index ? { ...row, ...sanitized } : row
       );
-      workbook.tabs[tableName] = updatedRows;
+      workbook.tabs[referenceWorkbookTabName(tableName)] = updatedRows;
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
         ok: true,
@@ -2394,6 +2620,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       }
 
       const nextRows = [...existingRows];
+      const changedRows: WorkbookRow[] = [];
       let updated = 0;
       let added = 0;
       for (const row of sanitizedRows) {
@@ -2414,17 +2641,20 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         }
         if (index >= 0) {
           nextRows[index] = { ...nextRows[index], ...row.sanitized };
+          changedRows.push(nextRows[index]);
           updated += 1;
         } else {
-          nextRows.push({
+          const addedRow = {
             ...referenceTableConfigs[tableName].defaultRow(nextWorkbookRowId(nextRows, rawId)),
             ...row.sanitized,
-          });
+          };
+          nextRows.push(addedRow);
+          changedRows.push(addedRow);
           added += 1;
         }
       }
 
-      workbook.tabs[tableName] = nextRows;
+      workbook.tabs[referenceWorkbookTabName(tableName)] = nextRows;
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
         ok: true,
@@ -2433,6 +2663,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         tableName,
         updated,
         added,
+        rows: changedRows,
         totalRows: nextRows.length,
       });
     }
@@ -2468,7 +2699,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         });
       }
 
-      workbook.tabs[tableName] = nextRows;
+      workbook.tabs[referenceWorkbookTabName(tableName)] = nextRows;
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       return jsonToolResult({
         ok: true,
@@ -2495,7 +2726,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         categories: workbook.tabs.categories ?? [],
         taxTreatment: workbook.tabs.taxTreatment ?? [],
         accountTaxType: workbook.tabs.accountTaxType ?? [],
-        investmentType: workbook.tabs.investmentType ?? [],
+        accountType: workbook.tabs.accountType ?? [],
+        investmentType: workbook.tabs.accountType ?? workbook.tabs.investmentType ?? [],
       });
     }
   );

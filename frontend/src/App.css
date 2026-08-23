@@ -1238,6 +1238,11 @@
   }
 }
 .workspace-shell { display: grid; grid-template-columns: 132px minmax(0, 1fr) 216px; min-height: calc(100vh - var(--app-top-nav-height)); }
+.workspace-shell--mcp-surface { display: block; min-height: 100vh; }
+.app-shell--mcp-surface .content-panel { width: 100%; padding: 0 14px 18px; }
+.app-shell--mcp-surface .content-topbar { top: 0; }
+.app-shell--mcp-surface .portfolio-workstation__sticky { top: 0; }
+.app-shell--mcp-surface .investments-workspace { min-height: calc(100vh - 92px); }
 .workspace-shell--focus-grid { grid-template-columns: 132px minmax(0, 1fr); }
 .sidebar { position: sticky; top: var(--app-top-nav-height); z-index: 30; display: flex; flex-direction: column; gap: 12px; width: 132px; height: calc(100vh - var(--app-top-nav-height)); padding: 14px 10px; border-right: 1px solid rgba(18,41,54,.1); background: linear-gradient(180deg, rgba(245,247,244,.98), rgba(226,238,240,.98)); overflow: auto; transition: width 180ms ease, box-shadow 180ms ease; }
 .sidebar:hover { width: 280px; box-shadow: 18px 0 40px rgba(24,49,58,.12); }

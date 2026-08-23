@@ -86,11 +86,20 @@ function resolveMcpToken(request: Request, env: WorkerEnv) {
 }
 
 async function handleMcpRequest(request: Request, env: WorkerEnv, tokenConfig: { portfolioSyncToken?: string; portfolioMcpToken?: string }) {
+  const uiAppOrigin = new URL(request.url).origin;
   const config = resolvePortfolioConfig({
     apiBaseUrl: env.PORTFOLIO_API_BASE_URL,
     defaultWorkspaceId: env.PORTFOLIO_WORKSPACE_ID,
     portfolioSyncToken: tokenConfig.portfolioSyncToken,
     portfolioMcpToken: tokenConfig.portfolioMcpToken,
+    uiAppOrigin,
+    loadUiHtml: env.ASSETS
+      ? async () => {
+          const response = await env.ASSETS!.fetch(new Request(`${uiAppOrigin}/`, { headers: { accept: "text/html" } }));
+          if (!response.ok) throw new Error(`Unable to load the focused UI shell (${response.status}).`);
+          return response.text();
+        }
+      : undefined,
   });
 
   // Cloudflare Workers are serverless; subsequent MCP requests are not guaranteed
@@ -146,14 +155,14 @@ export default {
       );
       return jsonResponse({
         ...payload,
-        mcpPathAliases: [mcpPath, "/mcp-v2", "/mcp-v3", "/mcp-v4", "/mcp-v5"],
+        mcpPathAliases: [mcpPath, "/mcp-v2", "/mcp-v3", "/mcp-v4", "/mcp-v5", "/mcp-v6"],
         authProtected: !publicMcpAccessAllowed(env),
         supportsUserMcpTokens: true,
         acceptsBearerAuthOnly: false,
       });
     }
 
-    if (url.pathname === mcpPath || url.pathname === "/mcp-v2" || url.pathname === "/mcp-v3" || url.pathname === "/mcp-v4" || url.pathname === "/mcp-v5") {
+    if (url.pathname === mcpPath || url.pathname === "/mcp-v2" || url.pathname === "/mcp-v3" || url.pathname === "/mcp-v4" || url.pathname === "/mcp-v5" || url.pathname === "/mcp-v6") {
       const tokenConfig = resolveMcpToken(request, env);
       if (!tokenConfig.ok) {
         return jsonResponse({ error: "Unauthorized MCP request." }, { status: 401 });
