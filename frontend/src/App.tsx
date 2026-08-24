@@ -4363,9 +4363,10 @@ function writeAssistantMessageHistory(messages: ChatMessage[]) {
   window.localStorage.setItem(ASSISTANT_MESSAGE_HISTORY_KEY, JSON.stringify(messages.slice(-ASSISTANT_MESSAGE_HISTORY_LIMIT)));
 }
 
-function clearAssistantMessageHistory() {
+function clearAssistantHistory() {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(ASSISTANT_MESSAGE_HISTORY_KEY, "[]");
+  window.localStorage.removeItem(ASSISTANT_MESSAGE_HISTORY_KEY);
+  window.localStorage.removeItem(ASSISTANT_PROMPT_HISTORY_KEY);
 }
 
 function AssistantPanel({
@@ -4473,6 +4474,18 @@ function AssistantPanel({
     }, 0);
   };
 
+  const clearAllAssistantHistory = () => {
+    if (isLoading || (messages.length === 0 && promptHistory.length === 0)) return;
+    if (!window.confirm("Clear all AI Portfolio Assistant history? This permanently removes saved messages and prompt recall history from this browser.")) return;
+    clearAssistantHistory();
+    setMessages([]);
+    setPromptHistory([]);
+    setHistoryCursor(null);
+    setHistoryDraft("");
+    setError(null);
+    window.setTimeout(() => askInputRef.current?.focus(), 0);
+  };
+
   const submitPrompt = async () => {
     const content = draft.trim();
     if (!content || isLoading) return;
@@ -4558,8 +4571,8 @@ function AssistantPanel({
           <h3>Ask about holdings, filters, and live metrics</h3>
         </div>
         <div className="assistant-panel__actions">
-          <button className="ghost-button ghost-button--compact" type="button" onClick={() => { clearAssistantMessageHistory(); setMessages([]); setError(null); }}>
-            Reset
+          <button className="ghost-button ghost-button--compact" type="button" onClick={clearAllAssistantHistory} disabled={isLoading || (messages.length === 0 && promptHistory.length === 0)} title="Clear saved messages and prompt history">
+            Clear history
           </button>
           <button className="ghost-button ghost-button--compact" type="button" onClick={onClose}>
             Close
