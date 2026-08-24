@@ -58,6 +58,7 @@ function buildCurrentModelContext(snapshot: unknown) {
 function loadAfterTaxUsSkillPrompt() {
   const candidates = [
     join(__dirname, "skills", "aftertaxus-portfolio-model"),
+    join(__dirname, "src", "skills", "aftertaxus-portfolio-model"),
     join(__dirname, "..", "skills", "aftertaxus-portfolio-model"),
   ];
   const skillRoot = candidates.find((candidate) => existsSync(join(candidate, "SKILL.md")));

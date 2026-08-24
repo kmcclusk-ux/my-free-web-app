@@ -1,6 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
+const crypto_1 = require("crypto");
+const https_1 = require("https");
+const assistantActionPrompt_1 = require("./assistantActionPrompt");
 const taxCalcs_1 = require("./taxCalcs");
 const workbookStore_1 = require("./workbookStore");
 function jsonResponse(statusCode, body, origin = "*") {
@@ -10,7 +13,7 @@ function jsonResponse(statusCode, body, origin = "*") {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
         },
         body: JSON.stringify(body),
     };
@@ -22,7 +25,7 @@ function corsPreflight(origin = "*") {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
         },
         body: "",
     };
@@ -34,11 +37,52 @@ function decodeBody(event) {
         ? Buffer.from(event.body, "base64").toString("utf8")
         : event.body;
 }
+let jwksCache = null;
+const PORTFOLIO_ASSISTANT_SYSTEM_PROMPT = `You are a portfolio assistant embedded in this investment portfolio app.
+Use only the provided portfolio state, workbook tables, reference tables, and calculated metrics. If data is missing, say what is missing.
+You can answer open-ended questions about investments, tickers, accounts, tax treatment, account tax type, investment type, categories, filters, selected rows, allocation, income, diversification, concentration, and calculated tax/after-tax metrics.
+Do not invent balances, prices, returns, allocations, gains, losses, or tax figures. Explain financial information neutrally. Do not provide personalized investment, tax, legal, trading, transfer, or irreversible-action advice.
+If web search tools are available, use them only when the user asks for current external information or facts not present in the workbook snapshot. Do not browse for questions that can be answered from the supplied portfolio/workbook data.
+When the user only asks a question, answer normally in concise prose or markdown. When the user asks you to change the app UI or workbook data, return JSON only in this shape:
+{"message":"short explanation","actions":[{"type":"setFilter","payload":{"filterName":"account","value":"taxable"}}]}.
+Allowed action types are setCheckbox, setAllCheckboxes, selectAsset, selectAssets, highlightRows, selectRows, selectAccount, setFilter, clearFilters, sortTable, setView, updateSettings, setWhatIf, addRow, updateRow, upsertRows, replaceRows, and deleteRows.
+Editable tableIds are investments, tickers, accounts, categories, taxTreatment, accountTaxType, and accountType.
+Use row ids from the snapshot when possible. If a request is ambiguous, select/highlight matching rows or ask a clarifying question instead of changing or deleting data.
+Action schemas:
+- setCheckbox payload: {"id": investment row id, "field":"includeIncome"|"overrideProposal", "checked": boolean}.
+- setAllCheckboxes payload: {"field":"includeIncome"|"overrideProposal", "checked": boolean}. Use requiresConfirmation true.
+- addRow payload: {"tableId":"investments"|"tickers"|"accounts"|"categories"|"taxTreatment"|"accountTaxType"|"accountType","row":{allowed fields for that table}}. Use requiresConfirmation true.
+- updateRow payload: {"tableId":"...","id": row id OR "selector":"text to match" OR "all":true,"values":{allowed fields to change}}. Use requiresConfirmation true.
+- upsertRows payload: {"tableId":"...","rows":[{row fields}],"matchField":"optional allowed field name"}. Updates existing rows by id, selector, or the table primary field; adds rows that do not match. Use requiresConfirmation true.
+- replaceRows payload: {"tableId":"...","rows":[{row fields}]}. Replaces the entire table. Use only when the user explicitly asks to replace or reset a full tab/table. Always use requiresConfirmation true.
+- deleteRows payload: {"tableId":"...","ids":[row ids] OR "selector":"text to match" OR "all":true}. Always use requiresConfirmation true.
+- selectAsset payload: {"assetId":"ticker, row id, description, or account text"}.
+- selectAssets payload: {"assetIds":[row ids]} or {"symbol":"ticker"}.
+- highlightRows payload: {"ids":[row ids]} or {"symbol":"ticker"} or {"query":"description/account/symbol text"}. Use this when the user asks to highlight rows in the frontend.
+- selectRows payload: same as highlightRows; it visually highlights matching investment rows.
+- selectAccount payload: {"accountId":"account id or account name"}.
+- setFilter payload: {"filterName":"account"|"category"|"asset","value":"filter value"}.
+- sortTable payload: {"tableId":"investments","column":"description"|"account"|"category"|"totalInvestment"|"yearlyIncome"|"symbol"|"includedTotal"|"filteredIncome","direction":"asc"|"desc"}.
+- setView payload: {"viewName":"Investments"|"Tickers"|"Accounts"|"Federal Tax"|"State Tax"|"Tax Calculator"|"focus_grid"|"analytics"}.
+- updateSettings payload: {"section":"federal"|"state"|"local"|"planner"|"ui","values":{allowed settings fields}}. This changes calculation inputs/preferences and is persisted to the authenticated workbook. Use requiresConfirmation true.
+- setWhatIf payload: {"scope":"investments"|"federal"|"state","enabled":boolean}. This opens/closes the requested What-If UI; investment What-If selection is persisted. Use requiresConfirmation true.
+Federal settings fields: filingStatus, deductionMode, extraOrdinaryIncome, extraPreferredIncome, extraOrdinaryItems, extraPreferredItems, aboveLineDeductionItems, deductionItems, mortgageInterest, propertyTax. The backend owns statutory federal values such as the standard deduction and SALT cap.
+State settings fields: stateCode, extraStateIncome, deductionMode, deductionItems, mortgageInterest, propertyTax, standardDeduction. Local settings fields: enabled, localityId, localityName, residency, rate, nonresidentRate, taxableBase. Planner settings fields: federalWithholding, stateWithholding. UI settings fields: incomePrimaryPeriod, darkMode, investmentFavorites, selectedAssetIds.
+Investment row fields: description, account, category, totalInvestment, yearlyIncome, includeIncome, overrideProposal, symbol, newSymbol, newPercent.
+When the user pastes spreadsheet investment rows, map columns like DESC/description -> description, ACCNT/account -> account, total inv. -> totalInvestment, yr inc. -> yearlyIncome, Inc/use checkbox -> includeIncome, override -> overrideProposal, symbol/ticker -> symbol, new symbol -> newSymbol, and new % -> newPercent. Ignore calculated downstream columns such as monthly income, tax status, ordinary, preferred, state, non taxable, cash/stocks/bonds rollups, filtered, and total.
+Ticker row fields: symbol, percentReturn, category, taxTreatment, incomeItem, extraData, description, exDividend, divPayout.
+Account row fields: account, taxStatus, dividendAccrued, includeInFreeCashflow.
+Category row fields: name. Tax treatment row fields: label, ordinaryShare, preferredShare, stateRule, niitIncluded, localCategory, description. Account tax type row fields: taxStatus. Account type row fields: name, taxStatus.
+For bulk updates to tickers, accounts, categories, taxTreatment, accountTaxType, or accountType, prefer upsertRows. Use replaceRows only when the user clearly wants the whole table replaced.
+Primary match fields for upsertRows: tickers=symbol, accounts=account, categories=name, taxTreatment=label, accountTaxType=taxStatus, accountType=name.
+To highlight rows for a ticker or description, use {"message":"Highlighting matching rows.","actions":[{"type":"highlightRows","payload":{"symbol":"BSJQ","matchMode":"symbol"}}]}.
+To highlight specific investment row ids, use {"message":"Highlighting matching rows.","actions":[{"type":"highlightRows","payload":{"ids":[17,21,31]}}]}.
+For "clear all Inc checkboxes", return {"message":"Clearing all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":false},"requiresConfirmation":true}]}.
+For "select all Inc checkboxes", return {"message":"Selecting all Inc checkboxes.","actions":[{"type":"setAllCheckboxes","payload":{"field":"includeIncome","checked":true},"requiresConfirmation":true}]}.
+Do not use setFilter for Inc. Inc is a checkbox field, not a filter.
+Do not request placing trades, transferring money, connecting brokerage accounts, or external irreversible financial actions.`;
 function isFilingStatus(x) {
     return x === "single" || x === "mfj" || x === "mfs" || x === "hoh";
-}
-function isOrdinary2025FilingStatus(x) {
-    return x === "single" || x === "mfj";
 }
 function readNonNegativeNumber(value, fieldName) {
     const num = Number(value);
@@ -46,6 +90,50 @@ function readNonNegativeNumber(value, fieldName) {
         return { error: `${fieldName} must be a number >= 0` };
     }
     return { value: num };
+}
+const RESERVED_PUBLIC_REPORT_SLUGS = new Set([
+    "api",
+    "assets",
+    "auth",
+    "hello",
+    "login",
+    "logout",
+    "mcp-v5",
+    "reports",
+    "signin",
+    "signup",
+]);
+function normalizePublicReportSlug(value) {
+    return String(value || "")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80)
+        .replace(/-+$/g, "");
+}
+function readPublicUsername(value) {
+    const requested = String(value || "").trim().toLowerCase();
+    const username = normalizePublicReportSlug(requested).slice(0, 32);
+    if (!username || username !== requested || RESERVED_PUBLIC_REPORT_SLUGS.has(username)) {
+        return { error: "Choose a valid public username containing letters, numbers, or hyphens." };
+    }
+    return { value: username };
+}
+function readPublicReportPayload(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return { error: "payload must be a report object" };
+    }
+    const payload = value;
+    if (!Array.isArray(payload.scenarios) || payload.scenarios.length < 1 || payload.scenarios.length > 20) {
+        return { error: "payload.scenarios must contain between 1 and 20 scenarios" };
+    }
+    const serialized = JSON.stringify(payload);
+    if (Buffer.byteLength(serialized, "utf8") > 300000) {
+        return { error: "Public report payload exceeds the 300 KB limit" };
+    }
+    return { value: payload };
 }
 function getProxySegments(event) {
     const pathParameters = (event.pathParameters ?? {});
@@ -77,7 +165,1098 @@ function parseJsonBody(event) {
         return null;
     return JSON.parse(raw.trim());
 }
+function getHeader(event, name) {
+    const headers = event.headers || {};
+    const target = name.toLowerCase();
+    for (const [key, value] of Object.entries(headers)) {
+        if (key.toLowerCase() === target)
+            return value || "";
+    }
+    return "";
+}
+function getCognitoConfig() {
+    const userPoolId = String(process.env.COGNITO_USER_POOL_ID || "").trim();
+    const appClientId = String(process.env.COGNITO_APP_CLIENT_ID || "").trim();
+    const region = String(process.env.COGNITO_REGION || process.env.AWS_REGION || process.env.REGION || "").trim();
+    if (!userPoolId || !appClientId || !region)
+        return null;
+    return {
+        userPoolId,
+        appClientId,
+        region,
+        issuer: `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`,
+    };
+}
+function authIsConfigured() {
+    return Boolean(getCognitoConfig() || process.env.PORTFOLIO_SYNC_TOKEN);
+}
+function publicPortfolioAccessAllowed() {
+    return parseBooleanEnv(process.env.ALLOW_PUBLIC_PORTFOLIO_ACCESS);
+}
+function getAllowedCorsOrigins() {
+    const configured = String(process.env.ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((value) => value.trim().replace(/\/+$/, ""))
+        .filter(Boolean);
+    const defaults = [
+        "https://aftertaxus.com",
+        "https://www.aftertaxus.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4178",
+        "http://127.0.0.1:4178",
+    ];
+    const openRouterSiteUrl = String(process.env.OPENROUTER_SITE_URL || "").trim().replace(/\/+$/, "");
+    if (openRouterSiteUrl) {
+        defaults.push(openRouterSiteUrl);
+    }
+    return [...new Set([...configured, ...defaults])];
+}
+function resolveCorsOrigin(event, restricted) {
+    if (!restricted)
+        return "*";
+    const requestOrigin = getHeader(event, "origin").trim().replace(/\/+$/, "");
+    const allowedOrigins = getAllowedCorsOrigins();
+    if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+        return requestOrigin;
+    }
+    return allowedOrigins[0] || "https://www.aftertaxus.com";
+}
+function base64UrlToBuffer(value) {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return Buffer.from(padded, "base64");
+}
+function decodeJwtPart(value) {
+    return JSON.parse(base64UrlToBuffer(value).toString("utf8"));
+}
+function parseBearerToken(event) {
+    const authorization = getHeader(event, "authorization");
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    return match?.[1]?.trim() || "";
+}
+async function fetchCognitoJwks(issuer) {
+    const cacheTtlMs = 60 * 60 * 1000;
+    if (jwksCache && jwksCache.issuer === issuer && Date.now() - jwksCache.fetchedAt < cacheTtlMs) {
+        return jwksCache.keys;
+    }
+    const response = await fetch(`${issuer}/.well-known/jwks.json`);
+    if (!response.ok) {
+        throw new Error(`Unable to fetch Cognito signing keys (${response.status}).`);
+    }
+    const json = await response.json();
+    const keys = Array.isArray(json.keys) ? json.keys : [];
+    jwksCache = { issuer, keys, fetchedAt: Date.now() };
+    return keys;
+}
+function jwkToKeyObject(jwk) {
+    return (0, crypto_1.createPublicKey)({
+        key: {
+            kty: jwk.kty,
+            n: jwk.n,
+            e: jwk.e,
+        },
+        format: "jwk",
+    });
+}
+async function verifyCognitoJwt(token) {
+    const config = getCognitoConfig();
+    if (!config) {
+        throw new Error("Cognito auth is not configured.");
+    }
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+        throw new Error("Invalid token format.");
+    }
+    const header = decodeJwtPart(parts[0]);
+    const payload = decodeJwtPart(parts[1]);
+    if (header.alg !== "RS256" || !header.kid) {
+        throw new Error("Unsupported token signing algorithm.");
+    }
+    const keys = await fetchCognitoJwks(config.issuer);
+    const jwk = keys.find((key) => key.kid === header.kid);
+    if (!jwk) {
+        throw new Error("Token signing key was not found.");
+    }
+    const verifier = (0, crypto_1.createVerify)("RSA-SHA256");
+    verifier.update(`${parts[0]}.${parts[1]}`);
+    verifier.end();
+    if (!verifier.verify(jwkToKeyObject(jwk), base64UrlToBuffer(parts[2]))) {
+        throw new Error("Invalid token signature.");
+    }
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const exp = Number(payload.exp || 0);
+    if (!Number.isFinite(exp) || exp <= nowSeconds) {
+        throw new Error("Token is expired.");
+    }
+    if (payload.iss !== config.issuer) {
+        throw new Error("Token issuer is invalid.");
+    }
+    const tokenUse = String(payload.token_use || "");
+    const clientId = tokenUse === "id" ? String(payload.aud || "") : String(payload.client_id || "");
+    if (clientId !== config.appClientId) {
+        throw new Error("Token audience is invalid.");
+    }
+    const sub = String(payload.sub || "");
+    if (!sub) {
+        throw new Error("Token subject is missing.");
+    }
+    return {
+        sub,
+        email: typeof payload.email === "string" ? payload.email : undefined,
+        authType: "cognito",
+    };
+}
+function verifySyncToken(event) {
+    const expected = String(process.env.PORTFOLIO_SYNC_TOKEN || "").trim();
+    if (!expected)
+        return null;
+    const provided = getHeader(event, "x-portfolio-sync-token").trim();
+    if (!provided || provided !== expected)
+        return null;
+    return {
+        sub: String(process.env.PORTFOLIO_SYNC_USER_ID || "sheet-sync").trim() || "sheet-sync",
+        email: process.env.PORTFOLIO_SYNC_USER_EMAIL,
+        authType: "syncToken",
+    };
+}
+function hashMcpToken(token) {
+    return (0, crypto_1.createHash)("sha256").update(token).digest("hex");
+}
+function createMcpTokenSecret() {
+    return (0, crypto_1.randomBytes)(32).toString("base64url");
+}
+function createTokenId() {
+    return (0, crypto_1.randomBytes)(10).toString("base64url");
+}
+function parseMcpToken(event) {
+    return (getHeader(event, "x-portfolio-mcp-token").trim() ||
+        getHeader(event, "x-mcp-token").trim());
+}
+async function verifyMcpToken(event) {
+    const token = parseMcpToken(event);
+    if (!token)
+        return null;
+    const store = new workbookStore_1.WorkbookStore();
+    const record = await store.getMcpToken(hashMcpToken(token));
+    if (!record || record.revokedAt) {
+        throw new Error("Invalid or revoked MCP token.");
+    }
+    return {
+        sub: record.ownerSub,
+        email: record.ownerEmail,
+        authType: "mcpToken",
+        workspaceId: record.workspaceId || "default",
+    };
+}
+async function authenticatePortfolioRequest(event, origin) {
+    if (!authIsConfigured()) {
+        if (publicPortfolioAccessAllowed()) {
+            return { auth: null };
+        }
+        return {
+            response: jsonResponse(503, { error: "Portfolio access is disabled until Cognito or a sync token is configured." }, origin),
+        };
+    }
+    if (publicPortfolioAccessAllowed()) {
+        return { auth: null };
+    }
+    const syncAuth = verifySyncToken(event);
+    if (syncAuth)
+        return { auth: syncAuth };
+    try {
+        const mcpAuth = await verifyMcpToken(event);
+        if (mcpAuth)
+            return { auth: mcpAuth };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid MCP token.";
+        return { response: jsonResponse(401, { error: message }, origin) };
+    }
+    const token = parseBearerToken(event);
+    if (!token) {
+        return { response: jsonResponse(401, { error: "Authentication required." }, origin) };
+    }
+    try {
+        return { auth: await verifyCognitoJwt(token) };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid authentication token.";
+        return { response: jsonResponse(401, { error: message }, origin) };
+    }
+}
+async function authenticateCognitoRequest(event, origin) {
+    const token = parseBearerToken(event);
+    if (!token) {
+        return { response: jsonResponse(401, { error: "Cognito sign-in required." }, origin) };
+    }
+    try {
+        return { auth: await verifyCognitoJwt(token) };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid authentication token.";
+        return { response: jsonResponse(401, { error: message }, origin) };
+    }
+}
+function sanitizeWorkspacePart(value) {
+    return value.trim().replace(/[^a-zA-Z0-9_.:-]+/g, "_").slice(0, 160) || "default";
+}
+function scopedWorkspaceId(workspaceId, auth) {
+    const cleanWorkspaceId = sanitizeWorkspacePart(auth?.authType === "mcpToken" && auth.workspaceId ? auth.workspaceId : workspaceId || "default");
+    if (!auth)
+        return cleanWorkspaceId;
+    return `user#${sanitizeWorkspacePart(auth.sub)}#workspace#${cleanWorkspaceId}`;
+}
+function workbookResponseForClient(result, requestedWorkspaceId, auth) {
+    return {
+        ...result,
+        workspaceId: sanitizeWorkspacePart(requestedWorkspaceId || "default"),
+        ...(auth ? { owner: { authType: auth.authType } } : {}),
+    };
+}
+function postJsonToOpenRouter(payload, apiKey, timeoutMs = 22000) {
+    const body = JSON.stringify(payload);
+    return new Promise((resolve, reject) => {
+        let completed = false;
+        let req;
+        const finish = (callback) => {
+            if (completed)
+                return;
+            completed = true;
+            clearTimeout(totalTimeout);
+            callback();
+        };
+        const totalTimeout = setTimeout(() => {
+            req.destroy(new Error("OpenRouter request timed out."));
+        }, timeoutMs);
+        req = (0, https_1.request)("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(body),
+                "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://portfolio-workbook.local",
+                "X-Title": "Portfolio Workbook Assistant",
+            },
+        }, (res) => {
+            const chunks = [];
+            res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            res.on("end", () => {
+                finish(() => resolve({
+                    statusCode: res.statusCode || 0,
+                    body: Buffer.concat(chunks).toString("utf8"),
+                }));
+            });
+        });
+        req.on("error", (error) => {
+            finish(() => reject(error));
+        });
+        req.setTimeout(Math.min(timeoutMs, 15000), () => {
+            req.destroy(new Error("OpenRouter request timed out."));
+        });
+        req.write(body);
+        req.end();
+    });
+}
+function getTextFromHttps(url, timeoutMs = 8000) {
+    return new Promise((resolve, reject) => {
+        let completed = false;
+        let req;
+        const finish = (callback) => {
+            if (completed)
+                return;
+            completed = true;
+            clearTimeout(totalTimeout);
+            callback();
+        };
+        const totalTimeout = setTimeout(() => {
+            req.destroy(new Error("External quote request timed out."));
+        }, timeoutMs);
+        req = (0, https_1.request)(url, {
+            method: "GET",
+            headers: {
+                "Accept": "application/json,text/plain,*/*",
+                "User-Agent": "PortfolioWorkbookAssistant/1.0",
+            },
+        }, (res) => {
+            const chunks = [];
+            res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+            res.on("end", () => {
+                finish(() => resolve({
+                    statusCode: res.statusCode || 0,
+                    body: Buffer.concat(chunks).toString("utf8"),
+                }));
+            });
+        });
+        req.on("error", (error) => {
+            finish(() => reject(error));
+        });
+        req.setTimeout(Math.min(timeoutMs, 7000), () => {
+            req.destroy(new Error("External quote request timed out."));
+        });
+        req.end();
+    });
+}
+function sanitizeChatMessages(messages) {
+    if (!Array.isArray(messages))
+        return [];
+    return messages
+        .filter((message) => {
+        if (!message || typeof message !== "object")
+            return false;
+        const role = message.role;
+        const content = message.content;
+        return (role === "user" || role === "assistant") && typeof content === "string" && content.trim().length > 0;
+    })
+        .slice(-16)
+        .map((message) => ({
+        role: message.role,
+        content: message.content.slice(0, 4000),
+    }));
+}
+function parseAssistantChatContent(content) {
+    const trimmed = content.trim();
+    const jsonCandidate = trimmed.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+    try {
+        const parsed = JSON.parse(jsonCandidate);
+        const message = typeof parsed?.message === "string" ? parsed.message : trimmed;
+        const actions = Array.isArray(parsed?.actions)
+            ? parsed.actions
+                .filter((action) => !!action && typeof action === "object" && typeof action.type === "string")
+                .map((action) => ({
+                type: action.type,
+                payload: action.payload && typeof action.payload === "object" ? action.payload : {},
+                requiresConfirmation: Boolean(action.requiresConfirmation),
+            }))
+            : [];
+        return { message, actions };
+    }
+    catch {
+        return { message: trimmed, actions: [] };
+    }
+}
+function inferBulkIncCheckboxAction(userContent, assistantContent) {
+    const text = `${userContent}\n${assistantContent}`.toLowerCase();
+    const mentionsIncCheckboxes = /\binc\b/.test(text) &&
+        (text.includes("checkbox") ||
+            text.includes("check box") ||
+            text.includes("checked") ||
+            text.includes("unchecked") ||
+            text.includes("clear") ||
+            text.includes("uncheck") ||
+            text.includes("deselect") ||
+            text.includes("select all"));
+    const mentionsBulk = text.includes("all") || text.includes("every");
+    if (!mentionsIncCheckboxes || !mentionsBulk)
+        return null;
+    if (text.includes("clear") || text.includes("uncheck") || text.includes("unchecked") || text.includes("deselect")) {
+        return {
+            type: "setAllCheckboxes",
+            payload: { field: "includeIncome", checked: false },
+            requiresConfirmation: true,
+        };
+    }
+    if (text.includes("select") || text.includes("check") || text.includes("checked")) {
+        return {
+            type: "setAllCheckboxes",
+            payload: { field: "includeIncome", checked: true },
+            requiresConfirmation: true,
+        };
+    }
+    return null;
+}
+function normalizeAssistantActions(actions, userContent, assistantContent) {
+    const inferredBulkAction = inferBulkIncCheckboxAction(userContent, assistantContent);
+    if (actions.length === 0) {
+        return inferredBulkAction ? [inferredBulkAction] : [];
+    }
+    return actions.map((action) => {
+        if (action.type === "setFilter") {
+            const filterName = String(action.payload?.filterName || "").trim().toLowerCase();
+            if (["inc", "include", "includeincome", "inc checkbox", "inc checkboxes"].includes(filterName)) {
+                return inferredBulkAction || action;
+            }
+        }
+        if (action.type === "setAllCheckboxes") {
+            const checked = typeof action.payload?.checked === "boolean"
+                ? action.payload.checked
+                : inferredBulkAction?.payload?.checked;
+            if (typeof checked === "boolean") {
+                return {
+                    type: "setAllCheckboxes",
+                    payload: {
+                        field: action.payload?.field === "overrideProposal" ? "overrideProposal" : "includeIncome",
+                        checked,
+                    },
+                    requiresConfirmation: true,
+                };
+            }
+        }
+        return action;
+    });
+}
+function extractAssistantText(parsed) {
+    const message = parsed?.choices?.[0]?.message;
+    const content = message?.content;
+    if (typeof content === "string" && content.trim())
+        return content;
+    if (Array.isArray(content)) {
+        const text = content
+            .map((part) => {
+            if (typeof part === "string")
+                return part;
+            if (typeof part?.text === "string")
+                return part.text;
+            if (typeof part?.content === "string")
+                return part.content;
+            return "";
+        })
+            .join("")
+            .trim();
+        if (text)
+            return text;
+    }
+    if (content && typeof content === "object") {
+        const text = [
+            content.text,
+            content.content,
+            content.message,
+            content.output_text,
+        ].find((value) => typeof value === "string" && value.trim());
+        if (typeof text === "string")
+            return text;
+    }
+    const fallback = message?.text ||
+        parsed?.choices?.[0]?.text ||
+        parsed?.message ||
+        parsed?.output_text ||
+        parsed?.output?.[0]?.content?.[0]?.text;
+    return typeof fallback === "string" && fallback.trim() ? fallback : null;
+}
+function toSnapshotNumber(value) {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : 0;
+}
+function parseBooleanEnv(value) {
+    return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+function parsePositiveIntegerEnv(value, fallback, max) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0)
+        return fallback;
+    return Math.min(Math.floor(parsed), max);
+}
+function extractTickerSymbolsFromText(text) {
+    const ignored = new Set([
+        "AI", "API", "IRS", "CA", "MFJ", "SS",
+        "A", "AN", "AND", "ARE", "ASK", "AT", "CURRENT", "DIVIDEND", "DIVIDENDS", "DO", "EACH", "EVERY", "FOR", "FROM", "GET", "GIVE", "HERE",
+        "IN", "INVESTMENT", "INVESTMENTS", "IS", "LATEST", "LIST", "MARKET", "ME", "NAV", "OF", "PORTFOLIO", "PRICE", "PRICES", "QUOTE",
+        "QUOTES", "RATIO", "SHOW", "SYMBOL", "SYMBOLS", "THE", "THEIR", "TICKER", "TICKERS", "TODAY", "VALUE", "WHAT", "YIELD",
+    ]);
+    const matches = text.match(/\b\^?[A-Za-z][A-Za-z0-9.-]{0,9}\b/g) || [];
+    return [...new Set(matches.map((match) => match.toUpperCase()).filter((match) => !ignored.has(match)))];
+}
+function questionLikelyNeedsWebSearch(text) {
+    return /\b(current|latest|today|market|quote|price|dividend|distribution|yield|ex[-\s]?dividend|nav|expense ratio)\b/i.test(text);
+}
+function buildCompactExternalLookupContext(snapshot, userContent) {
+    if (!snapshot || typeof snapshot !== "object") {
+        return { querySymbols: extractTickerSymbolsFromText(userContent) };
+    }
+    const querySymbols = extractTickerSymbolsFromText(userContent);
+    const upperSymbols = new Set(querySymbols);
+    const source = snapshot;
+    const holdings = Array.isArray(source.holdings)
+        ? source.holdings.filter((holding) => {
+            const symbols = [holding?.symbol, holding?.effectiveSymbol, holding?.newSymbol].map((value) => normalizePortfolioMatchValue(value));
+            return symbols.some((symbol) => upperSymbols.has(symbol));
+        })
+        : [];
+    const tickers = Array.isArray(source.referenceTables?.tickers)
+        ? source.referenceTables.tickers.filter((ticker) => upperSymbols.has(normalizePortfolioMatchValue(ticker?.symbol)))
+        : [];
+    return {
+        generatedAt: source.generatedAt,
+        querySymbols,
+        matchingHoldings: holdings,
+        matchingTickers: tickers,
+        metrics: source.metrics || {},
+    };
+}
+function buildAssistantPortfolioContext(snapshot, userContent) {
+    if (!snapshot || typeof snapshot !== "object") {
+        return { querySymbols: extractTickerSymbolsFromText(userContent) };
+    }
+    const source = snapshot;
+    return {
+        generatedAt: source.generatedAt,
+        querySymbols: extractTickerSymbolsFromText(userContent),
+        settings: source.settings,
+        view: source.view
+            ? {
+                activeTab: source.view.activeTab,
+                filters: source.view.filters,
+                sort: source.view.sort,
+                selectedAssetIds: source.view.selectedAssetIds,
+            }
+            : undefined,
+        holdings: Array.isArray(source.holdings)
+            ? source.holdings.map((holding) => ({
+                id: holding?.id,
+                description: holding?.description,
+                account: holding?.account,
+                category: holding?.category,
+                symbol: holding?.symbol,
+                effectiveSymbol: holding?.effectiveSymbol,
+                totalInvestment: holding?.totalInvestment,
+                yearlyIncome: holding?.yearlyIncome,
+                allocationPercent: holding?.allocationPercent,
+                includeIncome: holding?.includeIncome,
+                overrideProposal: holding?.overrideProposal,
+                taxTreatment: holding?.taxTreatment,
+                investmentType: holding?.investmentType,
+            }))
+            : [],
+        accounts: Array.isArray(source.accounts)
+            ? source.accounts.map((account) => ({
+                id: account?.id,
+                account: account?.account,
+                taxStatus: account?.taxStatus,
+            }))
+            : [],
+        referenceTables: {
+            tickers: Array.isArray(source.referenceTables?.tickers)
+                ? source.referenceTables.tickers.map((ticker) => ({
+                    symbol: ticker?.symbol,
+                    category: ticker?.category,
+                    taxTreatment: ticker?.taxTreatment,
+                    description: ticker?.description,
+                }))
+                : [],
+            categories: Array.isArray(source.referenceTables?.categories)
+                ? source.referenceTables.categories.map((row) => ({ name: row?.name }))
+                : [],
+            taxTreatment: Array.isArray(source.referenceTables?.taxTreatment)
+                ? source.referenceTables.taxTreatment.map((row) => ({ label: row?.label }))
+                : [],
+            accountTaxType: Array.isArray(source.referenceTables?.accountTaxType)
+                ? source.referenceTables.accountTaxType.map((row) => ({ taxStatus: row?.taxStatus }))
+                : [],
+            investmentType: Array.isArray(source.referenceTables?.investmentType)
+                ? source.referenceTables.investmentType.map((row) => ({ name: row?.name }))
+                : [],
+        },
+        editableTables: source.editableTables,
+        assetClasses: source.assetClasses || {},
+        metrics: source.metrics || {},
+        concentration: source.concentration || {},
+    };
+}
+function formatSnapshotCurrency(value) {
+    return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+function formatSnapshotPercent(value) {
+    return `${(value * 100).toFixed(2)}%`;
+}
+function formatSignedCurrency(value) {
+    const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+    return `${sign}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+function formatQuoteTime(epochSeconds, timeZone) {
+    const epoch = Number(epochSeconds);
+    if (!Number.isFinite(epoch) || epoch <= 0)
+        return "the latest available Yahoo Finance timestamp";
+    return new Date(epoch * 1000).toLocaleString("en-US", {
+        timeZone: timeZone || "America/New_York",
+        dateStyle: "medium",
+        timeStyle: "short",
+    });
+}
+function escapeMarkdownCell(value) {
+    return String(value ?? "")
+        .replace(/\|/g, "\\|")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+function getRecentUserContent(messages) {
+    return [...messages].reverse().find((message) => message.role === "user")?.content || "";
+}
+function getYahooFinanceQuoteSymbol(text) {
+    const urlMatch = text.match(/finance\.yahoo\.com\/quote\/([^/?#\s]+)/i);
+    if (urlMatch?.[1])
+        return decodeURIComponent(urlMatch[1]).toUpperCase();
+    if (!/\b(current|latest|today|market|quote|prices?|value)\b/i.test(text))
+        return null;
+    if (/\b(each|all|every|portfolio|investments?|tickers?|symbols?)\b/i.test(text))
+        return null;
+    const quotePatterns = [
+        /\b(?:quote|prices?|value)\s+(?:of|for)?\s*(\^?[A-Za-z][A-Za-z0-9.-]{0,9})\b/i,
+        /\b(?:current|latest|today|market)\s+(?:quote|prices?|value)\s+(?:of|for)?\s*(\^?[A-Za-z][A-Za-z0-9.-]{0,9})\b/i,
+        /\b(\^?[A-Za-z][A-Za-z0-9.-]{0,9})\s+(?:current\s+|latest\s+|today\s+|market\s+)?(?:quote|prices?|value)\b/i,
+    ];
+    for (const pattern of quotePatterns) {
+        const match = text.match(pattern)?.[1];
+        if (!match)
+            continue;
+        const symbol = match.toUpperCase();
+        if (extractTickerSymbolsFromText(symbol).length === 1)
+            return symbol;
+    }
+    const symbols = extractTickerSymbolsFromText(text);
+    if (symbols.length !== 1)
+        return null;
+    return symbols[0];
+}
+const YAHOO_QUOTE_SYMBOL_ALIASES = {
+    SPX: "^SPX",
+};
+async function fetchYahooFinanceQuote(symbol) {
+    const cleanSymbol = symbol.toUpperCase();
+    const lookupSymbol = YAHOO_QUOTE_SYMBOL_ALIASES[cleanSymbol] || cleanSymbol;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(lookupSymbol)}?range=1d&interval=1m`;
+    const response = await getTextFromHttps(url, 8000);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(`Yahoo quote endpoint returned ${response.statusCode}.`);
+    }
+    const parsed = JSON.parse(response.body);
+    const result = parsed?.chart?.result?.[0];
+    const meta = result?.meta;
+    if (!meta)
+        throw new Error("Yahoo quote endpoint did not include quote metadata.");
+    const price = toSnapshotNumber(meta.regularMarketPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+        throw new Error("Yahoo quote endpoint did not include a usable current market price.");
+    }
+    const previousClose = toSnapshotNumber(meta.previousClose ?? meta.chartPreviousClose);
+    const change = previousClose > 0 ? price - previousClose : 0;
+    return {
+        symbol: cleanSymbol,
+        lookupSymbol,
+        name: String(meta.longName || meta.shortName || cleanSymbol),
+        price,
+        previousClose,
+        change,
+        changePercent: previousClose > 0 ? change / previousClose : 0,
+        dayLow: toSnapshotNumber(meta.regularMarketDayLow),
+        dayHigh: toSnapshotNumber(meta.regularMarketDayHigh),
+        volume: toSnapshotNumber(meta.regularMarketVolume),
+        currency: String(meta.currency || "USD"),
+        quoteTime: formatQuoteTime(meta.regularMarketTime, meta.exchangeTimezoneName),
+        yahooUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(lookupSymbol)}/`,
+    };
+}
+async function answerYahooFinanceQuoteQuestion(messages) {
+    const lastUserMessage = getRecentUserContent(messages);
+    const symbol = getYahooFinanceQuoteSymbol(lastUserMessage);
+    if (!symbol)
+        return null;
+    try {
+        const quote = await fetchYahooFinanceQuote(symbol);
+        return {
+            message: [
+                `Yahoo Finance quote for **${quote.symbol}** (${quote.name}): **${formatSnapshotCurrency(quote.price)} ${quote.currency}** as of ${quote.quoteTime}.`,
+                `Change vs previous close ${formatSnapshotCurrency(quote.previousClose)}: **${formatSignedCurrency(quote.change)} (${quote.changePercent >= 0 ? "+" : ""}${formatSnapshotPercent(quote.changePercent)})**.`,
+                quote.dayLow || quote.dayHigh ? `Day range: ${formatSnapshotCurrency(quote.dayLow)} - ${formatSnapshotCurrency(quote.dayHigh)}.` : "",
+                quote.volume ? `Volume: ${quote.volume.toLocaleString("en-US", { maximumFractionDigits: 0 })}.` : "",
+                `Source: ${quote.yahooUrl}`,
+            ].filter(Boolean).join("\n"),
+            actions: [],
+            model: "direct-yahoo-finance-chart",
+        };
+    }
+    catch (error) {
+        const message = error instanceof Error && error.message ? error.message : "Yahoo Finance lookup failed.";
+        return {
+            message: `I could not fetch the Yahoo Finance quote directly for ${symbol}: ${message}`,
+            actions: [],
+            model: "direct-yahoo-finance-chart",
+        };
+    }
+}
+function isLikelyMarketTickerSymbol(value) {
+    const symbol = String(value || "").trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol))
+        return false;
+    return !new Set(["SS", "AUX-SS"]).has(symbol);
+}
+function getPortfolioPriceRequest(text) {
+    return /\b(current|latest|today|market)?\s*(prices?|quotes?)\b/i.test(text) &&
+        /\b(each|all|every|portfolio|investments?|tickers?|symbols?)\b/i.test(text);
+}
+function getPortfolioTickerSymbols(snapshot) {
+    if (!snapshot || typeof snapshot !== "object")
+        return [];
+    const source = snapshot;
+    const holdings = Array.isArray(source.holdings) ? source.holdings : [];
+    const symbols = holdings
+        .flatMap((holding) => [holding?.effectiveSymbol, holding?.symbol])
+        .map((symbol) => String(symbol || "").trim().toUpperCase())
+        .filter((symbol) => isLikelyMarketTickerSymbol(symbol));
+    return [...new Set(symbols)].sort((a, b) => a.localeCompare(b));
+}
+async function mapWithConcurrency(items, limit, mapper) {
+    const results = [];
+    for (let index = 0; index < items.length; index += limit) {
+        const chunk = items.slice(index, index + limit);
+        results.push(...await Promise.all(chunk.map(mapper)));
+    }
+    return results;
+}
+async function answerPortfolioTickerPricesQuestion(messages, snapshot) {
+    const lastUserMessage = getRecentUserContent(messages);
+    if (!getPortfolioPriceRequest(lastUserMessage))
+        return null;
+    const symbols = getPortfolioTickerSymbols(snapshot);
+    if (symbols.length === 0) {
+        return {
+            message: "I could not find any market-style ticker symbols in the current portfolio snapshot.",
+            actions: [],
+            model: "direct-yahoo-finance-chart",
+        };
+    }
+    const quoteResults = await mapWithConcurrency(symbols, 6, async (symbol) => {
+        try {
+            return { symbol, quote: await fetchYahooFinanceQuote(symbol), error: "" };
+        }
+        catch (error) {
+            const message = error instanceof Error && error.message ? error.message : "quote lookup failed";
+            return { symbol, quote: null, error: message };
+        }
+    });
+    const tableRows = quoteResults.map((result) => {
+        if (!result.quote) {
+            return `| ${escapeMarkdownCell(result.symbol)} | unavailable | - | - | - | ${escapeMarkdownCell(result.error)} |`;
+        }
+        const quote = result.quote;
+        return `| ${escapeMarkdownCell(quote.symbol)} | ${formatSnapshotCurrency(quote.price)} ${escapeMarkdownCell(quote.currency)} | ${formatSignedCurrency(quote.change)} | ${quote.changePercent >= 0 ? "+" : ""}${formatSnapshotPercent(quote.changePercent)} | ${escapeMarkdownCell(quote.quoteTime)} | ${escapeMarkdownCell(quote.name)} |`;
+    });
+    return {
+        message: [
+            `Current Yahoo Finance prices for ${symbols.length} portfolio ticker${symbols.length === 1 ? "" : "s"}:`,
+            "",
+            "| Ticker | Price | Change | Change % | Quote time | Name / status |",
+            "|---|---:|---:|---:|---|---|",
+            ...tableRows,
+        ].join("\n"),
+        actions: [],
+        model: "direct-yahoo-finance-chart",
+    };
+}
+function normalizePortfolioMatchValue(value) {
+    return String(value || "")
+        .replace(/[';]s\b/gi, "")
+        .replace(/[^a-z0-9]+/gi, " ")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toUpperCase();
+}
+function portfolioMatchTokens(value) {
+    const normalized = normalizePortfolioMatchValue(value);
+    if (!normalized)
+        return [];
+    return [
+        normalized,
+        ...normalized.split(/[^A-Z0-9]+/).filter(Boolean),
+    ];
+}
+function portfolioValueMatchesSelector(value, selector) {
+    const normalized = normalizePortfolioMatchValue(value);
+    if (!normalized || !selector)
+        return false;
+    if (normalized === selector)
+        return true;
+    if (portfolioMatchTokens(value).includes(selector))
+        return true;
+    if (selector === "SS" && normalized.includes("SOCIAL SECURITY"))
+        return true;
+    return selector.length >= 3 && normalized.includes(selector);
+}
+function portfolioSelectorTokens(selector) {
+    return normalizePortfolioMatchValue(selector)
+        .split(/[^A-Z0-9]+/)
+        .map((token) => token.trim())
+        .filter((token) => token && !["ALL", "LINE", "LINES", "ROW", "ROWS", "HOLDING", "HOLDINGS", "INVESTMENT", "INVESTMENTS", "DESC", "DESCRIPTION", "SYMBOL", "SYMBOLS", "TICKER", "TICKERS"].includes(token));
+}
+function holdingMatchesSelector(holding, selector) {
+    const values = [
+        holding?.symbol,
+        holding?.effectiveSymbol,
+        holding?.newSymbol,
+        holding?.description,
+        holding?.account,
+    ];
+    if (values.some((value) => portfolioValueMatchesSelector(value, selector)))
+        return true;
+    const combined = values.filter(Boolean).join(" ");
+    const tokens = portfolioSelectorTokens(selector);
+    return tokens.length > 1 && tokens.every((token) => portfolioValueMatchesSelector(combined, token));
+}
+function holdingMatchesExactSymbolSelector(holding, selector) {
+    const selectorKey = normalizePortfolioMatchValue(selector);
+    if (!selectorKey)
+        return false;
+    const activeSymbols = [
+        holding?.symbol,
+        holding?.effectiveSymbol,
+        holding?.overrideProposal ? holding?.newSymbol : undefined,
+    ];
+    return activeSymbols.some((value) => normalizePortfolioMatchValue(value) === selectorKey);
+}
+function getTickerTotalQuestion(matchesText) {
+    const socialSecurityMatch = /\bsocial security\b/i.test(matchesText);
+    const symbolMatch = matchesText.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
+    const asksTotal = /\b(total|sum|amount|value)\b/i.test(matchesText);
+    if (socialSecurityMatch && asksTotal)
+        return "SS";
+    return symbolMatch && asksTotal ? symbolMatch[1].toUpperCase() : null;
+}
+function answerSymbolDividendTableQuestion(messages, snapshot) {
+    const lastUserMessage = getRecentUserContent(messages);
+    const lastLower = lastUserMessage.toLowerCase();
+    const recentText = messages.slice(-6).map((message) => message.content).join("\n").toLowerCase();
+    const mentionsSymbols = /\b(symbols?|tickers?)\b/.test(recentText);
+    const asksForTable = /\b(table|list|show|include|included|all|continue)\b/.test(lastLower);
+    const asksForDividendData = /\b(dividends?|income|yield|payout)\b/.test(recentText);
+    if (!snapshot || typeof snapshot !== "object" || !mentionsSymbols || !asksForTable || !asksForDividendData) {
+        return null;
+    }
+    const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
+    if (holdings.length === 0)
+        return null;
+    const grouped = new Map();
+    holdings.forEach((holding) => {
+        const symbol = String(holding?.effectiveSymbol || holding?.symbol || "(blank)").trim() || "(blank)";
+        const existing = grouped.get(symbol) || {
+            symbol,
+            holdings: 0,
+            accounts: new Set(),
+            totalInvestment: 0,
+            includedTotal: 0,
+            annualIncome: 0,
+            includedIncome: 0,
+        };
+        existing.holdings += 1;
+        if (holding?.account)
+            existing.accounts.add(String(holding.account));
+        existing.totalInvestment += toSnapshotNumber(holding?.totalInvestment);
+        existing.includedTotal += toSnapshotNumber(holding?.includedTotal);
+        existing.annualIncome += toSnapshotNumber(holding?.yearlyIncome);
+        existing.includedIncome += toSnapshotNumber(holding?.filteredIncome);
+        grouped.set(symbol, existing);
+    });
+    const rows = [...grouped.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const totals = rows.reduce((acc, row) => {
+        acc.totalInvestment += row.totalInvestment;
+        acc.includedTotal += row.includedTotal;
+        acc.annualIncome += row.annualIncome;
+        acc.includedIncome += row.includedIncome;
+        return acc;
+    }, { totalInvestment: 0, includedTotal: 0, annualIncome: 0, includedIncome: 0 });
+    const tableLines = [
+        "| Symbol | Holdings | Accounts | Total investment | Included total | Annual dividends/income | Included income | Yield |",
+        "|---|---:|---|---:|---:|---:|---:|---:|",
+        ...rows.map((row) => {
+            const accounts = [...row.accounts].slice(0, 3).join(", ");
+            const accountLabel = row.accounts.size > 3 ? `${accounts}, +${row.accounts.size - 3}` : accounts;
+            const yieldValue = row.totalInvestment > 0 ? row.annualIncome / row.totalInvestment : 0;
+            return `| ${escapeMarkdownCell(row.symbol)} | ${row.holdings} | ${escapeMarkdownCell(accountLabel || "-")} | ${formatSnapshotCurrency(row.totalInvestment)} | ${formatSnapshotCurrency(row.includedTotal)} | ${formatSnapshotCurrency(row.annualIncome)} | ${formatSnapshotCurrency(row.includedIncome)} | ${formatSnapshotPercent(yieldValue)} |`;
+        }),
+        `| Total | ${holdings.length} | - | ${formatSnapshotCurrency(totals.totalInvestment)} | ${formatSnapshotCurrency(totals.includedTotal)} | ${formatSnapshotCurrency(totals.annualIncome)} | ${formatSnapshotCurrency(totals.includedIncome)} | ${formatSnapshotPercent(totals.totalInvestment > 0 ? totals.annualIncome / totals.totalInvestment : 0)} |`,
+    ];
+    return {
+        message: `Here is the symbol table using the app snapshot. I am treating yearly income as dividends/income because detailed ex-dividend and payout schedule fields are not included in the chat snapshot.\n\n${tableLines.join("\n")}`,
+        actions: [],
+        model: "local-portfolio-calculation",
+    };
+}
+function answerSimplePortfolioQuestion(messages, snapshot) {
+    const lastUserMessage = getRecentUserContent(messages);
+    const symbol = getTickerTotalQuestion(lastUserMessage);
+    if (!symbol || !snapshot || typeof snapshot !== "object")
+        return null;
+    const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
+    const selector = normalizePortfolioMatchValue(symbol);
+    const exactSymbolOnly = isLikelyMarketTickerSymbol(symbol);
+    const matches = holdings.filter((holding) => exactSymbolOnly ? holdingMatchesExactSymbolSelector(holding, selector) : holdingMatchesSelector(holding, selector));
+    if (matches.length === 0)
+        return null;
+    const totalInvestment = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.totalInvestment), 0);
+    const includedTotal = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.includedTotal), 0);
+    const annualIncome = matches.reduce((sum, holding) => sum + toSnapshotNumber(holding?.yearlyIncome), 0);
+    const includedAnnualIncome = matches.reduce((sum, holding) => {
+        if (Object.prototype.hasOwnProperty.call(holding || {}, "filteredIncome")) {
+            return sum + toSnapshotNumber(holding?.filteredIncome);
+        }
+        return sum + (holding?.includeIncome ? toSnapshotNumber(holding?.yearlyIncome) : 0);
+    }, 0);
+    const investmentPhrase = totalInvestment === 0 && annualIncome > 0
+        ? "Total investment is $0 because these appear to be income-only rows."
+        : `Total investment is ${formatSnapshotCurrency(totalInvestment)}. Included investment total is ${formatSnapshotCurrency(includedTotal)}.`;
+    return {
+        message: `${symbol} appears in ${matches.length} holding${matches.length === 1 ? "" : "s"}. ${investmentPhrase} Annual income is ${formatSnapshotCurrency(annualIncome)}. Included annual income is ${formatSnapshotCurrency(includedAnnualIncome)}. I highlighted the matching rows.`,
+        actions: [{ type: "selectAsset", payload: { assetId: symbol, matchMode: exactSymbolOnly ? "symbol" : "row" }, requiresConfirmation: false }],
+        model: "local-portfolio-calculation",
+    };
+}
+function openRouterErrorMessage(statusCode, body) {
+    let detail = body;
+    try {
+        const parsed = JSON.parse(body);
+        detail = parsed?.error?.message || parsed?.message || body;
+    }
+    catch {
+        detail = body;
+    }
+    if (statusCode === 401 || statusCode === 403)
+        return `OpenRouter authentication failed: ${detail}`;
+    if (statusCode === 404 || statusCode === 422)
+        return `OpenRouter model/request was invalid: ${detail}`;
+    if (statusCode === 429)
+        return `OpenRouter rate limit reached: ${detail}`;
+    if (statusCode >= 500)
+        return `OpenRouter service error: ${detail}`;
+    return `OpenRouter request failed (${statusCode}): ${detail}`;
+}
+async function handlePortfolioChatRoute(event, origin) {
+    if (event.httpMethod !== "POST") {
+        return jsonResponse(405, { error: "Portfolio chat route supports POST only." }, origin);
+    }
+    const authResult = await authenticatePortfolioRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    let body = null;
+    try {
+        body = parseJsonBody(event);
+    }
+    catch {
+        return jsonResponse(400, { error: "Invalid JSON body." }, origin);
+    }
+    if (!body || typeof body !== "object") {
+        return jsonResponse(400, { error: "Missing portfolio chat request body." }, origin);
+    }
+    const messages = sanitizeChatMessages(body.messages);
+    if (messages.length === 0) {
+        return jsonResponse(400, { error: "Portfolio chat requires at least one user message." }, origin);
+    }
+    const directQuoteAnswer = await answerYahooFinanceQuoteQuestion(messages);
+    if (directQuoteAnswer) {
+        return jsonResponse(200, directQuoteAnswer, origin);
+    }
+    const portfolioPricesAnswer = await answerPortfolioTickerPricesQuestion(messages, body.portfolioSnapshot);
+    if (portfolioPricesAnswer) {
+        return jsonResponse(200, portfolioPricesAnswer, origin);
+    }
+    const localAnswer = answerSymbolDividendTableQuestion(messages, body.portfolioSnapshot) ||
+        answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
+    if (localAnswer) {
+        return jsonResponse(200, localAnswer, origin);
+    }
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+        return jsonResponse(500, { error: "Missing OPENROUTER_API_KEY on the backend." }, origin);
+    }
+    const lastUserMessage = getRecentUserContent(messages);
+    const webSearchEnabled = parseBooleanEnv(process.env.ENABLE_ASSISTANT_WEB_SEARCH);
+    const shouldAttachWebSearch = webSearchEnabled && questionLikelyNeedsWebSearch(lastUserMessage);
+    const model = shouldAttachWebSearch
+        ? process.env.OPENROUTER_WEB_SEARCH_MODEL || process.env.OPENROUTER_MODEL || "openrouter/free"
+        : process.env.OPENROUTER_MODEL || "openrouter/free";
+    const openRouterTimeoutMs = parsePositiveIntegerEnv(process.env.OPENROUTER_TIMEOUT_MS, shouldAttachWebSearch ? 22000 : 18000, 24000);
+    const webSearchMaxResults = parsePositiveIntegerEnv(process.env.ASSISTANT_WEB_SEARCH_MAX_RESULTS, 3, 10);
+    const webSearchContextSize = String(process.env.ASSISTANT_WEB_SEARCH_CONTEXT_SIZE || "low").toLowerCase();
+    const webSearchParameters = {
+        max_results: webSearchMaxResults,
+        max_total_results: webSearchMaxResults,
+        search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
+    };
+    const assistantContext = buildAssistantPortfolioContext(body.portfolioSnapshot, lastUserMessage);
+    const modelMessages = (0, assistantActionPrompt_1.appendPortfolioActionContext)(messages, body.portfolioSnapshot);
+    const portfolioContext = JSON.stringify(shouldAttachWebSearch
+        ? buildCompactExternalLookupContext(body.portfolioSnapshot, lastUserMessage)
+        : assistantContext);
+    const requestPayload = {
+        model,
+        temperature: 0.2,
+        max_tokens: 1600,
+        messages: [
+            { role: "system", content: PORTFOLIO_ASSISTANT_SYSTEM_PROMPT },
+            {
+                role: "user",
+                content: `Current portfolio state JSON. Treat this as the only source of truth and do not expose raw private data unless needed to answer the user's question:\n${portfolioContext}`,
+            },
+            ...modelMessages,
+        ],
+        ...(shouldAttachWebSearch
+            ? {
+                tools: [
+                    {
+                        type: "openrouter:web_search",
+                        parameters: webSearchParameters,
+                    },
+                ],
+            }
+            : {}),
+    };
+    let openRouterResult;
+    try {
+        openRouterResult = await postJsonToOpenRouter(requestPayload, apiKey, openRouterTimeoutMs);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "OpenRouter network error.";
+        if (message.toLowerCase().includes("timed out")) {
+            return jsonResponse(200, {
+                message: shouldAttachWebSearch
+                    ? "OpenRouter web search timed out before returning current market data. Try the same question again, or ask for a known source/site if you want me to narrow the lookup."
+                    : "OpenRouter timed out before returning an answer. Try again with a smaller question.",
+                actions: [],
+                model,
+            }, origin);
+        }
+        return jsonResponse(502, { error: message }, origin);
+    }
+    if (openRouterResult.statusCode < 200 || openRouterResult.statusCode >= 300) {
+        return jsonResponse(openRouterResult.statusCode === 429 ? 429 : 502, { error: openRouterErrorMessage(openRouterResult.statusCode, openRouterResult.body) }, origin);
+    }
+    try {
+        const parsed = JSON.parse(openRouterResult.body);
+        const content = extractAssistantText(parsed);
+        if (!content) {
+            const finishReason = parsed?.choices?.[0]?.finish_reason;
+            const fallbackMessage = finishReason === "length"
+                ? "OpenRouter stopped before producing a complete answer. Try asking for fewer rows or fewer columns."
+                : "OpenRouter returned an empty answer. Try rephrasing the question or asking for a smaller table.";
+            return jsonResponse(200, {
+                message: fallbackMessage,
+                actions: [],
+                model: String(parsed?.model || model),
+                usage: parsed?.usage,
+            }, origin);
+        }
+        const normalized = parseAssistantChatContent(content);
+        const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content || "";
+        const actions = normalizeAssistantActions(normalized.actions, lastUserMessage, content);
+        const inferredBulkAction = actions.find((action) => action.type === "setAllCheckboxes");
+        const message = normalized.actions.length === 0 && inferredBulkAction
+            ? Boolean(inferredBulkAction.payload?.checked)
+                ? "Selecting all Inc checkboxes."
+                : "Clearing all Inc checkboxes."
+            : normalized.message;
+        const response = {
+            message,
+            actions,
+            model: String(parsed?.model || model),
+            usage: parsed?.usage,
+        };
+        return jsonResponse(200, response, origin);
+    }
+    catch {
+        return jsonResponse(502, { error: "OpenRouter returned invalid JSON." }, origin);
+    }
+}
 async function handleWorkbookRoute(event, origin) {
+    const authResult = await authenticatePortfolioRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
     let store;
     try {
         store = new workbookStore_1.WorkbookStore();
@@ -87,20 +1266,22 @@ async function handleWorkbookRoute(event, origin) {
         return jsonResponse(500, { error: message }, origin);
     }
     const [, workspaceId = "default", tabName, action] = getProxySegments(event);
+    const requestedWorkspaceId = workspaceId || "default";
+    const storageWorkspaceId = scopedWorkspaceId(requestedWorkspaceId, authResult.auth);
     try {
         if (event.httpMethod === "GET") {
-            if (!workspaceId) {
+            if (!requestedWorkspaceId) {
                 return jsonResponse(400, { error: "Missing workspaceId in workbook path." }, origin);
             }
             if (tabName) {
-                const result = await store.getTab(workspaceId, tabName);
-                return jsonResponse(200, result, origin);
+                const result = await store.getTab(storageWorkspaceId, tabName);
+                return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
             }
-            const result = await store.getWorkspace(workspaceId);
-            return jsonResponse(200, result, origin);
+            const result = await store.getWorkspace(storageWorkspaceId);
+            return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
         }
         if (event.httpMethod === "PUT") {
-            if (!workspaceId || !tabName) {
+            if (!requestedWorkspaceId || !tabName) {
                 return jsonResponse(400, { error: "PUT requires /hello/workbook/{workspaceId}/{tabName}." }, origin);
             }
             let body = null;
@@ -113,11 +1294,11 @@ async function handleWorkbookRoute(event, origin) {
             if (!body || !("data" in body)) {
                 return jsonResponse(400, { error: "PUT body must include a data field." }, origin);
             }
-            const result = await store.putTab(workspaceId, tabName, body.data);
-            return jsonResponse(200, result, origin);
+            const result = await store.putTab(storageWorkspaceId, tabName, body.data);
+            return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
         }
         if (event.httpMethod === "POST") {
-            if (!workspaceId || action !== "save") {
+            if (!requestedWorkspaceId || action !== "save") {
                 return jsonResponse(400, { error: "POST requires /hello/workbook/{workspaceId}/save." }, origin);
             }
             let body = null;
@@ -130,8 +1311,8 @@ async function handleWorkbookRoute(event, origin) {
             if (!body || (typeof body !== "object")) {
                 return jsonResponse(400, { error: "Missing workbook payload." }, origin);
             }
-            const result = await store.saveWorkspace(workspaceId, body);
-            return jsonResponse(200, result, origin);
+            const result = await store.saveWorkspace(storageWorkspaceId, body);
+            return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
         }
         return jsonResponse(405, { error: "Workbook route supports GET, PUT, and POST." }, origin);
     }
@@ -140,14 +1321,285 @@ async function handleWorkbookRoute(event, origin) {
         return jsonResponse(400, { error: message }, origin);
     }
 }
+async function handleMcpTokenRequest(event, origin, body) {
+    const authResult = await authenticateCognitoRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    let store;
+    try {
+        store = new workbookStore_1.WorkbookStore();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Workbook storage is unavailable.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+    try {
+        const calc = body.calc;
+        if (calc === "MCP_TOKEN_LIST") {
+            const tokens = await store.listMcpTokensForUser(authResult.auth.sub);
+            return jsonResponse(200, {
+                tokens: tokens.map((token) => ({
+                    tokenId: token.tokenId,
+                    workspaceId: token.workspaceId,
+                    label: token.label,
+                    createdAt: token.createdAt,
+                    revokedAt: token.revokedAt,
+                    active: !token.revokedAt,
+                })),
+            }, origin);
+        }
+        if (calc === "MCP_TOKEN_REVOKE") {
+            const tokenId = String(body.tokenId || "").trim();
+            if (!tokenId) {
+                return jsonResponse(400, { error: "MCP_TOKEN_REVOKE requires tokenId." }, origin);
+            }
+            const result = await store.revokeMcpTokenForUser(authResult.auth.sub, tokenId);
+            if (!result) {
+                return jsonResponse(404, { error: "MCP token was not found for this user." }, origin);
+            }
+            return jsonResponse(200, { ok: true, ...result }, origin);
+        }
+        const workspaceId = sanitizeWorkspacePart(String(body.workspaceId || "default"));
+        const token = createMcpTokenSecret();
+        const now = new Date().toISOString();
+        const record = {
+            tokenId: createTokenId(),
+            tokenHash: hashMcpToken(token),
+            ownerSub: authResult.auth.sub,
+            ownerEmail: authResult.auth.email,
+            workspaceId,
+            label: String(body.label || "ChatGPT connector").trim().slice(0, 120) || "ChatGPT connector",
+            createdAt: now,
+        };
+        const saved = await store.putMcpToken(record);
+        return jsonResponse(200, {
+            ...saved,
+            token,
+            tokenType: "mcp_token",
+            note: "This token is shown once. Store it in ChatGPT as the mcp_token query parameter.",
+        }, origin);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "MCP token operation failed.";
+        return jsonResponse(400, { error: message }, origin);
+    }
+}
+async function handlePublicReportRequest(event, body) {
+    const calc = body.calc;
+    const origin = resolveCorsOrigin(event, calc !== "PUBLIC_REPORT_GET");
+    if (calc === "PUBLIC_REPORT_GET") {
+        const requestedSlug = String(body.slug || "").trim().toLowerCase();
+        const slug = normalizePublicReportSlug(requestedSlug);
+        if (!slug || slug !== requestedSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
+            return jsonResponse(400, { error: "Invalid public report slug." }, origin);
+        }
+        try {
+            const store = new workbookStore_1.WorkbookStore();
+            const report = await store.getPublicReport(slug);
+            if (!report)
+                return jsonResponse(404, { error: "Public report not found." }, origin);
+            return jsonResponse(200, {
+                report: {
+                    id: report.reportId,
+                    slug: report.slug,
+                    name: report.name,
+                    payload: report.payload,
+                    createdAt: report.createdAt,
+                    updatedAt: report.updatedAt,
+                },
+            }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to load public report.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    const authResult = await authenticateCognitoRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    let store;
+    try {
+        store = new workbookStore_1.WorkbookStore();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Public report storage is unavailable.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+    if (calc === "PUBLIC_REPORT_LIST") {
+        try {
+            const reports = await store.listPublicReportsForUser(authResult.auth.sub);
+            return jsonResponse(200, {
+                reports: reports.map((report) => ({
+                    id: report.reportId,
+                    slug: report.slug,
+                    name: report.name,
+                    payload: report.payload,
+                    createdAt: report.createdAt,
+                    updatedAt: report.updatedAt,
+                })),
+            }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to list public reports.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    if (calc === "PUBLIC_REPORT_DELETE") {
+        const reportId = String(body.reportId || "").trim();
+        if (!/^[a-zA-Z0-9-]{1,100}$/.test(reportId)) {
+            return jsonResponse(400, { error: "Invalid public report id." }, origin);
+        }
+        try {
+            const deleted = await store.deletePublicReport(authResult.auth.sub, reportId);
+            if (!deleted)
+                return jsonResponse(404, { error: "Published report not found." }, origin);
+            return jsonResponse(200, { deleted: true, reportId }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to delete public report.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    const reportId = String(body.reportId || "").trim();
+    const name = String(body.name || "").trim();
+    const publicUsernameResult = readPublicUsername(body.publicUsername);
+    const requestedSlug = String(body.slug || "").trim().toLowerCase();
+    const slug = normalizePublicReportSlug(requestedSlug);
+    const previousSlugValue = String(body.previousSlug || "").trim().toLowerCase();
+    const previousSlug = previousSlugValue ? normalizePublicReportSlug(previousSlugValue) : undefined;
+    if (!/^[a-zA-Z0-9-]{1,100}$/.test(reportId)) {
+        return jsonResponse(400, { error: "Invalid public report id." }, origin);
+    }
+    if (!name || name.length > 80) {
+        return jsonResponse(400, { error: "Report name must contain between 1 and 80 characters." }, origin);
+    }
+    if ("error" in publicUsernameResult) {
+        return jsonResponse(400, { error: publicUsernameResult.error }, origin);
+    }
+    if (!slug || slug !== requestedSlug || RESERVED_PUBLIC_REPORT_SLUGS.has(slug)) {
+        return jsonResponse(400, { error: "Invalid or reserved public report slug." }, origin);
+    }
+    if (!slug.startsWith(`${publicUsernameResult.value}-`)) {
+        return jsonResponse(400, { error: "The public report URL must use your claimed username." }, origin);
+    }
+    if (previousSlugValue && previousSlug !== previousSlugValue) {
+        return jsonResponse(400, { error: "Invalid previous public report slug." }, origin);
+    }
+    const payloadResult = readPublicReportPayload(body.payload);
+    if ("error" in payloadResult) {
+        return jsonResponse(400, { error: payloadResult.error }, origin);
+    }
+    const now = new Date().toISOString();
+    const payload = { ...payloadResult.value, reportName: name, generatedAt: now };
+    const record = {
+        reportId,
+        slug,
+        name,
+        ownerSub: authResult.auth.sub,
+        payload,
+        createdAt: now,
+        updatedAt: now,
+    };
+    try {
+        await store.claimPublicUsername(publicUsernameResult.value, authResult.auth.sub);
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+            return jsonResponse(409, { error: "That username is already used by another account." }, origin);
+        }
+        const message = error instanceof Error ? error.message : "Unable to verify the public username.";
+        console.error("PUBLIC_REPORT_UPSERT username verification failed", {
+            requestId: event.requestContext?.requestId,
+            reportId,
+            slug,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            message,
+        });
+        return jsonResponse(500, { error: message }, origin);
+    }
+    try {
+        const saved = await store.putPublicReport(record, previousSlug);
+        return jsonResponse(200, {
+            report: {
+                id: saved.reportId,
+                slug: saved.slug,
+                name: saved.name,
+                payload: saved.payload,
+                createdAt: saved.createdAt,
+                updatedAt: saved.updatedAt,
+            },
+            publicUrl: `https://aftertaxus.com/${encodeURIComponent(publicUsernameResult.value)}/${encodeURIComponent(saved.slug.slice(publicUsernameResult.value.length + 1))}`,
+        }, origin);
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+            return jsonResponse(409, { error: "That public report URL is already in use. Choose a different report name." }, origin);
+        }
+        const message = error instanceof Error ? error.message : "Unable to publish public report.";
+        console.error("PUBLIC_REPORT_UPSERT save failed", {
+            requestId: event.requestContext?.requestId,
+            reportId,
+            slug,
+            previousSlug,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            message,
+        });
+        return jsonResponse(500, { error: message }, origin);
+    }
+}
+async function handlePublicUsernameRequest(event, body) {
+    const calc = body.calc;
+    const origin = resolveCorsOrigin(event, calc !== "PUBLIC_USERNAME_CHECK");
+    const usernameResult = readPublicUsername(body.username);
+    if ("error" in usernameResult) {
+        return jsonResponse(400, { error: usernameResult.error }, origin);
+    }
+    let store;
+    try {
+        store = new workbookStore_1.WorkbookStore();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Username storage is unavailable.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+    if (calc === "PUBLIC_USERNAME_CHECK") {
+        try {
+            const ownerSub = await store.getPublicUsernameOwner(usernameResult.value);
+            return jsonResponse(200, { username: usernameResult.value, available: !ownerSub }, origin);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : "Unable to check username availability.";
+            return jsonResponse(500, { error: message }, origin);
+        }
+    }
+    const authResult = await authenticateCognitoRequest(event, origin);
+    if ("response" in authResult)
+        return authResult.response;
+    try {
+        const claimed = await store.claimPublicUsername(usernameResult.value, authResult.auth.sub);
+        return jsonResponse(200, { username: claimed.username, available: true }, origin);
+    }
+    catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+            return jsonResponse(409, { error: "That username is already used by another account." }, origin);
+        }
+        const message = error instanceof Error ? error.message : "Unable to save the public username.";
+        return jsonResponse(500, { error: message }, origin);
+    }
+}
 const handler = async (event) => {
-    const origin = "*";
+    const segments = getProxySegments(event);
+    const restrictCors = segments[0] === "workbook" ||
+        (segments[0] === "api" && segments[1] === "portfolio-chat");
+    const origin = resolveCorsOrigin(event, restrictCors);
     if (event.httpMethod === "OPTIONS") {
         return corsPreflight(origin);
     }
-    const segments = getProxySegments(event);
     if (segments[0] === "workbook") {
         return handleWorkbookRoute(event, origin);
+    }
+    if (segments[0] === "api" && segments[1] === "portfolio-chat") {
+        return handlePortfolioChatRoute(event, origin);
     }
     if (event.httpMethod !== "POST") {
         return jsonResponse(405, { error: "Method not allowed. Use POST." }, origin);
@@ -167,7 +1619,29 @@ const handler = async (event) => {
     if (typeof calc !== "string") {
         return jsonResponse(400, { error: "Missing field: calc" }, origin);
     }
+    if (calc === "PORTFOLIO_CHAT") {
+        return handlePortfolioChatRoute({
+            ...event,
+            body: JSON.stringify({
+                messages: body.messages,
+                portfolioSnapshot: body.portfolioSnapshot,
+            }),
+            isBase64Encoded: false,
+        }, origin);
+    }
+    if (calc === "MCP_TOKEN_CREATE" || calc === "MCP_TOKEN_LIST" || calc === "MCP_TOKEN_REVOKE") {
+        return handleMcpTokenRequest(event, resolveCorsOrigin(event, true), body);
+    }
+    if (calc === "PUBLIC_REPORT_GET" || calc === "PUBLIC_REPORT_LIST" || calc === "PUBLIC_REPORT_UPSERT" || calc === "PUBLIC_REPORT_DELETE") {
+        return handlePublicReportRequest(event, body);
+    }
+    if (calc === "PUBLIC_USERNAME_CHECK" || calc === "PUBLIC_USERNAME_CLAIM") {
+        return handlePublicUsernameRequest(event, body);
+    }
     if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
+        const authResult = await authenticatePortfolioRequest(event, origin);
+        if ("response" in authResult)
+            return authResult.response;
         let store;
         try {
             store = new workbookStore_1.WorkbookStore();
@@ -177,32 +1651,33 @@ const handler = async (event) => {
             return jsonResponse(500, { error: message }, origin);
         }
         try {
-            const workspaceId = String(body.workspaceId || "default");
+            const requestedWorkspaceId = String(body.workspaceId || "default");
+            const storageWorkspaceId = scopedWorkspaceId(requestedWorkspaceId, authResult.auth);
             if (calc === "WORKBOOK_GET") {
-                const result = await store.getWorkspace(workspaceId);
-                return jsonResponse(200, result, origin);
+                const result = await store.getWorkspace(storageWorkspaceId);
+                return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
             }
             if (calc === "WORKBOOK_GET_TAB") {
                 const tabName = String(body.tabName || "");
                 if (!tabName) {
                     return jsonResponse(400, { error: "WORKBOOK_GET_TAB requires tabName" }, origin);
                 }
-                const result = await store.getTab(workspaceId, tabName);
-                return jsonResponse(200, result, origin);
+                const result = await store.getTab(storageWorkspaceId, tabName);
+                return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
             }
             if (calc === "WORKBOOK_SAVE_TAB") {
                 const tabName = String(body.tabName || "");
                 if (!tabName) {
                     return jsonResponse(400, { error: "WORKBOOK_SAVE_TAB requires tabName" }, origin);
                 }
-                const result = await store.putTab(workspaceId, tabName, body.data);
-                return jsonResponse(200, result, origin);
+                const result = await store.putTab(storageWorkspaceId, tabName, body.data);
+                return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
             }
-            const result = await store.saveWorkspace(workspaceId, {
+            const result = await store.saveWorkspace(storageWorkspaceId, {
                 tabs: body.tabs,
                 settings: body.settings,
             });
-            return jsonResponse(200, result, origin);
+            return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
         }
         catch (error) {
             const message = error instanceof Error ? error.message : "Workbook storage error.";
@@ -226,9 +1701,6 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        if (!isOrdinary2025FilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "FED_TAX_2025_ORDINARY currently supports filingStatus=single or mfj" }, origin);
-        }
         const tax = (0, taxCalcs_1.fedTax2025Ordinary)(taxableIncome.value, filingStatus);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, filingStatus, tax }, origin);
     }
@@ -240,7 +1712,32 @@ const handler = async (event) => {
         const tax = (0, taxCalcs_1.caTax2025Mfj)(taxableIncome.value);
         return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax }, origin);
     }
-    if (calc === "FED_PREF_TAX_2024") {
+    if (calc === "STATE_TAX_2025") {
+        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
+        if ("error" in taxableIncome) {
+            return jsonResponse(400, { error: taxableIncome.error }, origin);
+        }
+        const filingStatus = String(body.filingStatus || "single").toLowerCase();
+        if (!isFilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
+        }
+        const state = String(body.state || "").trim().toUpperCase();
+        if (!state) {
+            return jsonResponse(400, { error: "STATE_TAX_2025 requires state" }, origin);
+        }
+        if (!taxCalcs_1.stateTaxProfiles.some((profile) => profile.code === state)) {
+            return jsonResponse(400, { error: `Unsupported state: ${state}` }, origin);
+        }
+        const result = (0, taxCalcs_1.calculateStateTax2025)({
+            state,
+            filingStatus,
+            grossIncome: taxableIncome.value,
+            deductionMode: "standard",
+            standardDeduction: 0,
+        });
+        return jsonResponse(200, { calc, ...result }, origin);
+    }
+    if (calc === "FED_PREF_TAX_2024" || calc === "FED_PREF_TAX_2025") {
         const ordinaryTaxable = readNonNegativeNumber(body.ordinaryTaxable, "ordinaryTaxable");
         if ("error" in ordinaryTaxable) {
             return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
@@ -253,9 +1750,9 @@ const handler = async (event) => {
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
         }
-        const tax = (0, taxCalcs_1.fedPrefTax2024)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
+        const tax = (0, taxCalcs_1.fedPrefTax2025)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
         return jsonResponse(200, {
-            calc,
+            calc: "FED_PREF_TAX_2025",
             ordinaryTaxable: ordinaryTaxable.value,
             prefTaxable: prefTaxable.value,
             filingStatus,
@@ -263,20 +1760,53 @@ const handler = async (event) => {
         }, origin);
     }
     if (calc === "FED_TAX_2025_COMBINED") {
-        const ordinaryTaxable = readNonNegativeNumber(body.ordinaryTaxable, "ordinaryTaxable");
-        if ("error" in ordinaryTaxable) {
-            return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
+        const usesGrossIncome = body.ordinaryIncome !== undefined
+            || body.preferredIncome !== undefined
+            || body.deduction !== undefined;
+        let taxableSplit;
+        if (usesGrossIncome) {
+            const ordinaryIncome = readNonNegativeNumber(body.ordinaryIncome, "ordinaryIncome");
+            if ("error" in ordinaryIncome)
+                return jsonResponse(400, { error: ordinaryIncome.error }, origin);
+            const preferredIncome = readNonNegativeNumber(body.preferredIncome, "preferredIncome");
+            if ("error" in preferredIncome)
+                return jsonResponse(400, { error: preferredIncome.error }, origin);
+            const requestedDeductionMode = body.deductionMode;
+            if (requestedDeductionMode !== undefined && requestedDeductionMode !== "standard" && requestedDeductionMode !== "itemized") {
+                return jsonResponse(400, { error: "deductionMode must be standard or itemized" }, origin);
+            }
+            if (requestedDeductionMode) {
+                const aboveLineDeduction = readNonNegativeNumber(body.aboveLineDeduction ?? 0, "aboveLineDeduction");
+                if ("error" in aboveLineDeduction)
+                    return jsonResponse(400, { error: aboveLineDeduction.error }, origin);
+                const selectedDeduction = requestedDeductionMode === "standard"
+                    ? (0, taxCalcs_1.federalStandardDeduction2025)(String(body.filingStatus || "mfj").toLowerCase())
+                    : readNonNegativeNumber(body.itemizedDeduction ?? 0, "itemizedDeduction");
+                if (typeof selectedDeduction !== "number" && "error" in selectedDeduction) {
+                    return jsonResponse(400, { error: selectedDeduction.error }, origin);
+                }
+                const standardOrItemizedDeduction = typeof selectedDeduction === "number" ? selectedDeduction : selectedDeduction.value;
+                taxableSplit = (0, taxCalcs_1.splitFederalTaxableIncome2025)(ordinaryIncome.value, preferredIncome.value, aboveLineDeduction.value + standardOrItemizedDeduction);
+            }
+            else {
+                const deduction = readNonNegativeNumber(body.deduction, "deduction");
+                if ("error" in deduction)
+                    return jsonResponse(400, { error: deduction.error }, origin);
+                taxableSplit = (0, taxCalcs_1.splitFederalTaxableIncome2025)(ordinaryIncome.value, preferredIncome.value, deduction.value);
+            }
         }
-        const prefTaxable = readNonNegativeNumber(body.prefTaxable, "prefTaxable");
-        if ("error" in prefTaxable) {
-            return jsonResponse(400, { error: prefTaxable.error }, origin);
+        else {
+            const ordinaryTaxable = readNonNegativeNumber(body.ordinaryTaxable, "ordinaryTaxable");
+            if ("error" in ordinaryTaxable)
+                return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
+            const prefTaxable = readNonNegativeNumber(body.prefTaxable, "prefTaxable");
+            if ("error" in prefTaxable)
+                return jsonResponse(400, { error: prefTaxable.error }, origin);
+            taxableSplit = (0, taxCalcs_1.splitFederalTaxableIncome2025)(ordinaryTaxable.value, prefTaxable.value, 0);
         }
         const filingStatus = String(body.filingStatus || "mfj").toLowerCase();
         if (!isFilingStatus(filingStatus)) {
             return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
-        }
-        if (!isOrdinary2025FilingStatus(filingStatus)) {
-            return jsonResponse(400, { error: "FED_TAX_2025_COMBINED currently supports filingStatus=single or mfj" }, origin);
         }
         const magi = readNonNegativeNumber(body.magi, "magi");
         if ("error" in magi) {
@@ -286,14 +1816,13 @@ const handler = async (event) => {
         if ("error" in netInvestmentIncome) {
             return jsonResponse(400, { error: netInvestmentIncome.error }, origin);
         }
-        const ordinaryTax = (0, taxCalcs_1.fedTax2025Ordinary)(ordinaryTaxable.value, filingStatus);
-        const prefTax = (0, taxCalcs_1.fedPrefTax2024)(ordinaryTaxable.value, prefTaxable.value, filingStatus);
+        const ordinaryTax = (0, taxCalcs_1.fedTax2025Ordinary)(taxableSplit.ordinaryTaxable, filingStatus);
+        const prefTax = (0, taxCalcs_1.fedPrefTax2025)(taxableSplit.ordinaryTaxable, taxableSplit.prefTaxable, filingStatus);
         const niit = (0, taxCalcs_1.niitTax)(magi.value, netInvestmentIncome.value, filingStatus);
         const tax = ordinaryTax + prefTax + niit;
         return jsonResponse(200, {
             calc,
-            ordinaryTaxable: ordinaryTaxable.value,
-            prefTaxable: prefTaxable.value,
+            ...taxableSplit,
             filingStatus,
             magi: magi.value,
             netInvestmentIncome: netInvestmentIncome.value,
@@ -303,15 +1832,82 @@ const handler = async (event) => {
             tax,
         }, origin);
     }
+    if (calc === "TAX_CONFIG_2025") {
+        return jsonResponse(200, {
+            calc,
+            taxYear: 2025,
+            states: taxCalcs_1.stateTaxProfiles,
+            localities: taxCalcs_1.localTaxProfiles2025,
+        }, origin);
+    }
+    if (calc === "TAX_PLAN_2025") {
+        const filingStatus = String(body.filingStatus || "").toLowerCase();
+        if (!isFilingStatus(filingStatus)) {
+            return jsonResponse(400, { error: "filingStatus must be one of: single, mfj, mfs, hoh" }, origin);
+        }
+        const state = String(body.state || "").trim().toUpperCase();
+        if (!state)
+            return jsonResponse(400, { error: "TAX_PLAN_2025 requires state" }, origin);
+        if (!taxCalcs_1.stateTaxProfiles.some((profile) => profile.code === state)) {
+            return jsonResponse(400, { error: `Unsupported state: ${state}` }, origin);
+        }
+        const localityId = String(body.local?.localityId || "none");
+        if (body.local?.enabled === true && !taxCalcs_1.localTaxProfiles2025.some((profile) => profile.id === localityId)) {
+            return jsonResponse(400, { error: `Unsupported locality: ${localityId}` }, origin);
+        }
+        const result = (0, taxCalcs_1.calculateTaxPlan2025)({ ...body, filingStatus, state });
+        return jsonResponse(200, result, origin);
+    }
+    if (calc === "LOCAL_TAX") {
+        const taxableIncome = readNonNegativeNumber(body.taxableIncome, "taxableIncome");
+        if ("error" in taxableIncome) {
+            return jsonResponse(400, { error: taxableIncome.error }, origin);
+        }
+        const enabled = body.enabled !== false;
+        const kind = String(body.kind || "none").toLowerCase();
+        if (!enabled || kind === "none") {
+            return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, tax: 0, effectiveRate: 0, marginalRate: 0 }, origin);
+        }
+        if (kind === "progressive") {
+            const rawBrackets = body.brackets;
+            if (!Array.isArray(rawBrackets)) {
+                return jsonResponse(400, { error: "LOCAL_TAX progressive calculations require brackets" }, origin);
+            }
+            const brackets = rawBrackets.map((bracket) => ({
+                threshold: Number(bracket?.threshold),
+                rate: Number(bracket?.rate),
+            }));
+            if (brackets.some((bracket) => !Number.isFinite(bracket.threshold) || bracket.threshold < 0 || !Number.isFinite(bracket.rate) || bracket.rate < 0)) {
+                return jsonResponse(400, { error: "LOCAL_TAX brackets require threshold and rate >= 0" }, origin);
+            }
+            return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, ...(0, taxCalcs_1.localProgressiveTax)(taxableIncome.value, brackets) }, origin);
+        }
+        if (kind === "flat") {
+            const residency = String(body.residency || "resident").toLowerCase();
+            const rateValue = residency === "nonresident" && body.nonresidentRate !== undefined ? body.nonresidentRate : body.rate;
+            const rate = readNonNegativeNumber(rateValue, "rate");
+            if ("error" in rate) {
+                return jsonResponse(400, { error: rate.error }, origin);
+            }
+            return jsonResponse(200, { calc, taxableIncome: taxableIncome.value, ...(0, taxCalcs_1.localFlatTax)(taxableIncome.value, rate.value) }, origin);
+        }
+        return jsonResponse(400, { error: "LOCAL_TAX kind must be one of: none, flat, progressive" }, origin);
+    }
     return jsonResponse(400, {
         error: "Unknown calc.",
         allowed: [
             "FED_TAX_2025_MFJ",
             "FED_TAX_2025_ORDINARY",
             "FED_PREF_TAX_2024",
+            "FED_PREF_TAX_2025",
             "FED_TAX_2025_COMBINED",
             "CA_TAX_2025_MFJ",
+            "STATE_TAX_2025",
             "STATE_TAX_2025_CA_MFJ",
+            "TAX_CONFIG_2025",
+            "TAX_PLAN_2025",
+            "LOCAL_TAX",
+            "PORTFOLIO_CHAT",
         ],
     }, origin);
 };
