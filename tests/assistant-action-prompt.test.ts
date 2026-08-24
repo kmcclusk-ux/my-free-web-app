@@ -8,6 +8,19 @@ const snapshot = {
     { id: 14, account: "Fidelity IRA", description: "Fidelity Government Cash", symbol: "SPAXX", category: "Cash" },
   ],
   accounts: [{ id: 1, account: "Vanguard Brokerage" }, { id: 2, account: "Fidelity IRA" }],
+  settings: {
+    federal: { filingStatus: "mfj", deductionMode: "standard" },
+    state: { stateCode: "CA", deductionMode: "standard" },
+    local: { enabled: false, localityId: "none" },
+    planner: { federalWithholding: 1000, stateWithholding: 500 },
+  },
+  referenceTables: {
+    tickers: [{ id: 1, symbol: "VTI", assetType: "ETF", category: "Stocks", taxTreatment: "qualified", percentReturn: 0.015 }],
+    categories: [{ id: 1, name: "Stocks", includeInAllocation: true }],
+    taxTreatment: [{ id: 1, label: "qualified", ordinaryShare: 0, preferredShare: 1, stateRule: "taxable", niitIncluded: true, localCategory: "dividends" }],
+    accountTaxType: [{ id: 1, taxStatus: "taxable", includeInAllocation: true }],
+    accountType: [{ id: 1, name: "Brokerage Account", taxStatus: "taxable", includeInAllocation: true }],
+  },
 };
 
 describe("portfolio assistant action context", () => {
@@ -22,6 +35,12 @@ describe("portfolio assistant action context", () => {
     expect(content).toContain('"id":8');
     expect(content).toContain('"type":"selectRows"');
     expect(content).toContain('"vangard" should match "Vanguard"');
+    expect(content).toContain("AFTERTAX US COMPLETE MODEL LAYOUT");
+    expect(content).toContain("Investment.account -> Account.accountType -> Account Type.taxStatus");
+    expect(content).toContain("Taxable-base categories: wages, selfEmployment, interest, dividends");
+    expect(content).toContain('"filingStatus":"mfj"');
+    expect(content).toContain('"ordinaryShare":0');
+    expect(content).toContain('"name":"Brokerage Account"');
   });
 
   it("appends context only to the latest action request", () => {

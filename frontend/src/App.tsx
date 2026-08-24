@@ -218,6 +218,7 @@ type WorkbookTableId = "investments" | "tickers" | "accounts" | "categories" | "
 type PortfolioSnapshot = {
   generatedAt: string;
   view: { activeTab: TabKey; focusGrid: boolean; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[] };
+  settings: { federal: FederalSettings; state: StateSettings; local: LocalTaxSettings; planner: PlannerSettings };
   holdings: Array<{
     id: number;
     spreadsheetRowNumber?: number;
@@ -2756,6 +2757,10 @@ function buildPortfolioSnapshot({
   taxTreatments,
   accountTaxTypes,
   accountTypes,
+  federalSettings,
+  stateSettings,
+  localTaxSettings,
+  plannerSettings,
   flows,
   metrics,
 }: {
@@ -2771,6 +2776,10 @@ function buildPortfolioSnapshot({
   taxTreatments: TaxTreatmentRow[];
   accountTaxTypes: AccountTaxTypeRow[];
   accountTypes: AccountTypeRow[];
+  federalSettings: FederalSettings;
+  stateSettings: StateSettings;
+  localTaxSettings: LocalTaxSettings;
+  plannerSettings: PlannerSettings;
   flows: { totalInvestmentAmount: number; totalIncome: number; cash: number; stocks: number; preferredStock: number; bonds: number; muniBond: number; businessDevelopment: number; coveredCall: number; realEstate: number; bitcoin: number };
   metrics: PortfolioSnapshot["metrics"];
 }): PortfolioSnapshot {
@@ -2823,6 +2832,7 @@ function buildPortfolioSnapshot({
   return {
     generatedAt: new Date().toISOString(),
     view: { activeTab, focusGrid, filters, sort, selectedAssetIds },
+    settings: { federal: federalSettings, state: stateSettings, local: localTaxSettings, planner: plannerSettings },
     holdings,
     accounts: accounts.map((row) => ({ id: row.id, account: row.account, accountType: row.accountType || inferAccountTypeFromAccountName(row.account), taxStatus: row.taxStatus, dividendAccrued: row.dividendAccrued, includeInFreeCashflow: row.includeInFreeCashflow })),
     referenceTables: {
@@ -9511,6 +9521,10 @@ export default function App() {
     taxTreatments,
     accountTaxTypes,
     accountTypes,
+    federalSettings,
+    stateSettings,
+    localTaxSettings,
+    plannerSettings,
     flows,
     metrics: {
       totalInvestmentAmount: flows.totalInvestmentAmount,

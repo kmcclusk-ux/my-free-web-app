@@ -891,6 +891,7 @@ function buildAssistantPortfolioContext(snapshot: unknown, userContent: string) 
   return {
     generatedAt: source.generatedAt,
     querySymbols: extractTickerSymbolsFromText(userContent),
+    settings: source.settings,
     view: source.view
       ? {
           activeTab: source.view.activeTab,
