@@ -30,12 +30,14 @@ describe("portfolio assistant action context", () => {
     ], snapshot);
     const content = result[0].content;
     expect(content).toContain("select only the rows where the account is vangard");
-    expect(content).toContain("match holding.account");
+    expect(content).toContain("holding.account");
     expect(content).toContain('"Vanguard Brokerage"');
     expect(content).toContain('"id":8');
     expect(content).toContain('"type":"selectRows"');
-    expect(content).toContain('"vangard" should match "Vanguard"');
+    expect(content).toContain("`vangard` may match `Vanguard`");
     expect(content).toContain("AFTERTAX US COMPLETE MODEL LAYOUT");
+    expect(content).toContain("name: aftertaxus-portfolio-model");
+    expect(content).toContain("ChatGPT with an AfterTax US action tool/connector");
     expect(content).toContain("Investment.account -> Account.accountType -> Account Type.taxStatus");
     expect(content).toContain("Taxable-base categories: wages, selfEmployment, interest, dividends");
     expect(content).toContain('"filingStatus":"mfj"');

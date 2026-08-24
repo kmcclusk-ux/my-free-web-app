@@ -1,0 +1,4 @@
+interface:
+  display_name: "AfterTax US Portfolio Model"
+  short_description: "Interpret and operate the AfterTax US portfolio and tax model"
+  default_prompt: "Use the AfterTax US model context to answer or perform this portfolio request."
