@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
 import { createHash, createPublicKey, createVerify, randomBytes, type KeyObject } from "crypto";
 import { request as httpsRequest } from "https";
+import { appendPortfolioActionContext } from "./assistantActionPrompt";
 import {
   fedTax2025Mfj,
   fedTax2025Ordinary,
@@ -1227,115 +1228,6 @@ function holdingMatchesExactSymbolSelector(holding: any, selector: string) {
   return activeSymbols.some((value) => normalizePortfolioMatchValue(value) === selectorKey);
 }
 
-function cleanPortfolioSelectorPhrase(value: unknown) {
-  return String(value || "")
-    .replace(/^[\s"'`]+|[\s"'`.?!]+$/g, "")
-    .replace(/[';]s\b/gi, "")
-    .replace(/\b(?:all|line|lines|row|rows|holding|holdings|investment|investments)\b/gi, " ")
-    .replace(/\b(?:desc|description|symbol|symbols|ticker|tickers)\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function splitPortfolioSelectors(selector: string) {
-  const cleaned = cleanPortfolioSelectorPhrase(selector);
-  if (!cleaned) return [];
-
-  const hasExplicitList = /,|\bor\b/i.test(selector);
-  const tickerLikeTokens = cleaned.split(/\s+/).filter((token) => /^[A-Za-z][A-Za-z0-9.-]{1,9}$/.test(token));
-  const shouldSplitWhitespaceList =
-    !hasExplicitList &&
-    /\b(?:symbol|symbols|ticker|tickers)\b/i.test(selector) &&
-    tickerLikeTokens.length > 1;
-
-  const parts = hasExplicitList
-    ? cleaned.split(/\s*,\s*|\s+\bor\s+/i)
-    : shouldSplitWhitespaceList
-      ? tickerLikeTokens
-      : [cleaned];
-
-  return [...new Set(parts.map(cleanPortfolioSelectorPhrase).filter(Boolean))];
-}
-
-type SelectRowsSelector = { selector: string; rawSelector: string; matchMode: "row" | "symbol" };
-
-function isSymbolOnlySelectRowsRequest(value: string) {
-  return /\b(?:symbol|symbols|ticker|tickers)\b/i.test(value);
-}
-
-function getSelectRowsSelector(matchesText: string) {
-  const text = matchesText.trim();
-  const normalizedCommand = text.replace(/\bhightlight\b/gi, "highlight").replace(/\bhilight\b/gi, "highlight");
-  const asksToSelectRows =
-    /\bhighlight\b/i.test(normalizedCommand) ||
-    (
-      /\b(select|find)\b/i.test(normalizedCommand) &&
-      /\b(rows?|holdings?|investments?)\b/i.test(normalizedCommand) &&
-      !/\b(check|checkbox|checked|unchecked|inc)\b/i.test(normalizedCommand)
-    );
-  if (!asksToSelectRows) return null;
-
-  const selectorMatch =
-    normalizedCommand.match(/\b(?:contain(?:s|ing)?|with|matching|for|called|named)\s+(.+)$/i) ||
-    normalizedCommand.match(/\b(?:select|highlight|find)\s+(?:the\s+)?(?:rows?|holdings?|investments?)\s+(.+)$/i) ||
-    normalizedCommand.match(/\b(?:select|highlight|find)\s+(.+?)(?:\s+(?:rows?|holdings?|investments?))?$/i);
-  const rawSelector = selectorMatch?.[1] || "";
-  const selector = cleanPortfolioSelectorPhrase(rawSelector);
-  if (!selector) return null;
-  return {
-    selector,
-    rawSelector,
-    matchMode: isSymbolOnlySelectRowsRequest(rawSelector) || isSymbolOnlySelectRowsRequest(normalizedCommand) ? "symbol" : "row",
-  } satisfies SelectRowsSelector;
-}
-
-function answerSelectRowsQuestion(messages: PortfolioChatMessage[], snapshot: unknown): PortfolioChatResponse | null {
-  const lastUserMessage = getRecentUserContent(messages);
-  const selectRequest = getSelectRowsSelector(lastUserMessage);
-  if (!selectRequest) return null;
-
-  if (snapshot && typeof snapshot === "object") {
-    const holdings = Array.isArray((snapshot as any).holdings) ? (snapshot as any).holdings : [];
-    const selectors = splitPortfolioSelectors(selectRequest.matchMode === "symbol" ? selectRequest.rawSelector : selectRequest.selector);
-    const selectorKeys = selectors.map(normalizePortfolioMatchValue);
-    const matches = holdings.filter((holding: any) => selectorKeys.some((selectorKey) =>
-      selectRequest.matchMode === "symbol"
-        ? holdingMatchesExactSymbolSelector(holding, selectorKey)
-        : holdingMatchesSelector(holding, selectorKey)
-    ));
-    const selectorLabel = selectors.length > 1 ? selectors.join(", ") : selectRequest.selector;
-    const matchDescription = selectRequest.matchMode === "symbol" ? "with symbol" : "containing";
-    if (holdings.length > 0 && matches.length === 0) {
-      return {
-        message: `I could not find any rows ${matchDescription} "${selectorLabel}".`,
-        actions: [],
-        model: "local-portfolio-calculation",
-      };
-    }
-
-    return {
-      message: `Highlighting ${matches.length} matching row${matches.length === 1 ? "" : "s"} ${matchDescription} "${selectorLabel}".`,
-      actions: [{
-        type: "selectAssets",
-        payload: {
-          assetIds: matches.map((holding: any) => holding.id).filter((id: unknown) => id !== undefined),
-          selector: selectorLabel,
-          selectors,
-          matchMode: selectRequest.matchMode,
-        },
-        requiresConfirmation: false,
-      }],
-      model: "local-portfolio-calculation",
-    };
-  }
-
-  return {
-    message: `Highlighting rows containing "${selectRequest.selector}".`,
-    actions: [{ type: "selectAsset", payload: { assetId: selectRequest.selector }, requiresConfirmation: false }],
-    model: "local-portfolio-calculation",
-  };
-}
-
 function getTickerTotalQuestion(matchesText: string) {
   const socialSecurityMatch = /\bsocial security\b/i.test(matchesText);
   const symbolMatch = matchesText.match(/\b([A-Z]{2,6}[A-Z0-9.-]*)\b/);
@@ -1509,7 +1401,6 @@ async function handlePortfolioChatRoute(
   }
 
   const localAnswer =
-    answerSelectRowsQuestion(messages, body.portfolioSnapshot) ||
     answerSymbolDividendTableQuestion(messages, body.portfolioSnapshot) ||
     answerSimplePortfolioQuestion(messages, body.portfolioSnapshot);
   if (localAnswer) {
@@ -1536,6 +1427,7 @@ async function handlePortfolioChatRoute(
     search_context_size: ["low", "medium", "high"].includes(webSearchContextSize) ? webSearchContextSize : "low",
   };
   const assistantContext = buildAssistantPortfolioContext(body.portfolioSnapshot, lastUserMessage);
+  const modelMessages = appendPortfolioActionContext(messages, body.portfolioSnapshot);
   const portfolioContext = JSON.stringify(
     shouldAttachWebSearch
       ? buildCompactExternalLookupContext(body.portfolioSnapshot, lastUserMessage)
@@ -1551,7 +1443,7 @@ async function handlePortfolioChatRoute(
         role: "user",
         content: `Current portfolio state JSON. Treat this as the only source of truth and do not expose raw private data unless needed to answer the user's question:\n${portfolioContext}`,
       },
-      ...messages,
+      ...modelMessages,
     ],
     ...(shouldAttachWebSearch
       ? {
