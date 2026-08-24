@@ -2,7 +2,7 @@ import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useSta
 import { createPortal, flushSync } from "react-dom";
 import { isW2IncomeType } from "./taxMath";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
-import { readFocusedModelSurface, rememberFocusedModelSurface, type FocusedModelSurface } from "./mcpSurface";
+import { readFocusedModelSurface, readMcpWorkbookSnapshot, rememberFocusedModelSurface, type FocusedModelSurface } from "./mcpSurface";
 import { installMcpApiFetchBridge, isMcpUiHost } from "./mcpApiBridge";
 import "./App.css";
 
@@ -411,7 +411,9 @@ const PUBLIC_SITE_ORIGIN = "https://aftertaxus.com";
 const RESERVED_PUBLIC_REPORT_SLUGS = new Set(["api", "assets", "auth", "hello", "login", "logout", "mcp-v5", "mcp-v6", "reports", "signin", "signup"]);
 const CURRENT_MCP_CONNECTOR_PATH = "/mcp-v6";
 const WORKBOOK_REMOTE_REFRESH_INTERVAL_MS = 5000;
-const INITIAL_FOCUSED_MODEL_SURFACE = isMcpUiHost() ? readFocusedModelSurface() : null;
+const MCP_UI_HOST = isMcpUiHost();
+const INITIAL_FOCUSED_MODEL_SURFACE = MCP_UI_HOST ? readFocusedModelSurface() : null;
+const INITIAL_MCP_WORKBOOK_SNAPSHOT = MCP_UI_HOST ? readMcpWorkbookSnapshot() as WorkbookResponse | null : null;
 if (INITIAL_FOCUSED_MODEL_SURFACE) installMcpApiFetchBridge();
 
 function normalizeMcpConnectorBaseUrl(rawBaseUrl?: string) {
@@ -6705,6 +6707,7 @@ export default function App() {
   const usernameClaimAttemptRef = useRef("");
   const summaryReportRefreshRequestRef = useRef(0);
   const [focusedModelSurface, setFocusedModelSurface] = useState<FocusedModelSurface | null>(INITIAL_FOCUSED_MODEL_SURFACE);
+  const [mcpWorkbookSnapshot, setMcpWorkbookSnapshot] = useState<WorkbookResponse | null>(INITIAL_MCP_WORKBOOK_SNAPSHOT);
   const [activeTab, setActiveTab] = useState<TabKey>(() => INITIAL_FOCUSED_MODEL_SURFACE?.tab || "investments");
   const [focusGrid, setFocusGrid] = useState(false);
   const [taxThermometerMode, setTaxThermometerMode] = useState<TaxThermometerMode>(() => loadTaxThermometerMode("allocation"));
@@ -6802,7 +6805,7 @@ export default function App() {
     authState.status === "signedIn" ? authState.user : null,
     uiSettings.publicUsername
   );
-  const requiresSignIn = authEnabled && authState.status !== "signedIn" && !focusedModelSurface;
+  const requiresSignIn = authEnabled && authState.status !== "signedIn" && !MCP_UI_HOST;
   const closeTaxSummary = useCallback(() => setTaxSummaryKind(null), []);
   const currentHistorySnapshot = useMemo<PortfolioHistorySnapshot>(() => ({
     investments,
@@ -6925,6 +6928,7 @@ export default function App() {
       const nextSurface = rememberFocusedModelSurface(message.params?.structuredContent);
       if (nextSurface) {
         installMcpApiFetchBridge();
+        setMcpWorkbookSnapshot(readMcpWorkbookSnapshot() as WorkbookResponse | null);
         setFocusedModelSurface(nextSurface);
       }
     };
@@ -6963,7 +6967,7 @@ export default function App() {
   }, [taxThermometerMode]);
 
   useEffect(() => {
-    if (!authEnabled) return;
+    if (!authEnabled || MCP_UI_HOST) return;
     let cancelled = false;
     completeCognitoSignInFromUrl()
       .then((nextAuthState) => {
@@ -7911,6 +7915,20 @@ export default function App() {
   }, [authEnabled, authState, focusedModelSurface, resetHistoryTracking]);
 
   useEffect(() => {
+    if (focusedModelSurface) {
+      hasLoadedStorage.current = false;
+      resetHistoryTracking();
+      if (!mcpWorkbookSnapshot) {
+        setStorageState("loading");
+        return;
+      }
+      suppressNextAutosave.current = true;
+      applyWorkbookResponse(mcpWorkbookSnapshot, { resetWhatIf: true });
+      hasLoadedStorage.current = true;
+      setStorageState("ready");
+      return;
+    }
+
     if (authEnabled && authState.status !== "signedIn" && !focusedModelSurface) {
       hasLoadedStorage.current = false;
       latestWorkbookUpdatedAt.current = null;
@@ -7935,9 +7953,10 @@ export default function App() {
       hasLoadedStorage.current = true;
     });
     return () => { cancelled = true; };
-  }, [authEnabled, authState.status, authToken, applyWorkbookResponse, focusedModelSurface, resetHistoryTracking]);
+  }, [authEnabled, authState.status, authToken, applyWorkbookResponse, focusedModelSurface, mcpWorkbookSnapshot, resetHistoryTracking]);
 
   useEffect(() => {
+    if (focusedModelSurface) return;
     if (authEnabled && authState.status !== "signedIn" && !focusedModelSurface) return;
     let cancelled = false;
     const pollForRemoteWorkbookChanges = () => {
@@ -10313,7 +10332,7 @@ export default function App() {
   }
 
   const splashMessage =
-    authEnabled && authState.status === "loading" && !focusedModelSurface
+    authEnabled && authState.status === "loading" && !MCP_UI_HOST
       ? "Opening your private AfterTax US workspace..."
       : !requiresSignIn && storageState === "loading"
         ? "Loading investments and tax mappings..."

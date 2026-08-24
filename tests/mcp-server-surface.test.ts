@@ -50,6 +50,26 @@ describe("focused MCP model surfaces", () => {
     }
   });
 
+  it("does not allow the embedded UI to reload workbook data through the private bridge", async () => {
+    const apiFetch = vi.fn();
+    vi.stubGlobal("fetch", apiFetch);
+    const { client, server } = await connectTestClient();
+    try {
+      const result = await client.callTool({
+        name: "run_model_surface_api",
+        arguments: { body: { calc: "WORKBOOK_GET", workspaceId: "default" } },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: expect.stringContaining("not available") }),
+      ]));
+      expect(apiFetch).not.toHaveBeenCalled();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("serves the existing app shell as an MCP App resource", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(workbook)));
     const { client, server } = await connectTestClient();
@@ -85,6 +105,7 @@ describe("focused MCP model surfaces", () => {
         action: "edit",
         recordId: 7,
         title: "Assets",
+        workbook,
       });
       expect((result.structuredContent as { appUrl: string }).appUrl).toContain("surface=assets");
       expect(apiFetch).toHaveBeenCalledOnce();

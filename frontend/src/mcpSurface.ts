@@ -30,6 +30,13 @@ export type FocusedModelSurface = {
   editorKind: "investment" | "income" | null;
 };
 
+export type McpWorkbookSnapshot = {
+  workspaceId: string;
+  tabs: Record<string, unknown>;
+  settings: Record<string, unknown>;
+  updatedAt: string | null;
+};
+
 const surfaceAliases: Record<string, { surface: ModelSurfaceKey; tab: ModelSurfaceTab }> = {
   investmentsincome: { surface: "investmentsIncome", tab: "investments" },
   investments: { surface: "investmentsIncome", tab: "investments" },
@@ -58,6 +65,7 @@ const surfaceAliases: Record<string, { surface: ModelSurfaceKey; tab: ModelSurfa
 };
 
 let latestToolSurface: FocusedModelSurface | null = null;
+let latestToolWorkbook: McpWorkbookSnapshot | null = null;
 
 function normalizedKey(value: unknown) {
   return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -91,6 +99,20 @@ function focusedSurfaceFromValues(values: Record<string, unknown> | null): Focus
   return { ...match, action, recordId, editorKind };
 }
 
+export function parseMcpWorkbookSnapshot(toolOutput: unknown): McpWorkbookSnapshot | null {
+  const output = objectValue(toolOutput);
+  const workbook = objectValue(output?.workbook);
+  const tabs = objectValue(workbook?.tabs);
+  const settings = objectValue(workbook?.settings);
+  if (!workbook || !tabs || !settings || typeof workbook.workspaceId !== "string") return null;
+  return {
+    workspaceId: workbook.workspaceId,
+    tabs,
+    settings,
+    updatedAt: typeof workbook.updatedAt === "string" ? workbook.updatedAt : null,
+  };
+}
+
 export function parseFocusedModelSurface(search: string, toolOutput?: unknown): FocusedModelSurface | null {
   const output = objectValue(toolOutput);
   const fromTool = focusedSurfaceFromValues(output);
@@ -108,6 +130,7 @@ export function parseFocusedModelSurface(search: string, toolOutput?: unknown): 
 
 export function rememberFocusedModelSurface(toolOutput: unknown): FocusedModelSurface | null {
   latestToolSurface = parseFocusedModelSurface("", toolOutput);
+  latestToolWorkbook = parseMcpWorkbookSnapshot(toolOutput);
   return latestToolSurface;
 }
 
@@ -115,4 +138,10 @@ export function readFocusedModelSurface(): FocusedModelSurface | null {
   if (typeof window === "undefined") return null;
   const openai = (window as Window & { openai?: { toolOutput?: unknown } }).openai;
   return latestToolSurface || parseFocusedModelSurface(window.location.search, openai?.toolOutput);
+}
+
+export function readMcpWorkbookSnapshot(): McpWorkbookSnapshot | null {
+  if (typeof window === "undefined") return null;
+  const openai = (window as Window & { openai?: { toolOutput?: unknown } }).openai;
+  return latestToolWorkbook || parseMcpWorkbookSnapshot(openai?.toolOutput);
 }

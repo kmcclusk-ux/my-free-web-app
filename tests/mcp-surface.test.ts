@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFocusedModelSurface } from "../frontend/src/mcpSurface";
+import { parseFocusedModelSurface, parseMcpWorkbookSnapshot } from "../frontend/src/mcpSurface";
 
 describe("focused MCP model surfaces", () => {
   it("maps direct focused URLs to the existing frontend tabs", () => {
@@ -25,6 +25,22 @@ describe("focused MCP model surfaces", () => {
       action: "edit",
       recordId: 8,
       editorKind: null,
+    });
+  });
+
+  it("accepts workbook data passed directly with the ChatGPT tool result", () => {
+    expect(parseMcpWorkbookSnapshot({
+      workbook: {
+        workspaceId: "default",
+        tabs: { investments: [{ id: 3, symbol: "VOO" }] },
+        settings: { federal: { filingStatus: "single" } },
+        updatedAt: "2026-08-24T12:00:00.000Z",
+      },
+    })).toEqual({
+      workspaceId: "default",
+      tabs: { investments: [{ id: 3, symbol: "VOO" }] },
+      settings: { federal: { filingStatus: "single" } },
+      updatedAt: "2026-08-24T12:00:00.000Z",
     });
   });
 

@@ -1306,6 +1306,12 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         title: z.string(),
         appUrl: z.string(),
         updatedAt: z.string().nullable(),
+        workbook: z.object({
+          workspaceId: z.string(),
+          tabs: z.record(z.unknown()),
+          settings: z.record(z.unknown()),
+          updatedAt: z.string().nullable(),
+        }),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
       _meta: {
@@ -1336,6 +1342,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         title: surfaceConfig.title,
         appUrl: modelSurfaceAppUrl(resolvedConfig, surface, action, resolvedRecordId, resolvedEditorKind ?? undefined),
         updatedAt: workbook.updatedAt,
+        workbook,
       };
       return {
         structuredContent,
@@ -1348,7 +1355,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "run_model_surface_api",
     {
       title: "Run focused UI data request",
-      description: "UI-only bridge used by the focused AfterTaxUS component to load, calculate, and save the authorized workbook.",
+      description: "UI-only bridge used by the focused AfterTaxUS component to calculate and save the authorized workbook. Initial render data is supplied directly by show_model_surface.",
       inputSchema: {
         body: z.record(z.unknown()),
       },
@@ -1361,7 +1368,6 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     async ({ body }) => {
       const calc = String(body.calc || "");
       const allowedCalculations = new Set([
-        "WORKBOOK_GET",
         "WORKBOOK_SAVE",
         "TAX_CONFIG_2025",
         "TAX_PLAN_2025",
