@@ -4,6 +4,7 @@ import { isW2IncomeType } from "./taxMath";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
 import { readFocusedModelSurface, readMcpWorkbookSnapshot, rememberFocusedModelSurface, type FocusedModelSurface } from "./mcpSurface";
 import { installMcpApiFetchBridge, isMcpUiHost } from "./mcpApiBridge";
+import { buildInvestmentRowHash, buildSelectedInvestmentHashes, normalizeSelectedInvestmentHashes, resolveSelectedInvestmentIds } from "./investmentRowIdentity";
 import "./App.css";
 
 type TabKey =
@@ -204,7 +205,7 @@ type ModelDataSnapshot = {
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type ScenarioLandingPage = { id: string; name: string; slug?: string; createdAt: string; updatedAt: string; payload: string };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { publicUsername?: string; savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
+type UiSettings = ModelUiSnapshot & { selectedInvestmentHashes: string[]; publicUsername?: string; savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string; username?: string };
@@ -1192,7 +1193,7 @@ const initialFederalSettings: FederalSettings = { filingStatus: "mfj", deduction
 const initialStateSettings: StateSettings = { stateCode: "CA", extraStateIncome: 0, deductionMode: "itemized", deductionItems: [newDeductionItem("Mortgage interest", 26500), newDeductionItem("Property tax", 19000)], mortgageInterest: 26500, propertyTax: 19000, standardDeduction: 11000 };
 const initialLocalTaxSettings: LocalTaxSettings = { enabled: false, localityId: "none", localityName: "", residency: "resident", rate: 0, nonresidentRate: 0, taxableBase: noLocalTaxBase() };
 const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWithholding: 0 };
-const initialUiSettings: UiSettings = { publicUsername: "", investmentFavorites: [], selectedAssetIds: [], savedScenarios: [], scenarioLibraryMigrated: false, modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
+const initialUiSettings: UiSettings = { publicUsername: "", investmentFavorites: [], selectedAssetIds: [], selectedInvestmentHashes: [], savedScenarios: [], scenarioLibraryMigrated: false, modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
 function toNumber(value: number | string | boolean | null | undefined) {
@@ -1844,7 +1845,7 @@ function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (
 function normalizeFavoriteName(value: unknown) {
   return String(value || "").trim();
 }
-function buildInvestmentFavoriteKey(row: InvestmentRow) {
+function buildLegacyInvestmentFavoriteKey(row: InvestmentRow) {
   const description = normalizeLookupKey(row.description);
   const account = normalizeLookupKey(row.account);
   const symbol = normalizeLookupKey(row.symbol);
@@ -1866,7 +1867,26 @@ function buildInvestmentFavoriteKey(row: InvestmentRow) {
 }
 
 function buildInvestmentFavoriteKeys(row: InvestmentRow) {
-  return [buildInvestmentFavoriteKey(row)];
+  return [buildInvestmentRowHash(row), buildLegacyInvestmentFavoriteKey(row)];
+}
+function legacyInvestmentFavoriteSignature(key: string) {
+  return key.split("|").filter((part) => !part.startsWith("id:")).join("|");
+}
+function migrateInvestmentFavoritesToHashes(favorites: InvestmentFavorite[], rows: InvestmentRow[]) {
+  return favorites.map((favorite) => {
+    const migratedKeys = new Set<string>();
+    favorite.investmentKeys.forEach((key) => {
+      if (key.startsWith("rowhash:v1:")) {
+        migratedKeys.add(key);
+        return;
+      }
+      const legacySignature = legacyInvestmentFavoriteSignature(key);
+      const matchingRows = rows.filter((row) => legacyInvestmentFavoriteSignature(buildLegacyInvestmentFavoriteKey(row)) === legacySignature);
+      if (matchingRows.length === 0) migratedKeys.add(key);
+      else matchingRows.forEach((row) => migratedKeys.add(buildInvestmentRowHash(row)));
+    });
+    return { ...favorite, investmentKeys: [...migratedKeys] };
+  });
 }
 function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
   if (!Array.isArray(raw)) return [];
@@ -1880,7 +1900,7 @@ function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
     const keyCandidates = Array.isArray(obj.investmentKeys) ? obj.investmentKeys : [];
     for (const key of keyCandidates) {
       const normalized = String(key || "").trim();
-      if (normalized.startsWith("row|")) keySet.add(normalized);
+      if (normalized.startsWith("row|") || normalized.startsWith("rowhash:v1:")) keySet.add(normalized);
     }
     if (keySet.size === 0) continue;
     favorites.push({
@@ -2290,6 +2310,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
     publicUsername: normalizePublicReportSlug(sectionObj.publicUsername).slice(0, 32),
     investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     selectedAssetIds: normalizeSelectedAssetIds(sectionObj.selectedAssetIds),
+    selectedInvestmentHashes: normalizeSelectedInvestmentHashes(sectionObj.selectedInvestmentHashes),
     savedScenarios: normalizeSavedScenarios(sectionObj.savedScenarios),
     scenarioLibraryMigrated: sectionObj.scenarioLibraryMigrated === true,
     modelVersions: normalizeModelVersions(sectionObj.modelVersions),
@@ -2318,6 +2339,7 @@ function parseWorkbookSettings(settings: unknown) {
         ? ui.investmentFavorites
         : legacyFavorites,
       selectedAssetIds: ui.selectedAssetIds || [],
+      selectedInvestmentHashes: ui.selectedInvestmentHashes || [],
       savedScenarios: ui.savedScenarios || [],
       scenarioLibraryMigrated: ui.scenarioLibraryMigrated === true,
       modelVersions: ui.modelVersions || [],
@@ -6879,6 +6901,7 @@ export default function App() {
       publicUsername: current.publicUsername,
       investmentFavorites: snapshot.uiSettings.investmentFavorites,
       selectedAssetIds: normalizeSelectedAssetIds(snapshot.uiSettings.selectedAssetIds),
+      selectedInvestmentHashes: current.selectedInvestmentHashes,
       savedScenarios: current.savedScenarios,
       scenarioLibraryMigrated: current.scenarioLibraryMigrated,
       modelVersions: current.modelVersions,
@@ -7889,11 +7912,12 @@ export default function App() {
     setStateSettings(normalizeStateSettings(workbookSettings.state));
     setLocalTaxSettings(normalizeLocalTaxSettings(workbookSettings.local));
     setPlannerSettings(mergeSettings(initialPlannerSettings, workbookSettings.planner));
-    setSelectedInvestmentIds(
-      normalizeSelectedAssetIds(workbookSettings.ui?.selectedAssetIds).filter((id) =>
-        activeInvestments.some((row) => row.id === id)
-      )
-    );
+    const selectedHashes = normalizeSelectedInvestmentHashes(workbookSettings.ui?.selectedInvestmentHashes);
+    const restoredSelectedIds = selectedHashes.length > 0
+      ? resolveSelectedInvestmentIds(activeInvestments, selectedHashes)
+      : normalizeSelectedAssetIds(workbookSettings.ui?.selectedAssetIds).filter((id) => activeInvestments.some((row) => row.id === id));
+    const restoredInvestmentFavorites = migrateInvestmentFavoritesToHashes(workbookSettings.ui?.investmentFavorites || [], activeInvestments);
+    setSelectedInvestmentIds(restoredSelectedIds);
     const publicUsername = resolvePublicUsername(
       authState.status === "signedIn" ? authState.user : null,
       workbookSettings.ui?.publicUsername,
@@ -7902,8 +7926,9 @@ export default function App() {
     writeStoredPublicUsername(publicUsername);
     setUiSettings({
       publicUsername,
-      investmentFavorites: workbookSettings.ui?.investmentFavorites || [],
-      selectedAssetIds: workbookSettings.ui?.selectedAssetIds || [],
+      investmentFavorites: restoredInvestmentFavorites,
+      selectedAssetIds: restoredSelectedIds,
+      selectedInvestmentHashes: selectedHashes.length > 0 ? selectedHashes : buildSelectedInvestmentHashes(activeInvestments, restoredSelectedIds),
       savedScenarios: workbookSettings.ui?.savedScenarios || [],
       scenarioLibraryMigrated: workbookSettings.ui?.scenarioLibraryMigrated === true,
       modelVersions: workbookSettings.ui?.modelVersions || [],
@@ -8147,7 +8172,7 @@ export default function App() {
     saveTimeout.current = window.setTimeout(() => {
       let cancelled = false;
       saveTimeout.current = null;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, local: localTaxSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: selectedInvestmentIds, investmentWhatIfOpen: isWhatIfActive } } }, authToken).then((result) => {
+      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, local: localTaxSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: [], selectedInvestmentHashes: buildSelectedInvestmentHashes(persistedInvestments, selectedInvestmentIds), investmentWhatIfOpen: isWhatIfActive } } }, authToken).then((result) => {
         if (!cancelled) {
           latestWorkbookUpdatedAt.current = result.updatedAt || latestWorkbookUpdatedAt.current;
           latestWorkbookRefreshMarker.current = result.updatedAt || latestWorkbookRefreshMarker.current;
@@ -9502,7 +9527,7 @@ export default function App() {
     }
     const keySet = new Set<string>();
     investments.filter((row) => row.includeIncome).forEach((row) => {
-      buildInvestmentFavoriteKeys(row).forEach((key) => keySet.add(key));
+      keySet.add(buildInvestmentRowHash(row));
     });
     if (keySet.size === 0) {
       setStorageState("error");
@@ -10297,7 +10322,13 @@ export default function App() {
         const id = nextUnusedAssistantRowId(usedIds, raw.id);
         return { ...config.defaultRow(id), ...values, id };
       });
+      const selectedHashes = config.tableId === "investments"
+        ? buildSelectedInvestmentHashes(investments, selectedInvestmentIds)
+        : [];
       config.setRows(() => replacementRows);
+      if (config.tableId === "investments") {
+        setSelectedInvestmentIds(resolveSelectedInvestmentIds(replacementRows, selectedHashes));
+      }
       setActiveTab(config.tab);
       return { ok: true, message: `Replaced ${config.label} with ${replacementRows.length} row${replacementRows.length === 1 ? "" : "s"}.` };
     }
