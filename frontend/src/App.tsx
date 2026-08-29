@@ -5,6 +5,7 @@ import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUse
 import { readFocusedModelSurface, readMcpWorkbookSnapshot, rememberFocusedModelSurface, type FocusedModelSurface } from "./mcpSurface";
 import { installMcpApiFetchBridge, isMcpUiHost } from "./mcpApiBridge";
 import { buildInvestmentRowHash, buildSelectedInvestmentHashes, normalizeSelectedInvestmentHashes, resolveSelectedInvestmentIds } from "./investmentRowIdentity";
+import { isCurrentTaxCalculation, isTaxCalculationAbort, taxCalculationRequestKey, type TaxPlanRequest } from "./taxRecalculation";
 import "./App.css";
 
 type TabKey =
@@ -2392,9 +2393,9 @@ function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: str
   if (stateTaxable) return "federal-free-state-taxable";
   return "tax-free";
 }
-async function postTaxCalculation<T = TaxResult>(payload: Record<string, unknown>) {
+async function postTaxCalculation<T = TaxResult>(payload: object, signal?: AbortSignal) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal });
   const json = (await response.json()) as T | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "API request failed");
   return json as T;
@@ -6805,6 +6806,8 @@ export default function App() {
   const [taxConfig, setTaxConfig] = useState<TaxConfigResult | null>(null);
   const [taxPlanResult, setTaxPlanResult] = useState<TaxPlanResult | null>(null);
   const [taxPlanWithoutInvestmentsResult, setTaxPlanWithoutInvestmentsResult] = useState<TaxPlanResult | null>(null);
+  const [taxCalculationStatus, setTaxCalculationStatus] = useState<"recalculating" | "ready" | "error">("recalculating");
+  const taxCalculationRequestRef = useRef(0);
   const stateTaxProfiles = taxConfig?.states || [];
   const localTaxProfiles = taxConfig?.localities || fallbackLocalTaxProfiles;
   const selectedStateCode = normalizeStateCode(stateSettings.stateCode);
@@ -8123,59 +8126,36 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const localTaxBaseSignature = JSON.stringify(localTaxBaseAmounts);
-  useEffect(() => {
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      postTaxCalculation<TaxPlanResult>({
-        calc: "TAX_PLAN_2025",
-        filingStatus: federalSettings.filingStatus,
-        state: selectedStateCode,
-        ordinaryIncomeExcludingSocialSecurity,
-        preferredIncome: preferredBeforeDeductions,
-        socialSecurityBenefits,
-        taxExemptInterest: federalTaxExemptInterest,
-        netInvestmentIncome,
-        w2Income: effectiveW2Income,
-        totalIncome: flows.totalIncome,
-        displayIncome: flows.displayIncome,
-        federalDeductionMode: federalSettings.deductionMode,
-        federalAboveLineDeductions: federalSettings.aboveLineDeductionItems,
-        federalItemizedDeductions: federalSettings.deductionItems,
-        stateGrossIncome: stateGross,
-        stateDeductionMode: stateSettings.deductionMode,
-        stateStandardDeduction: stateSettings.standardDeduction,
-        stateItemizedDeductions: stateSettings.deductionItems,
-        local: {
-          enabled: localTaxSettings.enabled,
-          localityId: localTaxSettings.localityId,
-          residency: localTaxSettings.residency,
-          customRate: localTaxSettings.rate,
-          customNonresidentRate: localTaxSettings.nonresidentRate,
-          taxableBaseAmounts: localTaxBaseAmounts,
-          customTaxableBase: localTaxSettings.taxableBase,
-        },
-      }).then((result) => {
-        if (cancelled) return;
-        setTaxPlanResult(result);
-        setFederalResult({ ...result.federal, calc: "TAX_PLAN_2025", tax: result.federal.incomeTax });
-        setStateResult({ ...result.state, calc: "TAX_PLAN_2025", tax: result.state.incomeTax, state: result.stateCode, stateName: result.stateName });
-        setLocalResult({ ...result.local, calc: "TAX_PLAN_2025" });
-        setFederalError(null);
-        setStateError(null);
-      }).catch((error: Error) => {
-        if (cancelled) return;
-        setTaxPlanResult(null);
-        setFederalResult(null);
-        setStateResult(null);
-        setLocalResult(null);
-        setFederalError(error.message);
-        setStateError(error.message);
-      });
-    }, 220);
-
-    return () => { cancelled = true; window.clearTimeout(timeoutId); };
-  }, [ordinaryIncomeExcludingSocialSecurity, preferredBeforeDeductions, socialSecurityBenefits, federalTaxExemptInterest, netInvestmentIncome, effectiveW2Income, flows.totalIncome, flows.displayIncome, federalSettings.deductionMode, federalSettings.filingStatus, federalSettings.aboveLineDeductionItems, federalSettings.deductionItems, stateGross, stateSettings.deductionMode, stateSettings.standardDeduction, stateSettings.deductionItems, selectedStateCode, localTaxSettings.enabled, localTaxSettings.localityId, localTaxSettings.residency, localTaxSettings.rate, localTaxSettings.nonresidentRate, localTaxSettings.taxableBase, localTaxBaseSignature]);
+  const taxPlanRequest: TaxPlanRequest = {
+    calc: "TAX_PLAN_2025",
+    filingStatus: federalSettings.filingStatus,
+    state: selectedStateCode,
+    ordinaryIncomeExcludingSocialSecurity,
+    preferredIncome: preferredBeforeDeductions,
+    socialSecurityBenefits,
+    taxExemptInterest: federalTaxExemptInterest,
+    netInvestmentIncome,
+    w2Income: effectiveW2Income,
+    totalIncome: flows.totalIncome,
+    displayIncome: flows.displayIncome,
+    federalDeductionMode: federalSettings.deductionMode,
+    federalAboveLineDeductions: federalSettings.aboveLineDeductionItems,
+    federalItemizedDeductions: federalSettings.deductionItems,
+    stateGrossIncome: stateGross,
+    stateDeductionMode: stateSettings.deductionMode,
+    stateStandardDeduction: stateSettings.standardDeduction,
+    stateItemizedDeductions: stateSettings.deductionItems,
+    local: {
+      enabled: localTaxSettings.enabled,
+      localityId: localTaxSettings.localityId,
+      residency: localTaxSettings.residency,
+      customRate: localTaxSettings.rate,
+      customNonresidentRate: localTaxSettings.nonresidentRate,
+      taxableBaseAmounts: localTaxBaseAmounts,
+      customTaxableBase: localTaxSettings.taxableBase,
+    },
+  };
+  const currentTaxPlanRequestKey = taxCalculationRequestKey(taxPlanRequest);
 
 
 
@@ -8233,46 +8213,83 @@ export default function App() {
     base[key] = Math.max(base[key] - row.filteredIncome, 0);
     return base;
   }, { ...localTaxBaseAmounts });
-  const localTaxBaseWithoutInvestmentsSignature = JSON.stringify(localTaxBaseAmountsWithoutInvestments);
+  const taxPlanWithoutInvestmentsRequest: TaxPlanRequest = {
+    calc: "TAX_PLAN_2025",
+    filingStatus: federalSettings.filingStatus,
+    state: selectedStateCode,
+    ordinaryIncomeExcludingSocialSecurity: ordinaryBeforeDeductionsWithoutInvestments,
+    preferredIncome: preferredBeforeDeductionsWithoutInvestments,
+    socialSecurityBenefits,
+    taxExemptInterest: federalTaxExemptInterest,
+    netInvestmentIncome: netInvestmentIncomeWithoutInvestments,
+    w2Income: effectiveW2Income,
+    totalIncome: Math.max(flows.totalIncome - flows.investmentIncome, 0),
+    displayIncome: Math.max(flows.displayIncome - flows.displayInvestmentIncome, 0),
+    federalDeductionMode: federalSettings.deductionMode,
+    federalAboveLineDeductions: federalSettings.aboveLineDeductionItems,
+    federalItemizedDeductions: federalSettings.deductionItems,
+    stateGrossIncome: stateGrossWithoutInvestments,
+    stateDeductionMode: stateSettings.deductionMode,
+    stateStandardDeduction: stateSettings.standardDeduction,
+    stateItemizedDeductions: stateSettings.deductionItems,
+    local: {
+      enabled: localTaxSettings.enabled,
+      localityId: localTaxSettings.localityId,
+      residency: localTaxSettings.residency,
+      customRate: localTaxSettings.rate,
+      customNonresidentRate: localTaxSettings.nonresidentRate,
+      taxableBaseAmounts: localTaxBaseAmountsWithoutInvestments,
+      customTaxableBase: localTaxSettings.taxableBase,
+    },
+  };
+  const currentTaxPlanWithoutInvestmentsRequestKey = taxCalculationRequestKey(taxPlanWithoutInvestmentsRequest);
+
   useEffect(() => {
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      postTaxCalculation<TaxPlanResult>({
-        calc: "TAX_PLAN_2025",
-        filingStatus: federalSettings.filingStatus,
-        state: selectedStateCode,
-        ordinaryIncomeExcludingSocialSecurity: ordinaryBeforeDeductionsWithoutInvestments,
-        preferredIncome: preferredBeforeDeductionsWithoutInvestments,
-        socialSecurityBenefits,
-        taxExemptInterest: federalTaxExemptInterest,
-        netInvestmentIncome: netInvestmentIncomeWithoutInvestments,
-        w2Income: effectiveW2Income,
-        totalIncome: Math.max(flows.totalIncome - flows.investmentIncome, 0),
-        displayIncome: Math.max(flows.displayIncome - flows.displayInvestmentIncome, 0),
-        federalDeductionMode: federalSettings.deductionMode,
-        federalAboveLineDeductions: federalSettings.aboveLineDeductionItems,
-        federalItemizedDeductions: federalSettings.deductionItems,
-        stateGrossIncome: stateGrossWithoutInvestments,
-        stateDeductionMode: stateSettings.deductionMode,
-        stateStandardDeduction: stateSettings.standardDeduction,
-        stateItemizedDeductions: stateSettings.deductionItems,
-        local: {
-          enabled: localTaxSettings.enabled,
-          localityId: localTaxSettings.localityId,
-          residency: localTaxSettings.residency,
-          customRate: localTaxSettings.rate,
-          customNonresidentRate: localTaxSettings.nonresidentRate,
-          taxableBaseAmounts: localTaxBaseAmountsWithoutInvestments,
-          customTaxableBase: localTaxSettings.taxableBase,
-        },
-      }).then((result) => {
-        if (!cancelled) setTaxPlanWithoutInvestmentsResult(result);
-      }).catch(() => {
-        if (!cancelled) setTaxPlanWithoutInvestmentsResult(null);
-      });
-    }, 220);
-    return () => { cancelled = true; window.clearTimeout(timeoutId); };
-  }, [ordinaryBeforeDeductionsWithoutInvestments, preferredBeforeDeductionsWithoutInvestments, socialSecurityBenefits, federalTaxExemptInterest, netInvestmentIncomeWithoutInvestments, effectiveW2Income, flows.totalIncome, flows.displayIncome, flows.investmentIncome, flows.displayInvestmentIncome, federalSettings.deductionMode, federalSettings.filingStatus, federalSettings.aboveLineDeductionItems, federalSettings.deductionItems, stateGrossWithoutInvestments, stateSettings.deductionMode, stateSettings.standardDeduction, stateSettings.deductionItems, selectedStateCode, localTaxSettings.enabled, localTaxSettings.localityId, localTaxSettings.residency, localTaxSettings.rate, localTaxSettings.nonresidentRate, localTaxSettings.taxableBase, localTaxBaseWithoutInvestmentsSignature]);
+    const requestId = ++taxCalculationRequestRef.current;
+    const controller = new AbortController();
+    const activeTaxPlanRequest = JSON.parse(currentTaxPlanRequestKey) as TaxPlanRequest;
+    const activeTaxPlanWithoutInvestmentsRequest = JSON.parse(currentTaxPlanWithoutInvestmentsRequestKey) as TaxPlanRequest;
+    setTaxCalculationStatus("recalculating");
+
+    const timeoutId = window.setTimeout(async () => {
+      const [taxPlanOutcome, withoutInvestmentsOutcome] = await Promise.allSettled([
+        postTaxCalculation<TaxPlanResult>(activeTaxPlanRequest, controller.signal),
+        postTaxCalculation<TaxPlanResult>(activeTaxPlanWithoutInvestmentsRequest, controller.signal),
+      ]);
+      if (!isCurrentTaxCalculation(requestId, taxCalculationRequestRef.current, controller.signal.aborted)) return;
+
+      if (taxPlanOutcome.status === "fulfilled") {
+        const result = taxPlanOutcome.value;
+        setTaxPlanResult(result);
+        setFederalResult({ ...result.federal, calc: "TAX_PLAN_2025", tax: result.federal.incomeTax });
+        setStateResult({ ...result.state, calc: "TAX_PLAN_2025", tax: result.state.incomeTax, state: result.stateCode, stateName: result.stateName });
+        setLocalResult({ ...result.local, calc: "TAX_PLAN_2025" });
+        setFederalError(null);
+        setStateError(null);
+        setTaxCalculationStatus("ready");
+      } else if (!isTaxCalculationAbort(taxPlanOutcome.reason)) {
+        const error = taxPlanOutcome.reason instanceof Error ? taxPlanOutcome.reason : new Error("Tax calculation failed");
+        setTaxPlanResult(null);
+        setFederalResult(null);
+        setStateResult(null);
+        setLocalResult(null);
+        setFederalError(error.message);
+        setStateError(error.message);
+        setTaxCalculationStatus("error");
+      }
+
+      if (withoutInvestmentsOutcome.status === "fulfilled") {
+        setTaxPlanWithoutInvestmentsResult(withoutInvestmentsOutcome.value);
+      } else if (!isTaxCalculationAbort(withoutInvestmentsOutcome.reason)) {
+        setTaxPlanWithoutInvestmentsResult(null);
+      }
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [currentTaxPlanRequestKey, currentTaxPlanWithoutInvestmentsRequestKey]);
   const federalTaxWithoutInvestments = taxPlanWithoutInvestmentsResult?.federal.incomeTax || 0;
   const stateTaxWithoutInvestments = taxPlanWithoutInvestmentsResult?.state.incomeTax || 0;
   const localTaxWithoutInvestments = taxPlanWithoutInvestmentsResult?.local.tax || 0;
@@ -8332,6 +8349,16 @@ export default function App() {
       </span>
     </span>
   ) : undefined;
+  const taxCalculationBadge = taxCalculationStatus !== "ready" ? (
+    <span
+      className={`kpi-pill__calculation-badge kpi-pill__calculation-badge--${taxCalculationStatus}`}
+      role="status"
+      title={taxCalculationStatus === "error" ? federalError || "The latest tax calculation failed." : "Federal, state, local, payroll, and after-tax results are being recalculated."}
+    >
+      {taxCalculationStatus === "error" ? "Tax error" : "Updating tax"}
+    </span>
+  ) : undefined;
+  const afterTaxIncomeBadge = excludedIncomeBadge || taxCalculationBadge ? <>{excludedIncomeBadge}{taxCalculationBadge}</> : undefined;
   const afterTaxBreakdownDetails = (
     <div className="tax-breakdown-popover">
       <div className="tax-breakdown-popover__header">
@@ -9448,7 +9475,7 @@ export default function App() {
       primary: true,
       tone: "warning",
       details: incomeBreakdownDetails,
-      badge: excludedIncomeBadge,
+      badge: afterTaxIncomeBadge,
       alternateAriaLabel: `Show ${isMonthlyIncomePrimary ? "monthly" : "annual"} pre-tax income`,
       alternateContent: (
         <>
@@ -10401,7 +10428,11 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${uiSettings.darkMode ? "app-shell--dark" : ""} ${focusedModelSurface ? "app-shell--mcp-surface" : ""}`.trim()}>
+    <div
+      className={`app-shell ${uiSettings.darkMode ? "app-shell--dark" : ""} ${focusedModelSurface ? "app-shell--mcp-surface" : ""} ${taxCalculationStatus === "recalculating" ? "app-shell--tax-recalculating" : ""}`.trim()}
+      aria-busy={taxCalculationStatus === "recalculating"}
+      data-tax-calculation-status={taxCalculationStatus}
+    >
       {isCameraFlashing && (
         <div
           className="camera-flash"
@@ -11448,7 +11479,8 @@ export default function App() {
               </svg>
             </button>
           </div>
-          {showThermometerPanel && <div id="tax-thermometer-panel-content">
+          {showThermometerPanel && <div id="tax-thermometer-panel-content" className="tax-thermometer-panel__content" aria-busy={taxCalculationStatus === "recalculating"}>
+            {taxCalculationStatus === "recalculating" && <span className="tax-thermometer-panel__recalculating" role="status">Updating taxes…</span>}
             <TaxThermometerPanel
                 federalTaxable={federalTaxableAfterDeductions}
                 stateTaxable={stateTaxableAfterDeductions}

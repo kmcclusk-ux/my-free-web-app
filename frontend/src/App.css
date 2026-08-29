@@ -852,6 +852,38 @@
   pointer-events: auto;
   transform: translateY(0);
 }
+.kpi-pill__calculation-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 2px 6px;
+  border: 1px solid rgba(59, 130, 246, .38);
+  border-radius: 999px;
+  background: rgba(219, 234, 254, .96);
+  color: #1d4ed8 !important;
+  font-size: .54rem !important;
+  font-weight: 900 !important;
+  letter-spacing: .04em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+.kpi-pill__calculation-badge--recalculating::before {
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  content: "";
+  animation: tax-calculation-spin .7s linear infinite;
+}
+.kpi-pill__calculation-badge--error {
+  border-color: rgba(220, 38, 38, .36);
+  background: rgba(254, 226, 226, .96);
+  color: #b91c1c !important;
+}
+@keyframes tax-calculation-spin { to { transform: rotate(360deg); } }
 .kpi-pill--has-details {
   position: relative;
   cursor: help;
@@ -1288,6 +1320,25 @@
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select { width: 100%; min-width: 0; }
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select__button { width: 100%; justify-content: flex-start; }
 .tax-thermometer-panel__mode-bar .tax-thermometer-mode-select__chevron { margin-left: auto; }
+.tax-thermometer-panel__content { position: relative; }
+.tax-thermometer-panel__recalculating {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 7px;
+  border: 1px solid rgba(59, 130, 246, .32);
+  border-radius: 999px;
+  background: rgba(239, 246, 255, .96);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .10);
+  color: #1d4ed8;
+  font-size: .58rem;
+  font-weight: 850;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
 .tax-thermometer-panel__visibility-toggle {
   display: inline-grid;
   place-items: center;
@@ -6817,6 +6868,19 @@ html.aftertaxus-dark-mode .auth-required-panel__username input {
   align-items: flex-end;
   gap: 10px;
   min-width: 0;
+}
+
+.app-shell--dark .kpi-pill__calculation-badge,
+.app-shell--dark .tax-thermometer-panel__recalculating {
+  border-color: rgba(96, 165, 250, .42);
+  background: rgba(30, 58, 138, .76);
+  color: #bfdbfe !important;
+}
+
+.app-shell--dark .kpi-pill__calculation-badge--error {
+  border-color: rgba(248, 113, 113, .44);
+  background: rgba(127, 29, 29, .76);
+  color: #fecaca !important;
 }
 
 .topbar-local-preset-selector {
