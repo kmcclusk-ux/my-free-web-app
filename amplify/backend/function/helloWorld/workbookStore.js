@@ -73,6 +73,9 @@ function publicReportUserWorkspaceId(ownerSub) {
 function publicUsernameLookupWorkspaceId(username) {
     return `publicUsername#${username}`;
 }
+function analyticsEventWorkspaceId(date) {
+    return `analytics#event#${date}`;
+}
 class WorkbookStore {
     constructor() {
         this.tableName = getRequiredEnv("WORKBOOK_TABLE_NAME");
@@ -268,6 +271,42 @@ class WorkbookStore {
             workspaceId: revoked.workspaceId,
             revokedAt: revoked.revokedAt,
         };
+    }
+    async putAnalyticsEvent(record) {
+        await this.client.send(new lib_dynamodb_1.PutCommand({
+            TableName: this.tableName,
+            Item: {
+                workspaceId: analyticsEventWorkspaceId(record.date),
+                entityKey: `${record.at}#${record.eventId}`,
+                eventId: record.eventId,
+                eventDate: record.date,
+                data: record,
+                updatedAt: record.at,
+            },
+        }));
+        return record;
+    }
+    async listAnalyticsEvents(startDate, endDate) {
+        const events = [];
+        const cursor = new Date(`${startDate}T00:00:00.000Z`);
+        const last = new Date(`${endDate}T00:00:00.000Z`);
+        while (cursor <= last) {
+            const date = cursor.toISOString().slice(0, 10);
+            const response = await this.client.send(new lib_dynamodb_1.QueryCommand({
+                TableName: this.tableName,
+                KeyConditionExpression: "workspaceId = :workspaceId",
+                ExpressionAttributeValues: {
+                    ":workspaceId": analyticsEventWorkspaceId(date),
+                },
+            }));
+            for (const item of response.Items ?? []) {
+                const record = item.data;
+                if (record?.eventId && record?.at)
+                    events.push(record);
+            }
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+        return events.sort((left, right) => right.at.localeCompare(left.at));
     }
     async getPublicUsernameOwner(username) {
         const response = await this.client.send(new lib_dynamodb_1.GetCommand({

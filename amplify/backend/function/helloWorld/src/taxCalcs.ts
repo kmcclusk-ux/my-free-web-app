@@ -44,6 +44,7 @@ export type TaxPlan2025Input = {
   state: string;
   ordinaryIncomeExcludingSocialSecurity: number;
   preferredIncome: number;
+  longTermCapitalGainIncome?: number;
   socialSecurityBenefits?: number;
   taxExemptInterest?: number;
   netInvestmentIncome?: number;
@@ -186,9 +187,9 @@ export function fedPrefTax2025(
   prefTaxable: number,
   filingStatus: FilingStatus
 ): number {
-  const ord = Number(ordinaryTaxable) || 0;
-  const pref = Number(prefTaxable) || 0;
-  if (!Number.isFinite(pref) || pref <= 0) return 0;
+  const ord = nonNegative(ordinaryTaxable);
+  const pref = nonNegative(prefTaxable);
+  if (pref <= 0) return 0;
 
   const fs = (filingStatus || "single").toLowerCase() as FilingStatus;
 
@@ -218,9 +219,9 @@ export function splitFederalTaxableIncome2025(
   preferredIncome: number,
   deduction: number
 ) {
-  const ordinary = Math.max(Number(ordinaryIncome) || 0, 0);
-  const preferred = Math.max(Number(preferredIncome) || 0, 0);
-  const allowedDeduction = Math.max(Number(deduction) || 0, 0);
+  const ordinary = nonNegative(ordinaryIncome);
+  const preferred = nonNegative(preferredIncome);
+  const allowedDeduction = nonNegative(deduction);
   const taxableIncome = Math.max(ordinary + preferred - allowedDeduction, 0);
   const prefTaxable = Math.min(preferred, taxableIncome);
   const ordinaryTaxable = Math.max(taxableIncome - prefTaxable, 0);
@@ -268,8 +269,8 @@ export function niitTax(
 }
 
 export function localFlatTax(taxableIncome: number, rate: number) {
-  const income = Math.max(Number(taxableIncome) || 0, 0);
-  const normalizedRate = Math.max(Number(rate) || 0, 0);
+  const income = nonNegative(taxableIncome);
+  const normalizedRate = nonNegative(rate);
   const tax = income * normalizedRate;
   return {
     tax,
@@ -346,7 +347,7 @@ export function calculateTaxableSocialSecurity2025(
   const isMfsLivingTogether = filingStatus === "mfs" && !marriedFilingSeparatelyLivedApart;
   const baseAmount = filingStatus === "mfj" ? 32_000 : isMfsLivingTogether ? 0 : 25_000;
   const upperAmount = filingStatus === "mfj" ? 44_000 : isMfsLivingTogether ? 0 : 34_000;
-  const provisionalIncome = nonNegative(otherIncome) + nonNegative(taxExemptInterest) + annualBenefits * 0.5;
+  const provisionalIncome = Math.max((Number.isFinite(otherIncome) ? otherIncome : 0) + nonNegative(taxExemptInterest) + annualBenefits * 0.5, 0);
 
   if (isMfsLivingTogether) return Math.min(annualBenefits * 0.85, provisionalIncome * 0.85);
   if (provisionalIncome <= baseAmount) return 0;
@@ -362,6 +363,7 @@ export function calculateFederalTax2025(input: {
   filingStatus: FilingStatus;
   ordinaryIncomeExcludingSocialSecurity: number;
   preferredIncome: number;
+  longTermCapitalGainIncome?: number;
   socialSecurityBenefits?: number;
   taxExemptInterest?: number;
   netInvestmentIncome?: number;
@@ -369,24 +371,31 @@ export function calculateFederalTax2025(input: {
   aboveLineDeductions?: DeductionInput[];
   itemizedDeductions?: DeductionInput[];
   stateIncomeTax?: number;
+  localIncomeTax?: number;
 }) {
   const filingStatus = input.filingStatus;
   const ordinaryIncomeExcludingSocialSecurity = nonNegative(input.ordinaryIncomeExcludingSocialSecurity);
   const preferredIncome = nonNegative(input.preferredIncome);
+  const longTermCapitalGainIncome = Math.min(nonNegative(input.longTermCapitalGainIncome), preferredIncome);
   const socialSecurityBenefits = nonNegative(input.socialSecurityBenefits);
+  const capitalLossRaw = deductionAmount(input.aboveLineDeductions, isCapitalLossDeduction)
+    + deductionAmount(input.itemizedDeductions, isCapitalLossDeduction);
+  const capitalLossOffset = Math.min(capitalLossRaw, longTermCapitalGainIncome);
+  const capitalLossDeduction = Math.min(Math.max(capitalLossRaw - capitalLossOffset, 0), federalCapitalLossLimit2025(filingStatus));
+  const preferredIncomeAfterCapitalLoss = Math.max(preferredIncome - capitalLossOffset, 0);
+  const otherAboveLineDeductions = deductionAmount(input.aboveLineDeductions, (type) => !isCapitalLossDeduction(type));
+  const aboveLineDeduction = otherAboveLineDeductions + capitalLossDeduction;
+  const socialSecurityAdjustments = capitalLossDeduction + deductionAmount(input.aboveLineDeductions, (type) =>
+    ["ira contribution", "hsa contribution", "self-employed health insurance", "educator expenses"].includes(type.toLowerCase())
+  );
   const taxableSocialSecurity = calculateTaxableSocialSecurity2025(
     socialSecurityBenefits,
-    ordinaryIncomeExcludingSocialSecurity + preferredIncome,
+    ordinaryIncomeExcludingSocialSecurity + preferredIncomeAfterCapitalLoss - socialSecurityAdjustments,
     nonNegative(input.taxExemptInterest),
     filingStatus
   );
   const ordinaryIncome = ordinaryIncomeExcludingSocialSecurity + taxableSocialSecurity;
-  const capitalLossRaw = deductionAmount(input.aboveLineDeductions, isCapitalLossDeduction)
-    + deductionAmount(input.itemizedDeductions, isCapitalLossDeduction);
-  const capitalLossDeduction = Math.min(capitalLossRaw, federalCapitalLossLimit2025(filingStatus));
-  const otherAboveLineDeductions = deductionAmount(input.aboveLineDeductions, (type) => !isCapitalLossDeduction(type));
-  const aboveLineDeduction = otherAboveLineDeductions + capitalLossDeduction;
-  const adjustedGrossIncome = Math.max(ordinaryIncome + preferredIncome - aboveLineDeduction, 0);
+  const adjustedGrossIncome = Math.max(ordinaryIncome + preferredIncomeAfterCapitalLoss - aboveLineDeduction, 0);
   const propertyTax = deductionAmount(input.itemizedDeductions, (type) => type.trim().toLowerCase() === "property tax");
   const mortgageInterest = deductionAmount(input.itemizedDeductions, (type) => type.trim().toLowerCase() === "mortgage interest");
   const otherItemized = deductionAmount(input.itemizedDeductions, (type) => {
@@ -394,18 +403,20 @@ export function calculateFederalTax2025(input: {
     return !isCapitalLossDeduction(type) && normalized !== "property tax" && normalized !== "mortgage interest";
   });
   const saltCap = federalSaltCap2025(filingStatus, adjustedGrossIncome);
-  const saltEntered = propertyTax + nonNegative(input.stateIncomeTax);
+  const saltEntered = propertyTax + nonNegative(input.stateIncomeTax) + nonNegative(input.localIncomeTax);
   const saltDeduction = Math.min(saltEntered, saltCap);
   const itemizedDeduction = mortgageInterest + saltDeduction + otherItemized;
   const standardDeduction = federalStandardDeduction2025(filingStatus);
   const deductionMode = input.deductionMode === "itemized" ? "itemized" : "standard";
   const standardOrItemizedDeduction = deductionMode === "itemized" ? itemizedDeduction : standardDeduction;
-  const taxableSplit = splitFederalTaxableIncome2025(ordinaryIncome, preferredIncome, aboveLineDeduction + standardOrItemizedDeduction);
+  const taxableSplit = splitFederalTaxableIncome2025(ordinaryIncome, preferredIncomeAfterCapitalLoss, aboveLineDeduction + standardOrItemizedDeduction);
   const ordinaryTax = fedTax2025Ordinary(taxableSplit.ordinaryTaxable, filingStatus);
-  const prefTax = fedPrefTax2025(taxableSplit.ordinaryTaxable, taxableSplit.prefTaxable, filingStatus);
+  const preferentialTaxBeforeCeiling = fedPrefTax2025(taxableSplit.ordinaryTaxable, taxableSplit.prefTaxable, filingStatus);
   const regularTaxCeiling = fedTax2025Ordinary(taxableSplit.taxableIncome, filingStatus);
-  const incomeTaxBeforeNiit = Math.min(ordinaryTax + prefTax, regularTaxCeiling);
-  const netInvestmentIncome = nonNegative(input.netInvestmentIncome);
+  const prefTax = Math.min(preferentialTaxBeforeCeiling, Math.max(regularTaxCeiling - ordinaryTax, 0));
+  const incomeTaxBeforeNiit = ordinaryTax + prefTax;
+  const grossNetInvestmentIncome = nonNegative(input.netInvestmentIncome);
+  const netInvestmentIncome = Math.max(grossNetInvestmentIncome - capitalLossOffset, 0);
   const niitThreshold = filingStatus === "mfj" ? 250_000 : filingStatus === "mfs" ? 125_000 : 200_000;
   const niitBase = Math.min(netInvestmentIncome, Math.max(adjustedGrossIncome - niitThreshold, 0));
   const niit = niitBase * 0.038;
@@ -414,6 +425,9 @@ export function calculateFederalTax2025(input: {
   return {
     filingStatus,
     ordinaryIncomeExcludingSocialSecurity,
+    grossPreferredIncome: preferredIncome,
+    longTermCapitalGainIncome,
+    preferredIncomeAfterCapitalLoss,
     socialSecurityBenefits,
     taxableSocialSecurity,
     adjustedGrossIncome,
@@ -422,12 +436,14 @@ export function calculateFederalTax2025(input: {
       aboveLineDeduction,
       otherAboveLineDeductions,
       capitalLossRaw,
+      capitalLossOffset,
       capitalLossDeduction,
       standardDeduction,
       itemizedDeduction,
       mortgageInterest,
       propertyTax,
       stateIncomeTax: nonNegative(input.stateIncomeTax),
+      localIncomeTax: nonNegative(input.localIncomeTax),
       saltEntered,
       saltCap,
       saltDeduction,
@@ -438,10 +454,12 @@ export function calculateFederalTax2025(input: {
     ...taxableSplit,
     ordinaryTax,
     prefTax,
+    preferentialTaxBeforeCeiling,
     regularTaxCeiling,
     niitThreshold,
     niitBase,
     niit,
+    grossNetInvestmentIncome,
     netInvestmentIncome,
     incomeTax,
   };
@@ -536,10 +554,12 @@ export function calculateTaxPlan2025(input: TaxPlan2025Input) {
     standardDeduction: input.stateStandardDeduction,
     itemizedDeductions: input.stateItemizedDeductions,
   });
+  const local = calculateLocalTax2025({ ...input.local, filingStatus, stateIncomeTax: state.incomeTax, stateMarginalRate: state.marginalRate });
   const federal = calculateFederalTax2025({
     filingStatus,
     ordinaryIncomeExcludingSocialSecurity: input.ordinaryIncomeExcludingSocialSecurity,
     preferredIncome: input.preferredIncome,
+    longTermCapitalGainIncome: input.longTermCapitalGainIncome,
     socialSecurityBenefits: input.socialSecurityBenefits,
     taxExemptInterest: input.taxExemptInterest,
     netInvestmentIncome: input.netInvestmentIncome,
@@ -547,11 +567,11 @@ export function calculateTaxPlan2025(input: TaxPlan2025Input) {
     aboveLineDeductions: input.federalAboveLineDeductions,
     itemizedDeductions: input.federalItemizedDeductions,
     stateIncomeTax: state.incomeTax,
+    localIncomeTax: local.tax,
   });
   const payroll = calculateW2PayrollTax(nonNegative(input.w2Income), filingStatus, state.state);
   const nextDollarPayroll = calculateW2PayrollTax(nonNegative(input.w2Income) + 1, filingStatus, state.state);
   const marginalPayrollRate = Math.max(nextDollarPayroll.total - payroll.total, 0);
-  const local = calculateLocalTax2025({ ...input.local, filingStatus, stateIncomeTax: state.incomeTax, stateMarginalRate: state.marginalRate });
   const federalTotal = federal.incomeTax + payroll.federal.total;
   const stateTotal = state.incomeTax + payroll.state.total;
   const totalTax = federalTotal + stateTotal + local.tax;

@@ -6,6 +6,7 @@ import {
   fedTax2025Mfj,
   fedTax2025Ordinary,
   fedPrefTax2025,
+  calculateFederalTax2025,
   federalStandardDeduction2025,
   splitFederalTaxableIncome2025,
   caTax2025Mfj,
@@ -20,7 +21,7 @@ import {
   type LocalTaxBracket,
   type TaxPlan2025Input,
 } from "./taxCalcs";
-import { WorkbookStore, type PublicReportRecord, type WorkbookPayload } from "./workbookStore";
+import { WorkbookStore, type AnalyticsVisitorEvent, type PublicReportRecord, type WorkbookPayload } from "./workbookStore";
 
 function jsonResponse(
   statusCode: number,
@@ -33,7 +34,7 @@ function jsonResponse(
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token,X-AfterTax-Admin-Token",
     },
     body: JSON.stringify(body),
   };
@@ -46,7 +47,7 @@ function corsPreflight(origin = "*"): APIGatewayProxyResult {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Portfolio-Sync-Token,X-Portfolio-MCP-Token,X-AfterTax-Admin-Token",
     },
     body: "",
   };
@@ -114,6 +115,19 @@ type RequestBody =
   | { calc: "PUBLIC_REPORT_UPSERT"; reportId: string; name: string; slug: string; publicUsername: string; previousSlug?: string; payload: unknown }
   | { calc: "PUBLIC_USERNAME_CHECK"; username: string }
   | { calc: "PUBLIC_USERNAME_CLAIM"; username: string }
+  | {
+      calc: "ANALYTICS_TRACK";
+      eventName?: string;
+      path?: string;
+      title?: string;
+      referrer?: string;
+      visitorId?: string;
+      userAgent?: string;
+      language?: string;
+      timezone?: string;
+      screen?: { width?: number; height?: number };
+    }
+  | { calc: "ANALYTICS_SUMMARY"; days?: number; limit?: number }
   | { calc: "PORTFOLIO_CHAT"; messages?: PortfolioChatMessage[]; portfolioSnapshot?: unknown };
 
 type PortfolioChatMessage = {
@@ -173,7 +187,7 @@ Action schemas:
 - selectAsset payload: {"assetId":"ticker, row id, description, or account text"}.
 - selectAssets payload: {"assetIds":[row ids]} or {"symbol":"ticker"}.
 - highlightRows payload: {"ids":[row ids]} or {"symbol":"ticker"} or {"query":"description/account/symbol text"}. Use this when the user asks to highlight rows in the frontend.
-- selectRows payload: same as highlightRows; it visually highlights matching investment rows.
+- selectRows payload: {"ids":[row ids]} or {"symbol":"ticker"} or {"query":"description/account/symbol text"}. This sets the Investments UI column ✓ (include in calculations) and does not visually highlight rows.
 - selectAccount payload: {"accountId":"account id or account name"}.
 - setFilter payload: {"filterName":"account"|"category"|"asset","value":"filter value"}.
 - sortTable payload: {"tableId":"investments","column":"description"|"account"|"category"|"totalInvestment"|"yearlyIncome"|"symbol"|"includedTotal"|"filteredIncome","direction":"asc"|"desc"}.
@@ -298,6 +312,102 @@ function getHeader(event: APIGatewayProxyEvent, name: string) {
     if (key.toLowerCase() === target) return value || "";
   }
   return "";
+}
+
+function cleanAnalyticsText(value: unknown, maxLength: number) {
+  return String(value || "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function cleanAnalyticsPath(value: unknown) {
+  const raw = cleanAnalyticsText(value, 300);
+  if (!raw || raw.startsWith("javascript:") || raw.startsWith("data:")) return "/";
+  return raw.startsWith("/") ? raw : `/${raw.replace(/^https?:\/\/[^/]+/i, "")}`;
+}
+
+function getClientIp(event: APIGatewayProxyEvent) {
+  const forwarded = getHeader(event, "x-forwarded-for").split(",")[0]?.trim();
+  return forwarded || event.requestContext?.identity?.sourceIp || "";
+}
+
+function hashAnalyticsIp(ip: string) {
+  if (!ip) return undefined;
+  const salt = String(process.env.ANALYTICS_HASH_SALT || "aftertaxus-analytics").trim();
+  return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 24);
+}
+
+function classifyBotUserAgent(userAgent: string) {
+  const checks: Array<[RegExp, string]> = [
+    [/GPTBot/i, "GPTBot"],
+    [/ChatGPT-User|OAI-SearchBot/i, "OpenAI"],
+    [/ClaudeBot|anthropic/i, "Claude"],
+    [/PerplexityBot/i, "Perplexity"],
+    [/Googlebot|Google-InspectionTool/i, "Googlebot"],
+    [/Bingbot/i, "Bingbot"],
+    [/DuckDuckBot/i, "DuckDuckBot"],
+    [/Applebot/i, "Applebot"],
+    [/facebookexternalhit|Facebot/i, "Facebook"],
+    [/Twitterbot|XBot/i, "Twitter/X"],
+    [/LinkedInBot/i, "LinkedIn"],
+    [/bot|crawler|spider|slurp|crawl|preview|scanner|monitor/i, "Other bot"],
+  ];
+  const match = checks.find(([pattern]) => pattern.test(userAgent));
+  return { bot: Boolean(match), botName: match?.[1] };
+}
+
+function readBrowser(userAgent: string) {
+  if (/Edg\//i.test(userAgent)) return "Edge";
+  if (/Chrome\//i.test(userAgent) && !/Chromium/i.test(userAgent)) return "Chrome";
+  if (/Safari\//i.test(userAgent) && !/Chrome\//i.test(userAgent)) return "Safari";
+  if (/Firefox\//i.test(userAgent)) return "Firefox";
+  if (/bot|crawler|spider|slurp|crawl/i.test(userAgent)) return "Bot";
+  return userAgent ? "Other" : "Unknown";
+}
+
+function readDevice(userAgent: string) {
+  if (/ipad|tablet/i.test(userAgent)) return "Tablet";
+  if (/mobile|iphone|android/i.test(userAgent)) return "Mobile";
+  if (/bot|crawler|spider|slurp|crawl/i.test(userAgent)) return "Bot";
+  return userAgent ? "Desktop" : "Unknown";
+}
+
+function bucketCounts<T extends string | undefined>(items: T[], fallback = "Unknown") {
+  return items.reduce<Record<string, number>>((counts, value) => {
+    const key = value || fallback;
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function topCounts(counts: Record<string, number>, limit: number) {
+  return Object.entries(counts)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([name, count]) => ({ name, count }));
+}
+
+function referrerHost(referrer?: string) {
+  if (!referrer) return "Direct";
+  try {
+    return new URL(referrer).hostname.replace(/^www\./, "");
+  } catch {
+    return referrer.slice(0, 80);
+  }
+}
+
+function ensureAdminAnalyticsAccess(event: APIGatewayProxyEvent, origin: string) {
+  const configuredToken = String(process.env.ANALYTICS_ADMIN_TOKEN || "").trim();
+  if (!configuredToken) {
+    return jsonResponse(503, { error: "Analytics admin token is not configured." }, origin);
+  }
+  const suppliedToken = getHeader(event, "x-aftertax-admin-token").trim();
+  if (!suppliedToken || suppliedToken !== configuredToken) {
+    return jsonResponse(401, { error: "Analytics admin token is required." }, origin);
+  }
+  return null;
 }
 
 function getCognitoConfig() {
@@ -1881,6 +1991,150 @@ async function handlePublicUsernameRequest(
   }
 }
 
+async function handleAnalyticsRequest(
+  event: APIGatewayProxyEvent,
+  origin: string,
+  body: RequestBody
+): Promise<APIGatewayProxyResult> {
+  let store: WorkbookStore;
+  try {
+    store = new WorkbookStore();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Analytics storage is unavailable.";
+    return jsonResponse(500, { error: message }, origin);
+  }
+
+  const calc = (body as { calc: string }).calc;
+  if (calc === "ANALYTICS_TRACK") {
+    const analyticsBody = body as Extract<RequestBody, { calc: "ANALYTICS_TRACK" }>;
+    const now = new Date();
+    const at = now.toISOString();
+    const userAgent = cleanAnalyticsText(analyticsBody.userAgent || getHeader(event, "user-agent"), 500);
+    const botResult = classifyBotUserAgent(userAgent);
+    const screen = analyticsBody.screen && typeof analyticsBody.screen === "object"
+      ? {
+          width: Number.isFinite(Number(analyticsBody.screen.width)) ? Number(analyticsBody.screen.width) : undefined,
+          height: Number.isFinite(Number(analyticsBody.screen.height)) ? Number(analyticsBody.screen.height) : undefined,
+        }
+      : undefined;
+    const record: AnalyticsVisitorEvent = {
+      eventId: randomBytes(12).toString("hex"),
+      eventName: cleanAnalyticsText(analyticsBody.eventName || "page_view", 60) || "page_view",
+      at,
+      date: at.slice(0, 10),
+      path: cleanAnalyticsPath(analyticsBody.path || event.path || "/"),
+      title: cleanAnalyticsText(analyticsBody.title, 160) || undefined,
+      referrer: cleanAnalyticsText(analyticsBody.referrer, 300) || undefined,
+      visitorId: cleanAnalyticsText(analyticsBody.visitorId, 80) || undefined,
+      ipHash: hashAnalyticsIp(getClientIp(event)),
+      userAgent,
+      bot: botResult.bot,
+      botName: botResult.botName,
+      browser: readBrowser(userAgent),
+      device: readDevice(userAgent),
+      language: cleanAnalyticsText(analyticsBody.language, 40) || undefined,
+      timezone: cleanAnalyticsText(analyticsBody.timezone, 80) || undefined,
+      screen,
+    };
+
+    try {
+      await store.putAnalyticsEvent(record);
+      return jsonResponse(200, { ok: true }, origin);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to record analytics event.";
+      return jsonResponse(500, { error: message }, origin);
+    }
+  }
+
+  const adminError = ensureAdminAnalyticsAccess(event, origin);
+  if (adminError) return adminError;
+
+  const summaryBody = body as Extract<RequestBody, { calc: "ANALYTICS_SUMMARY" }>;
+  const days = Math.min(Math.max(Math.floor(Number(summaryBody.days || 14)), 1), 31);
+  const limit = Math.min(Math.max(Math.floor(Number(summaryBody.limit || 100)), 1), 500);
+  const end = new Date();
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() - days + 1);
+  const startDate = start.toISOString().slice(0, 10);
+  const endDate = end.toISOString().slice(0, 10);
+
+  try {
+    const events = await store.listAnalyticsEvents(startDate, endDate);
+    const daily = Array.from({ length: days }, (_, offset) => {
+      const date = new Date(start);
+      date.setUTCDate(start.getUTCDate() + offset);
+      return {
+        date: date.toISOString().slice(0, 10),
+        hits: 0,
+        humans: 0,
+        bots: 0,
+        uniqueVisitors: 0,
+      };
+    });
+    const dailyMap = new Map(daily.map((day) => [day.date, day]));
+    const visitorByDay = new Map<string, Set<string>>();
+
+    for (const eventRecord of events) {
+      const day = dailyMap.get(eventRecord.date);
+      if (!day) continue;
+      day.hits += 1;
+      if (eventRecord.bot) day.bots += 1;
+      else day.humans += 1;
+      const visitorKey = eventRecord.visitorId || eventRecord.ipHash || eventRecord.eventId;
+      if (!visitorByDay.has(eventRecord.date)) visitorByDay.set(eventRecord.date, new Set());
+      visitorByDay.get(eventRecord.date)?.add(visitorKey);
+    }
+
+    for (const day of daily) {
+      day.uniqueVisitors = visitorByDay.get(day.date)?.size || 0;
+    }
+
+    const uniqueVisitors = new Set(events.map((eventRecord) => eventRecord.visitorId || eventRecord.ipHash || eventRecord.eventId));
+    const topPages = topCounts(bucketCounts(events.map((eventRecord) => eventRecord.path)), 12);
+    const referrers = topCounts(bucketCounts(events.map((eventRecord) => referrerHost(eventRecord.referrer))), 12);
+    const browsers = topCounts(bucketCounts(events.map((eventRecord) => eventRecord.browser)), 10);
+    const devices = topCounts(bucketCounts(events.map((eventRecord) => eventRecord.device)), 10);
+    const botNames = topCounts(bucketCounts(events.filter((eventRecord) => eventRecord.bot).map((eventRecord) => eventRecord.botName), "Other bot"), 10);
+    const hourCounts = bucketCounts(events.map((eventRecord) => eventRecord.at.slice(0, 13).replace("T", " ")));
+
+    return jsonResponse(200, {
+      generatedAt: new Date().toISOString(),
+      range: { startDate, endDate, days },
+      totals: {
+        hits: events.length,
+        humans: events.filter((eventRecord) => !eventRecord.bot).length,
+        bots: events.filter((eventRecord) => eventRecord.bot).length,
+        uniqueVisitors: uniqueVisitors.size,
+      },
+      daily,
+      topPages,
+      referrers,
+      browsers,
+      devices,
+      botNames,
+      hourly: topCounts(hourCounts, 48).sort((left, right) => left.name.localeCompare(right.name)),
+      recentVisits: events.slice(0, limit).map((eventRecord) => ({
+        at: eventRecord.at,
+        path: eventRecord.path,
+        title: eventRecord.title,
+        referrer: eventRecord.referrer,
+        referrerHost: referrerHost(eventRecord.referrer),
+        visitorId: eventRecord.visitorId,
+        ipHash: eventRecord.ipHash,
+        bot: eventRecord.bot,
+        botName: eventRecord.botName,
+        browser: eventRecord.browser,
+        device: eventRecord.device,
+        language: eventRecord.language,
+        timezone: eventRecord.timezone,
+      })),
+    }, origin);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load analytics summary.";
+    return jsonResponse(500, { error: message }, origin);
+  }
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
@@ -1951,6 +2205,10 @@ export const handler = async (
 
   if (calc === "PUBLIC_USERNAME_CHECK" || calc === "PUBLIC_USERNAME_CLAIM") {
     return handlePublicUsernameRequest(event, body);
+  }
+
+  if (calc === "ANALYTICS_TRACK" || calc === "ANALYTICS_SUMMARY") {
+    return handleAnalyticsRequest(event, resolveCorsOrigin(event, calc === "ANALYTICS_SUMMARY"), body);
   }
 
   if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
@@ -2174,8 +2432,15 @@ export const handler = async (
       return jsonResponse(400, { error: netInvestmentIncome.error }, origin);
     }
 
-    const ordinaryTax = fedTax2025Ordinary(taxableSplit.ordinaryTaxable, filingStatus);
-    const prefTax = fedPrefTax2025(taxableSplit.ordinaryTaxable, taxableSplit.prefTaxable, filingStatus);
+    const federal = calculateFederalTax2025({
+      filingStatus,
+      ordinaryIncomeExcludingSocialSecurity: taxableSplit.ordinaryTaxable,
+      preferredIncome: taxableSplit.prefTaxable,
+      deductionMode: "itemized",
+      netInvestmentIncome: 0,
+    });
+    const ordinaryTax = federal.ordinaryTax;
+    const prefTax = federal.prefTax;
     const niit = niitTax(magi.value, netInvestmentIncome.value, filingStatus);
     const tax = ordinaryTax + prefTax + niit;
 

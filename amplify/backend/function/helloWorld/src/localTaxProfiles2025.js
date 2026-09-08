@@ -28,6 +28,7 @@ const earningsLocalTaxBase = () => ({
     ...noLocalTaxBase(),
     wages: true,
     selfEmployment: true,
+    businessIncome: true,
 });
 const broadLocalTaxBase = () => ({
     wages: true,
@@ -43,7 +44,7 @@ const broadLocalTaxBase = () => ({
 exports.localTaxProfiles2025 = [
     { id: "none", locality: "No local income tax", state: "", kind: "none", residentRate: 0, nonresidentRate: 0, base: noLocalTaxBase(), note: "No city, county, or district income tax is applied." },
     { id: "custom", locality: "Custom / manual local tax", state: "", kind: "flat", residentRate: 0, nonresidentRate: 0, base: earningsLocalTaxBase(), note: "Enter a local rate and choose which income categories are taxed." },
-    { id: "ny-nyc", locality: "New York City", state: "NY", kind: "progressive", residentRate: 0.03876, base: broadLocalTaxBase(), brackets: [{ threshold: 0, rate: 0.03078, baseTax: 0 }, { threshold: 12000, rate: 0.03762, baseTax: 369 }, { threshold: 25000, rate: 0.03819, baseTax: 858 }, { threshold: 50000, rate: 0.03876, baseTax: 1813 }], bracketsByStatus: {
+    { id: "ny-nyc", locality: "New York City", state: "NY", kind: "progressive", residentRate: 0.03876, nonresidentRate: 0, base: broadLocalTaxBase(), nonresidentBase: noLocalTaxBase(), brackets: [{ threshold: 0, rate: 0.03078, baseTax: 0 }, { threshold: 12000, rate: 0.03762, baseTax: 369 }, { threshold: 25000, rate: 0.03819, baseTax: 858 }, { threshold: 50000, rate: 0.03876, baseTax: 1813 }], bracketsByStatus: {
             single: [{ threshold: 0, rate: 0.03078, baseTax: 0 }, { threshold: 12000, rate: 0.03762, baseTax: 369 }, { threshold: 25000, rate: 0.03819, baseTax: 858 }, { threshold: 50000, rate: 0.03876, baseTax: 1813 }],
             mfs: [{ threshold: 0, rate: 0.03078, baseTax: 0 }, { threshold: 12000, rate: 0.03762, baseTax: 369 }, { threshold: 25000, rate: 0.03819, baseTax: 858 }, { threshold: 50000, rate: 0.03876, baseTax: 1813 }],
             mfj: [{ threshold: 0, rate: 0.03078, baseTax: 0 }, { threshold: 21600, rate: 0.03762, baseTax: 665 }, { threshold: 45000, rate: 0.03819, baseTax: 1545 }, { threshold: 90000, rate: 0.03876, baseTax: 3264 }],
@@ -58,10 +59,10 @@ exports.localTaxProfiles2025 = [
     { id: "oh-dayton", locality: "Dayton", state: "OH", kind: "flat", residentRate: 0.025, base: earningsLocalTaxBase(), note: "Ohio municipal income tax generally applies to earned income." },
     { id: "pa-philadelphia", locality: "Philadelphia", state: "PA", kind: "flat", residentRate: 0.0374, nonresidentRate: 0.0343, base: earningsLocalTaxBase(), note: "Wage/earnings tax rate effective July 1, 2025; investment income, retirement income, and Social Security are outside this wage-tax base." },
     { id: "pa-pittsburgh", locality: "Pittsburgh", state: "PA", kind: "flat", residentRate: 0.03, base: earningsLocalTaxBase(), note: "Local earned-income tax; investment income is generally not taxed by this local tax." },
-    { id: "mi-detroit", locality: "Detroit", state: "MI", kind: "flat", residentRate: 0.024, nonresidentRate: 0.012, base: earningsLocalTaxBase(), note: "City income tax on earned income; resident/nonresident rates differ." },
-    { id: "mi-grand-rapids", locality: "Grand Rapids", state: "MI", kind: "flat", residentRate: 0.015, nonresidentRate: 0.0075, base: earningsLocalTaxBase(), note: "Michigan city tax on earned income; resident/nonresident rates differ." },
-    { id: "mi-lansing", locality: "Lansing", state: "MI", kind: "flat", residentRate: 0.01, nonresidentRate: 0.005, base: earningsLocalTaxBase(), note: "Michigan city tax on earned income; resident/nonresident rates differ." },
-    { id: "mi-flint", locality: "Flint", state: "MI", kind: "flat", residentRate: 0.01, nonresidentRate: 0.005, base: earningsLocalTaxBase(), note: "Michigan city tax on earned income; resident/nonresident rates differ." },
+    { id: "mi-detroit", locality: "Detroit", state: "MI", kind: "flat", residentRate: 0.024, nonresidentRate: 0.012, base: broadLocalTaxBase(), nonresidentBase: { ...earningsLocalTaxBase(), rentalIncome: true }, note: "Residents include taxable interest, dividends, gains and rental profits. Nonresidents include city-sourced earnings, business and rental profits. Exemptions and source allocation must be entered separately." },
+    { id: "mi-grand-rapids", locality: "Grand Rapids", state: "MI", kind: "flat", residentRate: 0.015, nonresidentRate: 0.0075, base: broadLocalTaxBase(), nonresidentBase: { ...earningsLocalTaxBase(), rentalIncome: true }, note: "Residents include investment income; nonresidents include city-sourced earnings and net business/rental profits, not personal intangible income." },
+    { id: "mi-lansing", locality: "Lansing", state: "MI", kind: "flat", residentRate: 0.01, nonresidentRate: 0.005, base: broadLocalTaxBase(), nonresidentBase: { ...earningsLocalTaxBase(), rentalIncome: true }, note: "Residents include investment income; nonresidents include city-sourced earnings and net business/rental profits, not personal intangible income." },
+    { id: "mi-flint", locality: "Flint", state: "MI", kind: "flat", residentRate: 0.01, nonresidentRate: 0.005, base: broadLocalTaxBase(), nonresidentBase: { ...earningsLocalTaxBase(), rentalIncome: true }, note: "Residents include investment income; nonresidents include city-sourced earnings and net business/rental profits, not personal intangible income." },
     { id: "md-county", locality: "Maryland county / Baltimore City", state: "MD", kind: "flat", residentRate: 0.032, base: broadLocalTaxBase(), note: "Maryland local income tax generally follows the Maryland income-tax base; choose the county-specific rate." },
     { id: "in-county", locality: "Indiana county", state: "IN", kind: "flat", residentRate: 0.02, base: broadLocalTaxBase(), note: "Indiana county income-tax rates vary by county; enter your county rate." },
     { id: "ky-louisville", locality: "Louisville / Jefferson County", state: "KY", kind: "flat", residentRate: 0.022, base: earningsLocalTaxBase(), note: "Occupational/license tax usually applies to wages and net profits, not investment income." },

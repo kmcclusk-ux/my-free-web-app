@@ -19,9 +19,9 @@ const publishedStateFixtures: StateTaxFixture[] = [
   { state: "CT", single100k: 4750, mfj100k: 4000, single500k: 31250, mfj500k: 28000 },
   { state: "DE", single100k: 5583.5, mfj100k: 5583.5, single500k: 31983.5, mfj500k: 31983.5 },
   { state: "FL", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
-  { state: "GA", single100k: 5390, mfj100k: 5390, single500k: 26950, mfj500k: 26950 },
+  { state: "GA", single100k: 5190, mfj100k: 5190, single500k: 25950, mfj500k: 25950 },
   { state: "HI", single100k: 6491.2, mfj100k: 5382.4, single500k: 45216.2, mfj500k: 37432.4 },
-  { state: "ID", single100k: 5428.87, mfj100k: 5162.75, single500k: 28208.87, mfj500k: 27942.75 },
+  { state: "ID", single100k: 5300, mfj100k: 5300, single500k: 26500, mfj500k: 26500 },
   { state: "IL", single100k: 4950, mfj100k: 4950, single500k: 24750, mfj500k: 24750 },
   { state: "IN", single100k: 3000, mfj100k: 3000, single500k: 15000, mfj500k: 15000 },
   { state: "IA", single100k: 3800, mfj100k: 3800, single500k: 19000, mfj500k: 19000 },
@@ -44,16 +44,16 @@ const publishedStateFixtures: StateTaxFixture[] = [
   { state: "NY", single100k: 5431.75, mfj100k: 5167.5, single500k: 31850.85, mfj500k: 30362.55 },
   { state: "NC", single100k: 4250, mfj100k: 4250, single500k: 21250, mfj500k: 21250 },
   { state: "ND", single100k: 1004.74, mfj100k: 370.99, single500k: 10208.2, mfj500k: 9281.58 },
-  { state: "OH", single100k: 2033.63, mfj100k: 2033.63, single500k: 13033.63, mfj500k: 13033.63 },
+  { state: "OH", single100k: 2375.63, mfj100k: 2375.63, single500k: 14894.32, mfj500k: 14894.32 },
   { state: "OK", single100k: 4561.5, mfj100k: 4373, single500k: 23561.5, mfj500k: 23373 },
   { state: "OR", single100k: 8441, mfj100k: 8132, single500k: 47753.5, mfj500k: 46007 },
   { state: "PA", single100k: 3070, mfj100k: 3070, single500k: 15350, mfj500k: 15350 },
   { state: "RI", single100k: 3951, mfj100k: 3951, single500k: 26898.54, mfj500k: 26898.54 },
-  { state: "SC", single100k: 5522.64, mfj100k: 5522.64, single500k: 30322.64, mfj500k: 30322.64 },
+  { state: "SC", single100k: 5358.3, mfj100k: 5358.3, single500k: 29358.3, mfj500k: 29358.3 },
   { state: "SD", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
   { state: "TN", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
   { state: "TX", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
-  { state: "UT", single100k: 4550, mfj100k: 4550, single500k: 22750, mfj500k: 22750 },
+  { state: "UT", single100k: 4500, mfj100k: 4500, single500k: 22500, mfj500k: 22500 },
   { state: "VT", single100k: 5043.25, mfj100k: 4001.63, single500k: 38250.25, mfj500k: 35830.73 },
   { state: "VA", single100k: 5492.5, mfj100k: 5492.5, single500k: 28492.5, mfj500k: 28492.5 },
   { state: "WA", single100k: 0, mfj100k: 0, single500k: 0, mfj500k: 0 },
@@ -108,7 +108,7 @@ describe("2025 state income tax published fixture coverage", () => {
     expect(stateTax2025(100000, "NJ", "single").tax).toBeCloseTo(4243.75, 2);
   });
 
-  test("every state schedule is ordered, nonnegative, and continuous at each threshold", () => {
+  test("every state schedule honors its marginal rates and any statutory base-tax steps", () => {
     const filingStatuses: FilingStatus[] = ["single", "mfj", "mfs", "hoh"];
     for (const profile of stateTaxProfiles) {
       for (const filingStatus of filingStatuses) {
@@ -123,7 +123,11 @@ describe("2025 state income tax published fixture coverage", () => {
           const atThreshold = stateTax2025(bracket.threshold, profile.code, filingStatus).tax;
           const afterThreshold = stateTax2025(bracket.threshold + 1, profile.code, filingStatus).tax;
           expect(afterThreshold).toBeGreaterThanOrEqual(atThreshold);
-          expect(afterThreshold - atThreshold).toBeCloseTo(bracket.rate, 8);
+          if (bracket.baseTax !== undefined) {
+            expect(afterThreshold).toBeCloseTo(bracket.baseTax + bracket.rate, 8);
+          } else {
+            expect(afterThreshold - atThreshold).toBeCloseTo(bracket.rate, 8);
+          }
         }
       }
     }

@@ -6,6 +6,7 @@ const frontendNodeModules = fileURLToPath(new URL("../frontend/node_modules/", i
 export default defineConfig({
   base: "./",
   resolve: {
+    extensions: [".ts", ".tsx", ".mjs", ".js", ".json"],
     alias: {
       react: `${frontendNodeModules}react`,
       "react-dom/client": `${frontendNodeModules}react-dom/client`,

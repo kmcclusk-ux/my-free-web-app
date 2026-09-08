@@ -1,5 +1,5 @@
 {
-  "name": "helloWorld",
+  "name": "helloworld",
   "version": "1.0.0",
   "description": "Tax calculation Lambda function",
   "main": "index.js",
@@ -8,6 +8,7 @@
     "build": "cd amplify/backend/function/helloWorld && npm run build",
     "clean": "rimraf build",
     "rebuild": "npm run clean && npm run build",
+    "pretest": "npm run build",
     "test": "vitest run",
     "test:tax-treatments": "vitest run tests/tax-treatment.test.ts"
   },
@@ -21,5 +22,19 @@
     "rimraf": "^5.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.0.18"
-  }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kmcclusk-ux/my-free-web-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kmcclusk-ux/my-free-web-app/issues"
+  },
+  "homepage": "https://github.com/kmcclusk-ux/my-free-web-app#readme"
 }

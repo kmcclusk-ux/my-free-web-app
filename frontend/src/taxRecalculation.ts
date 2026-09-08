@@ -4,6 +4,7 @@ export type TaxPlanRequest = {
   state: string;
   ordinaryIncomeExcludingSocialSecurity: number;
   preferredIncome: number;
+  longTermCapitalGainIncome?: number;
   socialSecurityBenefits: number;
   taxExemptInterest: number;
   netInvestmentIncome: number;

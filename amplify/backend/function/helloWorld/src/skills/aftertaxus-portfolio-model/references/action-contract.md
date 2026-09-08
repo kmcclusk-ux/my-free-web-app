@@ -5,8 +5,9 @@ Use this contract only when the user requests a UI or workbook change.
 ## Interpretation
 
 - Interpret the request semantically. Do not search for the entire command as literal row text.
-- `select rows`, `highlight rows`, `show only ... rows`, and `select only ... rows` refer to highlighted-row selection, not the Inc/includeIncome checkbox.
-- `select only` replaces the existing highlighted selection with exactly the matching rows.
+- `select/include/check rows` and `select all investments` refer to the Inc/includeIncome checkbox, which controls whether rows participate in calculations.
+- `highlight rows` refers only to visual row highlighting. It never changes the Inc/includeIncome or WhatIf checkboxes.
+- `show only highlighted rows` is a visual filter request; it does not change calculation inclusion.
 - Ignore command/filler words when identifying a match value, including `select`, `only`, `the`, `rows`, `row`, `where`, `with`, `containing`, `account`, `is`, `equals`, `named`, `called`, `please`, `show`, and `highlight`.
 - If the user names a field, match it first: account -> `holding.account`; symbol/ticker -> `symbol` or `effectiveSymbol`; description -> `description`. Without a named field, search account, description, symbol, effectiveSymbol, and category.
 - Match case-insensitively. Allow a minor spelling error or omitted character only when one current value is clearly intended. For example, `vangard` may match `Vanguard` when it is the unique close current value.
@@ -28,7 +29,9 @@ For ChatGPT, use the host adaptation rules in `SKILL.md`. Do not claim that prop
 - `setCheckbox`: `{"id":17,"field":"includeIncome|overrideProposal","checked":true}`.
 - `setAllCheckboxes`: `{"field":"includeIncome|overrideProposal","checked":true}`. Confirmation required.
 - `selectAsset`: `{"assetId":"ticker, stable row id, description, or account text"}`.
-- `selectAssets`, `highlightRows`, or `selectRows`: use `{"ids":[17,21]}`, `{"symbol":"VTI"}`, or `{"query":"matching text"}`. Prefer exact stable IDs. `selectRows` is the canonical action for `select only`.
+- `selectRows`: use `{"ids":[17,21]}`, `{"symbol":"VTI"}`, or `{"query":"matching text"}` to set the Inc/includeIncome checkbox. Prefer exact stable IDs.
+- `highlightRows`: use `{"ids":[17,21]}`, `{"symbol":"VTI"}`, or `{"query":"matching text"}` to set visual highlights only.
+- `selectAssets`: use only for choosing an asset/account in the UI, not for changing Inc/includeIncome or visual highlights.
 - `selectAccount`: `{"accountId":"account id or exact account name"}`.
 - `setFilter`: `{"filterName":"account|category|asset","value":"current value"}`.
 - `clearFilters`: empty payload.
@@ -49,6 +52,6 @@ Allowed table fields and ownership are defined in `model-layout.md` and may be n
 - Use stable IDs from current model data. Spreadsheet row numbers are not IDs unless the host explicitly maps them.
 - Prefer `upsertRows` for bulk Assets, Accounts, Asset Classes, Tax Treatments, Account Tax Categories, or Account Types. Match by symbol, account, name, label, taxStatus, or name respectively.
 - Use `replaceRows` only when the user explicitly requests replacement/reset of the entire table.
-- Use `setCheckbox`/`setAllCheckboxes` for Inc. Inc is not a filter.
+- Use `setCheckbox`/`setAllCheckboxes` for Inc or WhatIf checkboxes. Inc is not a filter.
 - Highlighting, selecting, filtering, sorting, and navigation are non-destructive. Data mutation, persisted settings, WhatIf state, bulk checkbox changes, and deletion retain their confirmation requirement.
 - Keep the action as narrow as possible and do not modify related tables unless required to satisfy the explicit request.

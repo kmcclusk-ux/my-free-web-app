@@ -11,18 +11,17 @@ import { calculateTaxableSocialSecurity2025 } from "../amplify/backend/function/
 
 const amount = 100;
 const expectedTreatments = [
-  { label: "tax-free", ordinary: 0, preferred: 0, state: 0, niit: false },
   { label: "state tax free", ordinary: 100, preferred: 0, state: 0, niit: true },
-  { label: "fed tax free", ordinary: 0, preferred: 0, state: 100, niit: true },
-  { label: "index-60-40", ordinary: 40, preferred: 60, state: 100, niit: true },
+  { label: "fed tax free", ordinary: 0, preferred: 0, state: 100, niit: false },
+  { label: "section 1256", ordinary: 40, preferred: 60, state: 100, niit: true },
+  { label: "W2 income", ordinary: 100, preferred: 0, state: 100, niit: false },
   { label: "income", ordinary: 100, preferred: 0, state: 100, niit: true },
-  { label: "ss-85-fed", ordinary: 85, preferred: 0, state: 0, niit: false },
+  { label: "social security", ordinary: 85, preferred: 0, state: 0, niit: false },
   { label: "qualified-div", ordinary: 0, preferred: 100, state: 100, niit: true },
   { label: "non-qualified-div", ordinary: 100, preferred: 0, state: 100, niit: true },
   { label: "short term gain", ordinary: 100, preferred: 0, state: 100, niit: true },
   { label: "long term gain", ordinary: 0, preferred: 100, state: 100, niit: true },
-  { label: "real estate", ordinary: 100, preferred: 0, state: 100, niit: true },
-  { label: "hold", ordinary: 0, preferred: 0, state: 0, niit: false },
+  { label: "return of capital", ordinary: 0, preferred: 0, state: 0, niit: false },
 ] as const;
 
 describe("investment tax-treatment regression coverage", () => {
@@ -49,7 +48,23 @@ describe("investment tax-treatment regression coverage", () => {
     const staleTaxableRule = { id: 1, label: "state tax free", ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest", description: "", includeInAllocation: true };
     expect(canonicalStateRuleForTaxTreatment("state tax free")).toBe("treasury-exempt");
     expect(stateTaxAdjust(amount, "state tax free", "CA", staleTaxableRule)).toBe(0);
-    expect(stateTaxAdjust(amount, "tax-free", "CA", staleTaxableRule)).toBe(0);
+    expect(stateTaxAdjust(amount, "return of capital", "CA", staleTaxableRule)).toBe(0);
+    expect(stateTaxAdjust(amount, "social security", "CA", staleTaxableRule)).toBe(0);
+  });
+
+  test("legacy exported treatment names remain aliases for current schema labels", () => {
+    const aliases = [
+      { legacy: "hold", current: "return of capital" },
+      { legacy: "ss-85-fed", current: "social security" },
+      { legacy: "index-60-40", current: "section 1256" },
+      { legacy: "tax-free", current: "return of capital" },
+    ] as const;
+    for (const pair of aliases) {
+      expect(fedTaxAdjust(amount, pair.legacy, false)).toBeCloseTo(fedTaxAdjust(amount, pair.current, false));
+      expect(fedTaxAdjust(amount, pair.legacy, true)).toBeCloseTo(fedTaxAdjust(amount, pair.current, true));
+      expect(stateTaxAdjust(amount, pair.legacy, "CA")).toBeCloseTo(stateTaxAdjust(amount, pair.current, "CA"));
+      expect(defaultTaxTreatmentRule(pair.legacy).niitIncluded).toBe(defaultTaxTreatmentRule(pair.current).niitIncluded);
+    }
   });
 
   test("custom federal shares are capped and proportionally normalized", () => {

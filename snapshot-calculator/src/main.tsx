@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { federalStandardDeduction2025, investmentResult } from "./calculation";
 
 type FilingStatus = "mfj" | "single" | "mfs" | "hoh";
 type TaxType = "ordinary" | "qualified" | "treasury" | "muni" | "taxFree";
@@ -82,10 +83,10 @@ const filingStatusValues = new Set<FilingStatus>(filingStatusOptions.map((option
 const deductionMethodValues = new Set<DeductionMethod>(["standard", "itemized"]);
 
 const standardDeductions: Record<FilingStatus, number> = {
-  mfj: 30000,
-  single: 15000,
-  mfs: 15000,
-  hoh: 22500,
+  mfj: federalStandardDeduction2025("mfj"),
+  single: federalStandardDeduction2025("single"),
+  mfs: federalStandardDeduction2025("mfs"),
+  hoh: federalStandardDeduction2025("hoh"),
 };
 
 const defaultInputs: SnapshotInputs = {
@@ -95,8 +96,8 @@ const defaultInputs: SnapshotInputs = {
   investmentAmount: 100000,
   deductionMethod: "standard",
   itemizedDeductions: { mortgageInterest: 0, propertyTax: 0, charitable: 0, other: 0 },
-  investmentA: { symbol: "BIL", amount: 100000, yieldPercent: 3.6, taxType: "ordinary" },
-  investmentB: { symbol: "NAC", amount: 100000, yieldPercent: 7, taxType: "treasury" },
+  investmentA: { symbol: "BIL", amount: 100000, yieldPercent: 3.6, taxType: "treasury" },
+  investmentB: { symbol: "NAC", amount: 100000, yieldPercent: 7, taxType: "muni" },
 };
 
 const stateOptions = [
@@ -124,14 +125,6 @@ const stateFlagOverrides: Record<string, string> = {
   WA: "Flag_of_Washington.svg",
 };
 
-const stateRates: Record<string, number> = {
-  AL: 0.05, AZ: 0.025, AR: 0.039, CA: 0.093, CO: 0.044, CT: 0.06, DE: 0.066, DC: 0.085,
-  GA: 0.0539, HI: 0.0825, ID: 0.05695, IL: 0.0495, IN: 0.03, IA: 0.038, KS: 0.0558,
-  KY: 0.04, LA: 0.03, ME: 0.0715, MD: 0.0575, MA: 0.05, MI: 0.0425, MN: 0.0785,
-  MS: 0.044, MO: 0.047, MT: 0.059, NE: 0.052, NJ: 0.0637, NM: 0.049, NY: 0.0685,
-  NC: 0.0425, ND: 0.0195, OH: 0.0275, OK: 0.0475, OR: 0.0875, PA: 0.0307, RI: 0.0475,
-  SC: 0.062, UT: 0.0455, VT: 0.076, VA: 0.0575, WV: 0.0482, WI: 0.053,
-};
 
 function stateFlagUrl(stateCode: string) {
   const name = stateNames[stateCode] || stateCode;
@@ -269,83 +262,6 @@ function yearlyIncomeAmount(value: number) {
   return `${currency(value)}/yr`;
 }
 
-function bracketedTax(income: number, brackets: ReadonlyArray<{ max: number; rate: number }>) {
-  if (!Number.isFinite(income) || income <= 0) return 0;
-  let tax = 0;
-  let previousMax = 0;
-  for (const bracket of brackets) {
-    const amount = Math.max(Math.min(income, bracket.max) - previousMax, 0);
-    tax += amount * bracket.rate;
-    if (income <= bracket.max) break;
-    previousMax = bracket.max;
-  }
-  return tax;
-}
-
-function federalOrdinaryTax(income: number, filingStatus: FilingStatus) {
-  const schedules: Record<FilingStatus, ReadonlyArray<{ max: number; rate: number }>> = {
-    mfj: [
-      { max: 23850, rate: 0.10 }, { max: 96950, rate: 0.12 }, { max: 206700, rate: 0.22 },
-      { max: 394600, rate: 0.24 }, { max: 501050, rate: 0.32 }, { max: 751600, rate: 0.35 },
-      { max: Infinity, rate: 0.37 },
-    ],
-    single: [
-      { max: 11925, rate: 0.10 }, { max: 48475, rate: 0.12 }, { max: 103350, rate: 0.22 },
-      { max: 197300, rate: 0.24 }, { max: 250525, rate: 0.32 }, { max: 626350, rate: 0.35 },
-      { max: Infinity, rate: 0.37 },
-    ],
-    mfs: [
-      { max: 11925, rate: 0.10 }, { max: 48475, rate: 0.12 }, { max: 103350, rate: 0.22 },
-      { max: 197300, rate: 0.24 }, { max: 250525, rate: 0.32 }, { max: 375800, rate: 0.35 },
-      { max: Infinity, rate: 0.37 },
-    ],
-    hoh: [
-      { max: 17000, rate: 0.10 }, { max: 64850, rate: 0.12 }, { max: 103350, rate: 0.22 },
-      { max: 197300, rate: 0.24 }, { max: 250500, rate: 0.32 }, { max: 626350, rate: 0.35 },
-      { max: Infinity, rate: 0.37 },
-    ],
-  };
-  return bracketedTax(income, schedules[filingStatus]);
-}
-
-function preferredTax(incomeBeforeInvestment: number, investmentIncome: number, filingStatus: FilingStatus) {
-  const thresholds: Record<FilingStatus, { zero: number; fifteen: number }> = {
-    single: { zero: 48350, fifteen: 533400 },
-    mfj: { zero: 96700, fifteen: 600050 },
-    mfs: { zero: 48350, fifteen: 300000 },
-    hoh: { zero: 64750, fifteen: 566700 },
-  };
-  const bracket = thresholds[filingStatus];
-  const zeroAmount = Math.max(0, Math.min(investmentIncome, bracket.zero - incomeBeforeInvestment));
-  const fifteenBase = Math.max(incomeBeforeInvestment, bracket.zero);
-  const fifteenAmount = Math.max(0, Math.min(investmentIncome - zeroAmount, bracket.fifteen - fifteenBase));
-  const twentyAmount = Math.max(0, investmentIncome - zeroAmount - fifteenAmount);
-  return fifteenAmount * 0.15 + twentyAmount * 0.2;
-}
-
-function investmentResult(input: InvestmentInput, taxableIncome: number, filingStatus: FilingStatus, stateCode: string) {
-  const beforeTaxIncome = input.amount * (input.yieldPercent / 100);
-  const federalOrdinaryBase = input.taxType === "ordinary" || input.taxType === "treasury" ? beforeTaxIncome : 0;
-  const federalPreferredBase = input.taxType === "qualified" ? beforeTaxIncome : 0;
-  const federalTaxBefore = federalOrdinaryTax(taxableIncome, filingStatus);
-  const federalTaxAfterOrdinary = federalOrdinaryTax(taxableIncome + federalOrdinaryBase, filingStatus);
-  const federalOrdinaryIncrement = Math.max(federalTaxAfterOrdinary - federalTaxBefore, 0);
-  const federalPreferredIncrement = federalPreferredBase > 0 ? preferredTax(taxableIncome, federalPreferredBase, filingStatus) : 0;
-  const stateRate = noIncomeTaxStates.has(stateCode) ? 0 : stateRates[stateCode] ?? 0.05;
-  const isStateTaxable = input.taxType === "ordinary" || input.taxType === "qualified";
-  const stateTax = isStateTaxable ? beforeTaxIncome * stateRate : 0;
-  const federalTax = federalOrdinaryIncrement + federalPreferredIncrement;
-  const taxCost = federalTax + stateTax;
-  const afterTaxIncome = beforeTaxIncome - taxCost;
-  return {
-    beforeTaxIncome,
-    federalTax,
-    stateTax,
-    taxCost,
-    afterTaxIncome,
-    effectiveTaxRate: beforeTaxIncome > 0 ? taxCost / beforeTaxIncome : 0,
-  };
-}
 
 function parseNumberInput(value: string) {
   const cleanedValue = value.replace(/[$,%\s,]/g, "");
@@ -546,8 +462,8 @@ function App() {
   const itemizedDeductionTotal = itemizedDeductions.mortgageInterest + itemizedDeductions.propertyTax + itemizedDeductions.charitable + itemizedDeductions.other;
   const deductionTotal = deductionMethod === "standard" ? standardDeductions[filingStatus] : itemizedDeductionTotal;
   const taxableIncomeAfterDeductions = Math.max(0, taxableIncome - deductionTotal);
-  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioA, taxableIncomeAfterDeductions, filingStatus, stateCode]);
-  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode), [scenarioB, taxableIncomeAfterDeductions, filingStatus, stateCode]);
+  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncome, filingStatus, stateCode, deductionTotal), [scenarioA, taxableIncome, filingStatus, stateCode, deductionTotal]);
+  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncome, filingStatus, stateCode, deductionTotal), [scenarioB, taxableIncome, filingStatus, stateCode, deductionTotal]);
   const differenceA = resultA.afterTaxIncome - resultB.afterTaxIncome;
   const differenceB = resultB.afterTaxIncome - resultA.afterTaxIncome;
   const incomeBarScaleMax = Math.max(resultA.beforeTaxIncome, resultB.beforeTaxIncome, 1);
@@ -796,6 +712,7 @@ function App() {
           </form>
         </section>
       )}
+      <p className="muted">2025 planning estimate, not a tax return. Uses the same deduction as a state-base approximation. Excludes local taxes, credits, AMT, state-specific adjustments, and tax effects on existing Social Security or investment income. Verify fund tax treatment and enter allowable itemized deductions.</p>
     </main>
   );
 }

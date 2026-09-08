@@ -145,6 +145,33 @@ describe("2025 federal backend engine", () => {
     expect(result.deductions.itemizedDeduction).toBe(30900);
   });
 
+  test("capital losses offset explicitly identified long-term gains before ordinary income", () => {
+    const result = calculateFederalTax2025({
+      filingStatus: "single",
+      ordinaryIncomeExcludingSocialSecurity: 100_000,
+      preferredIncome: 20_000,
+      longTermCapitalGainIncome: 20_000,
+      aboveLineDeductions: [{ amount: 10_000, deductionType: "Investment loss (Long Term)" }],
+    });
+    expect(result.deductions.capitalLossOffset).toBe(10_000);
+    expect(result.deductions.capitalLossDeduction).toBe(0);
+    expect(result.preferredIncomeAfterCapitalLoss).toBe(10_000);
+    expect(result.adjustedGrossIncome).toBe(110_000);
+  });
+
+  test("capital losses reduce NIIT investment income after offsetting long-term gains", () => {
+    const result = calculateFederalTax2025({
+      filingStatus: "single",
+      ordinaryIncomeExcludingSocialSecurity: 250_000,
+      preferredIncome: 50_000,
+      longTermCapitalGainIncome: 50_000,
+      netInvestmentIncome: 50_000,
+      aboveLineDeductions: [{ amount: 10_000, deductionType: "Investment loss (Long Term)" }],
+    });
+    expect(result.netInvestmentIncome).toBe(40_000);
+    expect(result.niit).toBeCloseTo(1_520, 8);
+  });
+
   test("aggregate tax plan applies federal, state, local, payroll, and excluded-income rules once", () => {
     const result = calculateTaxPlan2025({
       filingStatus: "mfj",

@@ -38,7 +38,7 @@ const STATE_W2_PAYROLL_COMPONENTS_2025 = {
     DE: [],
     FL: [],
     GA: [],
-    HI: [{ label: "HI temporary disability insurance employee share", rate: 0.005 }],
+    HI: [{ label: "HI temporary disability insurance employee share", rate: 0.005, maxTax: 7.21 * 52 }],
     ID: [],
     IL: [],
     IN: [],
@@ -46,7 +46,7 @@ const STATE_W2_PAYROLL_COMPONENTS_2025 = {
     KS: [],
     KY: [],
     LA: [],
-    ME: [],
+    ME: [{ label: "ME paid leave employee share", rate: 0.005, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
     MD: [],
     MA: [{ label: "MA PFML employee share", rate: 0.0046, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
     MI: [],
@@ -71,9 +71,12 @@ const STATE_W2_PAYROLL_COMPONENTS_2025 = {
     ND: [],
     OH: [],
     OK: [],
-    OR: [{ label: "OR paid leave employee share", rate: 0.006, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 }],
+    OR: [
+        { label: "OR paid leave employee share", rate: 0.006, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 },
+        { label: "OR statewide transit tax", rate: 0.001 },
+    ],
     PA: [{ label: "PA employee unemployment withholding", rate: 0.0007 }],
-    RI: [{ label: "RI temporary disability insurance", rate: 0.013, wageBase: 89700 }],
+    RI: [{ label: "RI temporary disability insurance", rate: 0.013, wageBase: 89200 }],
     SC: [],
     SD: [],
     TN: [],
@@ -82,7 +85,7 @@ const STATE_W2_PAYROLL_COMPONENTS_2025 = {
     VT: [],
     VA: [],
     WA: [
-        { label: "WA paid family and medical leave employee share", rate: 0.003882, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 },
+        { label: "WA paid family and medical leave employee share", rate: 0.0092 * 0.7152, wageBase: SOCIAL_SECURITY_WAGE_BASE_2025 },
         { label: "WA Cares Fund", rate: 0.0058 },
     ],
     WV: [],
@@ -94,7 +97,7 @@ function isW2IncomeType(incomeType) {
     return String(incomeType || "").trim().toLowerCase() === "w2 wages";
 }
 function calculateW2PayrollTax(wagesInput, filingStatus, stateCodeInput) {
-    const wages = Math.max(Number(wagesInput) || 0, 0);
+    const wages = Number.isFinite(Number(wagesInput)) ? Math.max(Number(wagesInput), 0) : 0;
     const socialSecurity = Math.min(wages, SOCIAL_SECURITY_WAGE_BASE_2025) * SOCIAL_SECURITY_EMPLOYEE_RATE;
     const medicare = wages * MEDICARE_EMPLOYEE_RATE;
     const additionalMedicare = Math.max(wages - additionalMedicareThreshold(filingStatus), 0) * ADDITIONAL_MEDICARE_RATE;

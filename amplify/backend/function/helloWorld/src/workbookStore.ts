@@ -71,6 +71,29 @@ export type PublicUsernameRecord = {
   updatedAt: string;
 };
 
+export type AnalyticsVisitorEvent = {
+  eventId: string;
+  eventName: string;
+  at: string;
+  date: string;
+  path: string;
+  title?: string;
+  referrer?: string;
+  visitorId?: string;
+  ipHash?: string;
+  userAgent?: string;
+  bot: boolean;
+  botName?: string;
+  browser?: string;
+  device?: string;
+  language?: string;
+  timezone?: string;
+  screen?: {
+    width?: number;
+    height?: number;
+  };
+};
+
 const ENTITY_KEYS: WorkbookEntityKey[] = [
   "tab#investments",
   "tab#tickers",
@@ -150,6 +173,10 @@ function publicReportUserWorkspaceId(ownerSub: string) {
 
 function publicUsernameLookupWorkspaceId(username: string) {
   return `publicUsername#${username}`;
+}
+
+function analyticsEventWorkspaceId(date: string) {
+  return `analytics#event#${date}`;
 }
 
 export class WorkbookStore {
@@ -395,6 +422,51 @@ export class WorkbookStore {
       workspaceId: revoked.workspaceId,
       revokedAt: revoked.revokedAt,
     };
+  }
+
+  async putAnalyticsEvent(record: AnalyticsVisitorEvent): Promise<AnalyticsVisitorEvent> {
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          workspaceId: analyticsEventWorkspaceId(record.date),
+          entityKey: `${record.at}#${record.eventId}`,
+          eventId: record.eventId,
+          eventDate: record.date,
+          data: record,
+          updatedAt: record.at,
+        },
+      })
+    );
+    return record;
+  }
+
+  async listAnalyticsEvents(startDate: string, endDate: string): Promise<AnalyticsVisitorEvent[]> {
+    const events: AnalyticsVisitorEvent[] = [];
+    const cursor = new Date(`${startDate}T00:00:00.000Z`);
+    const last = new Date(`${endDate}T00:00:00.000Z`);
+
+    while (cursor <= last) {
+      const date = cursor.toISOString().slice(0, 10);
+      const response = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: "workspaceId = :workspaceId",
+          ExpressionAttributeValues: {
+            ":workspaceId": analyticsEventWorkspaceId(date),
+          },
+        })
+      );
+
+      for (const item of response.Items ?? []) {
+        const record = item.data as AnalyticsVisitorEvent | undefined;
+        if (record?.eventId && record?.at) events.push(record);
+      }
+
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return events.sort((left, right) => right.at.localeCompare(left.at));
   }
 
   async getPublicUsernameOwner(username: string): Promise<string | null> {
