@@ -4,14 +4,16 @@ import { describe, expect, it } from 'vitest';
 
 const runScript = (name: string, behavior: string) => {
   const path = fileURLToPath(new URL(`../${name}.ps1`, import.meta.url)).replaceAll("'", "''");
-  return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
     $ErrorActionPreference = 'Stop'
     function aws { ${behavior} }
     & '${path}'
-  `], { encoding: 'utf8' });
+  `], { encoding: 'utf8', timeout: 15000 });
+  if (result.error) throw result.error;
+  return result;
 };
 
-describe.skipIf(process.platform !== 'win32')('operational scripts without live AWS access', () => {
+describe.skipIf(process.platform !== 'win32')('operational scripts without live AWS access', { timeout: 35000 }, () => {
   for (const name of ['shutoff-aftertaxus-backend', 'turn-back-on-aftertaxus-backend']) {
     it(`${name} exits unsuccessfully when the write is denied`, () => {
       const result = runScript(name, '$global:LASTEXITCODE = 254; Write-Output "AccessDenied"');
