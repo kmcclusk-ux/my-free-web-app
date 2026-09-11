@@ -17,10 +17,10 @@ describe("portfolio input integrity and tax classification", () => {
     expect(accountAllowsCurrentIncome("tax deferred", false)).toBe(false);
     expect(accountAllowsCurrentIncome("tax free", true)).toBe(false);
   });
-  test("deferred accruals are retirement income, while taxable deferred distributions keep their source category", () => {
+  test("retirement distributions do not inherit the tax character of funds held inside the account", () => {
     const row = { account: "Example IRA", effectiveSymbol: "FUND", investmentType: "", localTaxCategory: "dividends", nonInvestmentIncome: 0, taxStatus: "deferred", taxTreatment: "qualified-div", w2Income: 0 };
     expect(localIncomeCategory({ ...row, incomeItem: false })).toBe("retirementIncome");
-    expect(localIncomeCategory({ ...row, incomeItem: true })).toBe("dividends");
+    expect(localIncomeCategory({ ...row, incomeItem: true })).toBe("retirementIncome");
   });
   test("NIIT distinguishes investment income from income-item UI controls", () => {
     const rental = { amount: 20_000, currentlyTaxable: true, federalExempt: false, niitIncluded: true, category: "rentalIncome" };
@@ -45,8 +45,8 @@ describe("portfolio input integrity and tax classification", () => {
     expect(isFederalTaxExemptInterestTreatment("Fed Tax Free")).toBe(true);
     expect(isFederalTaxExemptInterestTreatment("Return of Capital")).toBe(false);
   });
-  test("non-investment income is classified as business income for local tax bases", () => {
+  test("the income-item UI flag does not override an explicit local interest category", () => {
     expect(isNonInvestmentIncomeType("non investment income")).toBe(true);
-    expect(localIncomeCategory({ account: "Brokerage", effectiveSymbol: "Income", investmentType: "non investment income", localTaxCategory: "interest", nonInvestmentIncome: 10_000, taxStatus: "taxable", taxTreatment: "income", w2Income: 0, incomeItem: true })).toBe("businessIncome");
+    expect(localIncomeCategory({ account: "Brokerage", effectiveSymbol: "Income", investmentType: "non investment income", localTaxCategory: "interest", nonInvestmentIncome: 10_000, taxStatus: "taxable", taxTreatment: "income", w2Income: 0, incomeItem: true })).toBe("interest");
   });
 });

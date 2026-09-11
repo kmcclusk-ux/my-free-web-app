@@ -242,7 +242,7 @@ function FED_TAX_2025_MFJ_API(taxableIncome) {
   return FED_TAX_2025_ORDINARY_API(taxableIncome, 'mfj');
 }
 
-function FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus) {
+function FED_PREF_TAX_2025_API(ordinaryTaxable, prefTaxable, filingStatus) {
   ordinaryTaxable = Number(ordinaryTaxable) || 0;
   prefTaxable = Number(prefTaxable) || 0;
   filingStatus = normalizeFilingStatus(filingStatus || 'single');
@@ -250,13 +250,18 @@ function FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus) {
   if (prefTaxable <= 0) return 0;
 
   var json = callTaxApi({
-    calc: 'FED_PREF_TAX_2024',
+    calc: 'FED_PREF_TAX_2025',
     ordinaryTaxable: ordinaryTaxable,
     prefTaxable: prefTaxable,
     filingStatus: filingStatus
   });
 
   return Number(json.tax || 0);
+}
+
+function FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus) {
+  Logger.log('Deprecated spreadsheet alias: FED_PREF_TAX_2024_API uses the 2025 planning model. Rename the formula to FED_PREF_TAX_2025_API; this is not a 2024 return calculation.');
+  return FED_PREF_TAX_2025_API(ordinaryTaxable, prefTaxable, filingStatus);
 }
 
 /**
@@ -285,6 +290,10 @@ function FED_TAX_API(calc, ordinaryTaxable, prefTaxable, filingStatus, magi, net
 
   if (calc === 'FED_PREF_TAX_2024') {
     return FED_PREF_TAX_2024_API(ordinaryTaxable, prefTaxable, filingStatus);
+  }
+
+  if (calc === 'FED_PREF_TAX_2025') {
+    return FED_PREF_TAX_2025_API(ordinaryTaxable, prefTaxable, filingStatus);
   }
 
   if (calc === 'FED_TAX_2025_COMBINED') {
@@ -586,18 +595,27 @@ function WORKBOOK_GET_TAB(workspaceId, tabName) {
   });
 }
 
-function WORKBOOK_SAVE_TAB(workspaceId, tabName, data) {
+function requireWorkbookRevision_(revision) {
+  if (typeof revision !== 'number' || !isFinite(revision) || revision < 0 || Math.floor(revision) !== revision) {
+    throw new Error('Read the workbook revision before saving and pass it as expectedRevision.');
+  }
+  return revision;
+}
+
+function WORKBOOK_SAVE_TAB(workspaceId, tabName, data, expectedRevision) {
   return callWorkbookApi({
     calc: "WORKBOOK_SAVE_TAB",
+    expectedRevision: requireWorkbookRevision_(expectedRevision),
     workspaceId: String(workspaceId || "default"),
     tabName: String(tabName || ""),
     data: data
   });
 }
 
-function WORKBOOK_SAVE(workspaceId, tabs, settings) {
+function WORKBOOK_SAVE(workspaceId, tabs, settings, expectedRevision) {
   return callWorkbookApi({
     calc: "WORKBOOK_SAVE",
+    expectedRevision: requireWorkbookRevision_(expectedRevision),
     workspaceId: String(workspaceId || "default"),
     tabs: tabs || {},
     settings: settings || {}
@@ -1274,9 +1292,9 @@ function collectWorkbookExportPayload_() {
 
 function EXPORT_WORKBOOK_TO_DATASTORE() {
   var workspaceId = 'default';
-  REPAIR_ASSET_COLUMN_FORMULAS();
+  var current = WORKBOOK_GET(workspaceId);
   var payload = collectWorkbookExportPayload_();
-  var result = WORKBOOK_SAVE(workspaceId, payload.tabs, payload.settings);
+  var result = WORKBOOK_SAVE(workspaceId, payload.tabs, payload.settings, current.revision === undefined ? 0 : current.revision);
 
   SpreadsheetApp.getActiveSpreadsheet().toast(
     'Workbook exported to data store for workspace "' + workspaceId + '".',

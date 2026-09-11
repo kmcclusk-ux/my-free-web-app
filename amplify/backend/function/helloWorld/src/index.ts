@@ -11,6 +11,7 @@ import {
   splitFederalTaxableIncome2025,
   caTax2025Mfj,
   calculateTaxPlan2025,
+  TaxInputValidationError,
   calculateStateTax2025,
   localTaxProfiles2025,
   localFlatTax,
@@ -21,7 +22,8 @@ import {
   type LocalTaxBracket,
   type TaxPlan2025Input,
 } from "./taxCalcs";
-import { WorkbookStore, type AnalyticsVisitorEvent, type PublicReportRecord, type WorkbookPayload } from "./workbookStore";
+import { WorkbookStore, WorkbookConflictError, type AnalyticsVisitorEvent, type PublicReportRecord, type WorkbookPayload } from "./workbookStore";
+import { analyticsReferrer, analyticsRoute, RequestLimitError, validateRequestSize, validateRequestStructure } from "./requestSafety";
 
 function jsonResponse(
   statusCode: number,
@@ -103,9 +105,10 @@ type RequestBody =
       brackets?: LocalTaxBracket[];
     }
   | { calc: "WORKBOOK_GET"; workspaceId?: string }
+  | { calc: "WORKBOOK_REVISION"; workspaceId?: string }
   | { calc: "WORKBOOK_GET_TAB"; workspaceId?: string; tabName: string }
-  | { calc: "WORKBOOK_SAVE"; workspaceId?: string; tabs?: Record<string, unknown>; settings?: Record<string, unknown> }
-  | { calc: "WORKBOOK_SAVE_TAB"; workspaceId?: string; tabName: string; data: unknown }
+  | ({ calc: "WORKBOOK_SAVE"; workspaceId?: string } & WorkbookPayload)
+  | { calc: "WORKBOOK_SAVE_TAB"; workspaceId?: string; tabName: string; data: unknown; expectedRevision?: number }
   | { calc: "MCP_TOKEN_CREATE"; workspaceId?: string; label?: string }
   | { calc: "MCP_TOKEN_LIST" }
   | { calc: "MCP_TOKEN_REVOKE"; tokenId: string }
@@ -165,6 +168,7 @@ type CognitoJwk = {
 };
 
 let jwksCache: { issuer: string; keys: CognitoJwk[]; fetchedAt: number } | null = null;
+let lastUnknownKeyRefresh = 0;
 
 const PORTFOLIO_ASSISTANT_SYSTEM_PROMPT = `You are a portfolio assistant embedded in this investment portfolio app.
 Use only the provided portfolio state, workbook tables, reference tables, and calculated metrics. If data is missing, say what is missing.
@@ -322,12 +326,6 @@ function cleanAnalyticsText(value: unknown, maxLength: number) {
     .slice(0, maxLength);
 }
 
-function cleanAnalyticsPath(value: unknown) {
-  const raw = cleanAnalyticsText(value, 300);
-  if (!raw || raw.startsWith("javascript:") || raw.startsWith("data:")) return "/";
-  return raw.startsWith("/") ? raw : `/${raw.replace(/^https?:\/\/[^/]+/i, "")}`;
-}
-
 function getClientIp(event: APIGatewayProxyEvent) {
   const forwarded = getHeader(event, "x-forwarded-for").split(",")[0]?.trim();
   return forwarded || event.requestContext?.identity?.sourceIp || "";
@@ -335,7 +333,8 @@ function getClientIp(event: APIGatewayProxyEvent) {
 
 function hashAnalyticsIp(ip: string) {
   if (!ip) return undefined;
-  const salt = String(process.env.ANALYTICS_HASH_SALT || "aftertaxus-analytics").trim();
+  const salt = String(process.env.ANALYTICS_HASH_SALT || "").trim();
+  if (!salt) return undefined;
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 24);
 }
 
@@ -390,12 +389,8 @@ function topCounts(counts: Record<string, number>, limit: number) {
 }
 
 function referrerHost(referrer?: string) {
-  if (!referrer) return "Direct";
-  try {
-    return new URL(referrer).hostname.replace(/^www\./, "");
-  } catch {
-    return referrer.slice(0, 80);
-  }
+  const origin = analyticsReferrer(referrer);
+  return origin ? new URL(origin).hostname.replace(/^www\./, "") : "Direct";
 }
 
 function ensureAdminAnalyticsAccess(event: APIGatewayProxyEvent, origin: string) {
@@ -478,18 +473,20 @@ function parseBearerToken(event: APIGatewayProxyEvent) {
   return match?.[1]?.trim() || "";
 }
 
-async function fetchCognitoJwks(issuer: string): Promise<CognitoJwk[]> {
+async function fetchCognitoJwks(issuer: string, forceRefresh = false): Promise<CognitoJwk[]> {
   const cacheTtlMs = 60 * 60 * 1000;
-  if (jwksCache && jwksCache.issuer === issuer && Date.now() - jwksCache.fetchedAt < cacheTtlMs) {
+  if (!forceRefresh && jwksCache && jwksCache.issuer === issuer && Date.now() - jwksCache.fetchedAt < cacheTtlMs) {
     return jwksCache.keys;
   }
 
-  const response = await fetch(`${issuer}/.well-known/jwks.json`);
+  const response = await fetch(`${issuer}/.well-known/jwks.json`, { signal: AbortSignal.timeout(8000) });
   if (!response.ok) {
     throw new Error(`Unable to fetch Cognito signing keys (${response.status}).`);
   }
 
-  const json = await response.json() as { keys?: CognitoJwk[] };
+  const raw = await response.text();
+  if (Buffer.byteLength(raw, "utf8") > 65536) throw new Error("Invalid Cognito signing key response.");
+  const json = JSON.parse(raw) as { keys?: CognitoJwk[] };
   const keys = Array.isArray(json.keys) ? json.keys : [];
   jwksCache = { issuer, keys, fetchedAt: Date.now() };
   return keys;
@@ -513,18 +510,24 @@ async function verifyCognitoJwt(token: string): Promise<AuthContext> {
   }
 
   const parts = token.split(".");
-  if (parts.length !== 3) {
+  if (token.length > 16384 || parts.length !== 3) {
     throw new Error("Invalid token format.");
   }
 
   const header = decodeJwtPart<{ kid?: string; alg?: string }>(parts[0]);
   const payload = decodeJwtPart<Record<string, unknown>>(parts[1]);
-  if (header.alg !== "RS256" || !header.kid) {
+  if (header?.alg !== "RS256" || typeof header.kid !== "string" || !header.kid || header.kid.length > 256) {
     throw new Error("Unsupported token signing algorithm.");
   }
 
+  if (!payload || payload.iss !== config.issuer) throw new Error("Token issuer is invalid.");
+  if (payload.token_use !== "id" && payload.token_use !== "access") throw new Error("Token use is invalid.");
   const keys = await fetchCognitoJwks(config.issuer);
-  const jwk = keys.find((key) => key.kid === header.kid);
+  let jwk = keys.find((key) => key.kid === header.kid);
+  if (!jwk && Date.now() - lastUnknownKeyRefresh > 60000) {
+    lastUnknownKeyRefresh = Date.now();
+    jwk = (await fetchCognitoJwks(config.issuer, true)).find((key) => key.kid === header.kid);
+  }
   if (!jwk) {
     throw new Error("Token signing key was not found.");
   }
@@ -537,10 +540,11 @@ async function verifyCognitoJwt(token: string): Promise<AuthContext> {
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const exp = Number(payload.exp || 0);
-  if (!Number.isFinite(exp) || exp <= nowSeconds) {
+  const exp = payload.exp;
+  if (typeof exp !== "number" || !Number.isFinite(exp) || exp <= nowSeconds) {
     throw new Error("Token is expired.");
   }
+  if (payload.nbf !== undefined && (typeof payload.nbf !== "number" || !Number.isFinite(payload.nbf) || payload.nbf > nowSeconds)) throw new Error("Token is not yet valid.");
 
   if (payload.iss !== config.issuer) {
     throw new Error("Token issuer is invalid.");
@@ -1655,6 +1659,10 @@ async function handleWorkbookRoute(
         return jsonResponse(400, { error: "Missing workspaceId in workbook path." }, origin);
       }
 
+      if (tabName === "revision") {
+        const result = await store.getRevision(storageWorkspaceId);
+        return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
+      }
       if (tabName) {
         const result = await store.getTab(storageWorkspaceId, tabName);
         return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
@@ -1669,9 +1677,9 @@ async function handleWorkbookRoute(
         return jsonResponse(400, { error: "PUT requires /hello/workbook/{workspaceId}/{tabName}." }, origin);
       }
 
-      let body: { data?: unknown } | null = null;
+      let body: { data?: unknown; expectedRevision?: number } | null = null;
       try {
-        body = parseJsonBody<{ data?: unknown }>(event);
+        body = parseJsonBody<{ data?: unknown; expectedRevision?: number }>(event);
       } catch {
         return jsonResponse(400, { error: "Invalid JSON body." }, origin);
       }
@@ -1680,12 +1688,12 @@ async function handleWorkbookRoute(
         return jsonResponse(400, { error: "PUT body must include a data field." }, origin);
       }
 
-      const result = await store.putTab(storageWorkspaceId, tabName, body.data);
+      const result = await store.putTab(storageWorkspaceId, tabName, body.data, body.expectedRevision);
       return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
     }
 
     if (event.httpMethod === "POST") {
-      if (!requestedWorkspaceId || action !== "save") {
+      if (!requestedWorkspaceId || (tabName !== "save" && action !== "save")) {
         return jsonResponse(400, { error: "POST requires /hello/workbook/{workspaceId}/save." }, origin);
       }
 
@@ -1707,7 +1715,7 @@ async function handleWorkbookRoute(
     return jsonResponse(405, { error: "Workbook route supports GET, PUT, and POST." }, origin);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Workbook storage error.";
-    return jsonResponse(400, { error: message }, origin);
+    return jsonResponse(error instanceof WorkbookConflictError ? 409 : 400, { error: message }, origin);
   }
 }
 
@@ -2019,12 +2027,11 @@ async function handleAnalyticsRequest(
       : undefined;
     const record: AnalyticsVisitorEvent = {
       eventId: randomBytes(12).toString("hex"),
-      eventName: cleanAnalyticsText(analyticsBody.eventName || "page_view", 60) || "page_view",
+      eventName: "page_view",
       at,
       date: at.slice(0, 10),
-      path: cleanAnalyticsPath(analyticsBody.path || event.path || "/"),
-      title: cleanAnalyticsText(analyticsBody.title, 160) || undefined,
-      referrer: cleanAnalyticsText(analyticsBody.referrer, 300) || undefined,
+      path: analyticsRoute(analyticsBody.path || event.path || "/"),
+      referrer: analyticsReferrer(analyticsBody.referrer),
       visitorId: cleanAnalyticsText(analyticsBody.visitorId, 80) || undefined,
       ipHash: hashAnalyticsIp(getClientIp(event)),
       userAgent,
@@ -2090,7 +2097,7 @@ async function handleAnalyticsRequest(
     }
 
     const uniqueVisitors = new Set(events.map((eventRecord) => eventRecord.visitorId || eventRecord.ipHash || eventRecord.eventId));
-    const topPages = topCounts(bucketCounts(events.map((eventRecord) => eventRecord.path)), 12);
+    const topPages = topCounts(bucketCounts(events.map((eventRecord) => analyticsRoute(eventRecord.path))), 12);
     const referrers = topCounts(bucketCounts(events.map((eventRecord) => referrerHost(eventRecord.referrer))), 12);
     const browsers = topCounts(bucketCounts(events.map((eventRecord) => eventRecord.browser)), 10);
     const devices = topCounts(bucketCounts(events.map((eventRecord) => eventRecord.device)), 10);
@@ -2115,9 +2122,8 @@ async function handleAnalyticsRequest(
       hourly: topCounts(hourCounts, 48).sort((left, right) => left.name.localeCompare(right.name)),
       recentVisits: events.slice(0, limit).map((eventRecord) => ({
         at: eventRecord.at,
-        path: eventRecord.path,
-        title: eventRecord.title,
-        referrer: eventRecord.referrer,
+        path: analyticsRoute(eventRecord.path),
+        referrer: analyticsReferrer(eventRecord.referrer),
         referrerHost: referrerHost(eventRecord.referrer),
         visitorId: eventRecord.visitorId,
         ipHash: eventRecord.ipHash,
@@ -2146,6 +2152,14 @@ export const handler = async (
 
   if (event.httpMethod === "OPTIONS") {
     return corsPreflight(origin);
+  }
+
+  try {
+    validateRequestSize(event.body, event.isBase64Encoded);
+    if (event.body) validateRequestStructure(JSON.parse(decodeBody(event)!));
+  } catch (error) {
+    if (error instanceof RequestLimitError) return jsonResponse(error.statusCode, { error: error.message }, origin);
+    return jsonResponse(400, { error: "Invalid JSON body." }, origin);
   }
 
   if (segments[0] === "workbook") {
@@ -2211,7 +2225,7 @@ export const handler = async (
     return handleAnalyticsRequest(event, resolveCorsOrigin(event, calc === "ANALYTICS_SUMMARY"), body);
   }
 
-  if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
+  if (calc === "WORKBOOK_GET" || calc === "WORKBOOK_REVISION" || calc === "WORKBOOK_GET_TAB" || calc === "WORKBOOK_SAVE" || calc === "WORKBOOK_SAVE_TAB") {
     const authResult = await authenticatePortfolioRequest(event, origin);
     if ("response" in authResult) return authResult.response;
 
@@ -2227,6 +2241,10 @@ export const handler = async (
       const requestedWorkspaceId = String((body as any).workspaceId || "default");
       const storageWorkspaceId = scopedWorkspaceId(requestedWorkspaceId, authResult.auth);
 
+      if (calc === "WORKBOOK_REVISION") {
+        const result = await store.getRevision(storageWorkspaceId);
+        return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
+      }
       if (calc === "WORKBOOK_GET") {
         const result = await store.getWorkspace(storageWorkspaceId);
         return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
@@ -2246,18 +2264,19 @@ export const handler = async (
         if (!tabName) {
           return jsonResponse(400, { error: "WORKBOOK_SAVE_TAB requires tabName" }, origin);
         }
-        const result = await store.putTab(storageWorkspaceId, tabName, (body as any).data);
+        const result = await store.putTab(storageWorkspaceId, tabName, (body as { data: unknown }).data, (body as { expectedRevision?: number }).expectedRevision);
         return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
       }
 
       const result = await store.saveWorkspace(storageWorkspaceId, {
         tabs: (body as any).tabs,
         settings: (body as any).settings,
+        expectedRevision: (body as { expectedRevision?: number }).expectedRevision,
       });
       return jsonResponse(200, workbookResponseForClient(result, requestedWorkspaceId, authResult.auth), origin);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Workbook storage error.";
-      return jsonResponse(400, { error: message }, origin);
+      return jsonResponse(error instanceof WorkbookConflictError ? 409 : 400, { error: message }, origin);
     }
   }
 
@@ -2316,8 +2335,8 @@ export const handler = async (
     }
 
     const state = String((body as any).state || "").trim().toUpperCase();
-    if (!state) {
-      return jsonResponse(400, { error: "STATE_TAX_2025 requires state" }, origin);
+    if (!stateTaxProfiles.some((profile) => profile.code === state)) {
+      return jsonResponse(400, { error: "STATE_TAX_2025 requires a valid state or DC code" }, origin);
     }
     if (!stateTaxProfiles.some((profile) => profile.code === state)) {
       return jsonResponse(400, { error: `Unsupported state: ${state}` }, origin);
@@ -2333,7 +2352,11 @@ export const handler = async (
     return jsonResponse(200, { calc, ...result }, origin);
   }
 
-  if (calc === "FED_PREF_TAX_2024" || calc === "FED_PREF_TAX_2025") {
+  if (calc === "FED_PREF_TAX_2024") {
+    return jsonResponse(400, { error: "The 2024 tax model is not supported. Use FED_PREF_TAX_2025 only for tax year 2025." }, origin);
+  }
+
+  if (calc === "FED_PREF_TAX_2025") {
     const ordinaryTaxable = readNonNegativeNumber((body as any).ordinaryTaxable, "ordinaryTaxable");
     if ("error" in ordinaryTaxable) {
       return jsonResponse(400, { error: ordinaryTaxable.error }, origin);
@@ -2484,8 +2507,14 @@ export const handler = async (
     if ((body as any).local?.enabled === true && !localTaxProfiles2025.some((profile) => profile.id === localityId)) {
       return jsonResponse(400, { error: `Unsupported locality: ${localityId}` }, origin);
     }
-    const result = calculateTaxPlan2025({ ...(body as any), filingStatus, state });
-    return jsonResponse(200, result, origin);
+    try {
+      const result = calculateTaxPlan2025({ ...(body as TaxPlan2025Input), filingStatus, state });
+      return jsonResponse(200, result, origin);
+    } catch (error) {
+      if (error instanceof TaxInputValidationError) return jsonResponse(400, { error: error.message, diagnostics: error.diagnostics }, origin);
+      if (error instanceof RangeError || error instanceof TypeError) return jsonResponse(400, { error: error.message }, origin);
+      throw error;
+    }
   }
 
   if (calc === "LOCAL_TAX") {

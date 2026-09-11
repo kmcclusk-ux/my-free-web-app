@@ -2,6 +2,8 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { federalStandardDeduction2025, investmentResult } from "./calculation";
+import { embeddingParentOrigin, trustedEmbeddingMessage } from "./embedding";
+import { MAX_SNAPSHOT_AMOUNT, MAX_SNAPSHOT_YIELD_PERCENT, snapshotNumber } from "./numericInput";
 
 type FilingStatus = "mfj" | "single" | "mfs" | "hoh";
 type TaxType = "ordinary" | "qualified" | "treasury" | "muni" | "taxFree";
@@ -19,6 +21,7 @@ type SnapshotInputs = {
   stateCode: string;
   taxableIncome: number;
   investmentAmount: number;
+  stateAllowedDeduction: number;
   deductionMethod: DeductionMethod;
   itemizedDeductions: ItemizedDeductions;
   investmentA: InvestmentInput;
@@ -94,10 +97,11 @@ const defaultInputs: SnapshotInputs = {
   stateCode: "CA",
   taxableIncome: 120000,
   investmentAmount: 100000,
+  stateAllowedDeduction: 0,
   deductionMethod: "standard",
   itemizedDeductions: { mortgageInterest: 0, propertyTax: 0, charitable: 0, other: 0 },
   investmentA: { symbol: "BIL", amount: 100000, yieldPercent: 3.6, taxType: "treasury" },
-  investmentB: { symbol: "NAC", amount: 100000, yieldPercent: 7, taxType: "muni" },
+  investmentB: { symbol: "NAC", amount: 100000, yieldPercent: popularInvestmentYieldBySymbol.get("NAC")!, taxType: "muni" },
 };
 
 const stateOptions = [
@@ -136,14 +140,13 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-function numberValue(value: unknown, fallback: number) {
+function numberValue(value: unknown, fallback: number, maximum = MAX_SNAPSHOT_AMOUNT) {
   if (value === null || value === undefined || value === "") return fallback;
-  const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : fallback;
+  return snapshotNumber(value, maximum) ?? fallback;
 }
 
-function numberParam(params: URLSearchParams, key: string, fallback: number) {
-  return numberValue(params.get(key), fallback);
+function numberParam(params: URLSearchParams, key: string, fallback: number, maximum = MAX_SNAPSHOT_AMOUNT) {
+  return numberValue(params.get(key), fallback, maximum);
 }
 
 function filingStatusParam(params: URLSearchParams, fallback: FilingStatus) {
@@ -179,7 +182,7 @@ function investmentFromParams(params: URLSearchParams, prefix: "a" | "b", fallba
   return {
     symbol: (params.get(`${prefix}Symbol`) || fallback.symbol).toUpperCase(),
     amount: numberParam(params, `${prefix}Amount`, fallback.amount),
-    yieldPercent: numberParam(params, `${prefix}Yield`, fallback.yieldPercent),
+    yieldPercent: numberParam(params, `${prefix}Yield`, fallback.yieldPercent, MAX_SNAPSHOT_YIELD_PERCENT),
     taxType: taxTypeParam(params, `${prefix}TaxType`, fallback.taxType),
   };
 }
@@ -199,6 +202,7 @@ function getInitialSettings() {
       stateCode: stateParam(params, defaultInputs.stateCode),
       taxableIncome: numberParam(params, "income", defaultInputs.taxableIncome),
       investmentAmount,
+      stateAllowedDeduction: numberParam(params, "stateDeduction", defaultInputs.stateAllowedDeduction),
       deductionMethod: deductionMethodParam(params, defaultInputs.deductionMethod),
       itemizedDeductions: itemizedDeductionsFromParams(params, defaultInputs.itemizedDeductions),
       investmentA: { ...investmentA, amount: investmentAmount },
@@ -215,6 +219,7 @@ function buildShareUrl(inputs: SnapshotInputs, embed = true) {
   url.searchParams.set("state", inputs.stateCode);
   url.searchParams.set("income", String(inputs.taxableIncome));
   url.searchParams.set("amount", String(inputs.investmentAmount));
+  url.searchParams.set("stateDeduction", String(inputs.stateAllowedDeduction));
   url.searchParams.set("deductionMethod", inputs.deductionMethod);
   url.searchParams.set("mortgageInterest", String(inputs.itemizedDeductions.mortgageInterest));
   url.searchParams.set("propertyTax", String(inputs.itemizedDeductions.propertyTax));
@@ -238,7 +243,7 @@ function safeInvestmentUpdate(value: unknown, fallback: InvestmentInput) {
   return {
     symbol: (stringValue(record.symbol) || fallback.symbol).toUpperCase(),
     amount: numberValue(record.amount, fallback.amount),
-    yieldPercent: numberValue(record.yieldPercent, fallback.yieldPercent),
+    yieldPercent: numberValue(record.yieldPercent, fallback.yieldPercent, MAX_SNAPSHOT_YIELD_PERCENT),
     taxType: taxTypeValues.has(taxType as TaxType) ? taxType as TaxType : fallback.taxType,
   };
 }
@@ -263,13 +268,6 @@ function yearlyIncomeAmount(value: number) {
 }
 
 
-function parseNumberInput(value: string) {
-  const cleanedValue = value.replace(/[$,%\s,]/g, "");
-  if (cleanedValue === "" || cleanedValue === "-" || cleanedValue === "." || cleanedValue === "-.") return 0;
-  const number = Number(cleanedValue);
-  return Number.isFinite(number) ? number : null;
-}
-
 function formatDollarInput(value: number | string) {
   const rawValue = String(value).replace(/[$,%\s,]/g, "");
   if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.") return rawValue;
@@ -283,17 +281,14 @@ function formatDollarInput(value: number | string) {
 function NumberField({ label, value, onChange, prefix, suffix, className = "" }: { label: string; value: number; onChange: (value: number) => void; prefix?: string; suffix?: string; className?: string }) {
   const isDollarField = prefix === "$";
   const displayValue = isDollarField ? formatDollarInput(value) : String(value);
-  const [draftValue, setDraftValue] = useState(displayValue);
-
-  useEffect(() => {
-    const parsedDraftValue = parseNumberInput(draftValue);
-    if (parsedDraftValue === value) return;
-    setDraftValue(isDollarField ? formatDollarInput(value) : String(value));
-  }, [draftValue, isDollarField, value]);
+  const maximum = suffix === "%" ? MAX_SNAPSHOT_YIELD_PERCENT : MAX_SNAPSHOT_AMOUNT;
+  const [draft, setDraft] = useState({ value, text: displayValue });
+  const draftValue = draft.value === value ? draft.text : displayValue;
+  const invalid = snapshotNumber(draftValue, maximum) === null;
 
   function handleChange(rawValue: string) {
-    setDraftValue(isDollarField ? formatDollarInput(rawValue) : rawValue);
-    const nextValue = parseNumberInput(rawValue);
+    const nextValue = snapshotNumber(rawValue, maximum);
+    setDraft({ value: nextValue ?? value, text: isDollarField ? formatDollarInput(rawValue) : rawValue });
     if (nextValue !== null) onChange(nextValue);
   }
 
@@ -302,9 +297,10 @@ function NumberField({ label, value, onChange, prefix, suffix, className = "" }:
       <span>{label}</span>
       <div className="input-shell">
         {prefix && <em>{prefix}</em>}
-        <input type="text" inputMode="decimal" value={draftValue} onChange={(event) => handleChange(event.target.value)} />
+        <input type="text" inputMode="decimal" value={draftValue} aria-invalid={invalid} onChange={(event) => handleChange(event.target.value)} />
         {suffix && <em>{suffix}</em>}
       </div>
+      {invalid && <small role="alert">Enter 0–{maximum.toLocaleString("en-US")}. Results use the last valid value.</small>}
     </label>
   );
 }
@@ -348,7 +344,8 @@ function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { ti
   const changeSymbol = (symbol: string) => {
     const normalizedSymbol = symbol.toUpperCase();
     const dividendYield = popularInvestmentYieldBySymbol.get(normalizedSymbol);
-    onChange({ ...value, symbol: normalizedSymbol, yieldPercent: dividendYield ?? value.yieldPercent });
+    if (normalizedSymbol === value.symbol) return;
+    onChange({ ...value, symbol: normalizedSymbol, yieldPercent: dividendYield ?? 0, taxType: "ordinary" });
   };
   return (
     <section className={`investment-card ${isWinner ? "investment-card--winner" : ""}`}>
@@ -373,7 +370,7 @@ function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { ti
           {taxTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
-      <p className="tax-note">{taxType.note}</p>
+      <p className="tax-note">{taxType.note} Catalog yields are illustrative samples, not live quotes. Changing an asset resets its tax treatment to ordinary income; confirm treatment and enter the yield you want to compare.</p>
     </section>
   );
 }
@@ -446,6 +443,7 @@ function App() {
   const [stateCode, setStateCode] = useState(initialSettings.inputs.stateCode);
   const [taxableIncome, setTaxableIncome] = useState(initialSettings.inputs.taxableIncome);
   const [investmentAmount, setInvestmentAmount] = useState(initialSettings.inputs.investmentAmount);
+  const [stateAllowedDeduction, setStateAllowedDeduction] = useState(initialSettings.inputs.stateAllowedDeduction);
   const [deductionMethod, setDeductionMethod] = useState<DeductionMethod>(initialSettings.inputs.deductionMethod);
   const [itemizedDeductions, setItemizedDeductions] = useState<ItemizedDeductions>(initialSettings.inputs.itemizedDeductions);
   const [investmentA, setInvestmentA] = useState<InvestmentInput>(initialSettings.inputs.investmentA);
@@ -462,8 +460,8 @@ function App() {
   const itemizedDeductionTotal = itemizedDeductions.mortgageInterest + itemizedDeductions.propertyTax + itemizedDeductions.charitable + itemizedDeductions.other;
   const deductionTotal = deductionMethod === "standard" ? standardDeductions[filingStatus] : itemizedDeductionTotal;
   const taxableIncomeAfterDeductions = Math.max(0, taxableIncome - deductionTotal);
-  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncome, filingStatus, stateCode, deductionTotal), [scenarioA, taxableIncome, filingStatus, stateCode, deductionTotal]);
-  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncome, filingStatus, stateCode, deductionTotal), [scenarioB, taxableIncome, filingStatus, stateCode, deductionTotal]);
+  const resultA = useMemo(() => investmentResult(scenarioA, taxableIncome, filingStatus, stateCode, deductionTotal, stateAllowedDeduction), [scenarioA, taxableIncome, filingStatus, stateCode, deductionTotal, stateAllowedDeduction]);
+  const resultB = useMemo(() => investmentResult(scenarioB, taxableIncome, filingStatus, stateCode, deductionTotal, stateAllowedDeduction), [scenarioB, taxableIncome, filingStatus, stateCode, deductionTotal, stateAllowedDeduction]);
   const differenceA = resultA.afterTaxIncome - resultB.afterTaxIncome;
   const differenceB = resultB.afterTaxIncome - resultA.afterTaxIncome;
   const incomeBarScaleMax = Math.max(resultA.beforeTaxIncome, resultB.beforeTaxIncome, 1);
@@ -471,7 +469,7 @@ function App() {
   const winner = resultA.afterTaxIncome >= resultB.afterTaxIncome ? { label: scenarioAName, symbol: scenarioA.symbol, result: resultA, other: resultB } : { label: scenarioBName, symbol: scenarioB.symbol, result: resultB, other: resultA };
   const advantage = Math.abs(resultA.afterTaxIncome - resultB.afterTaxIncome);
   const selectedStateName = stateNames[stateCode] || stateCode;
-  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentAmount, deductionMethod, itemizedDeductions, investmentA: scenarioA, investmentB: scenarioB }), [filingStatus, stateCode, taxableIncome, investmentAmount, deductionMethod, itemizedDeductions, scenarioA, scenarioB]);
+  const inputs = useMemo<SnapshotInputs>(() => ({ filingStatus, stateCode, taxableIncome, investmentAmount, stateAllowedDeduction, deductionMethod, itemizedDeductions, investmentA: scenarioA, investmentB: scenarioB }), [filingStatus, stateCode, taxableIncome, investmentAmount, stateAllowedDeduction, deductionMethod, itemizedDeductions, scenarioA, scenarioB]);
   const shareUrl = useMemo(() => buildShareUrl(inputs), [inputs]);
   const embedPayload = useMemo(() => ({
     inputs,
@@ -488,12 +486,15 @@ function App() {
 
   useEffect(() => {
     if (typeof window === "undefined" || window.parent === window) return;
-    window.parent.postMessage({ type: "aftertaxus-snapshot-result", payload: embedPayload }, "*");
+    const parentOrigin = embeddingParentOrigin(document.referrer);
+    if (parentOrigin) window.parent.postMessage({ type: "aftertaxus-snapshot-result", payload: embedPayload }, parentOrigin);
   }, [embedPayload]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || window.parent === window) return;
+    const parentOrigin = embeddingParentOrigin(document.referrer);
     const handleMessage = (event: MessageEvent) => {
+      if (!trustedEmbeddingMessage(event, window.parent, parentOrigin)) return;
       const data = event.data;
       if (!data || typeof data !== "object") return;
       const record = data as Record<string, unknown>;
@@ -509,6 +510,7 @@ function App() {
       if (payload.investmentAmount !== undefined || payload.amount !== undefined) {
         setInvestmentAmount(numberValue(payload.investmentAmount ?? payload.amount, investmentAmount));
       }
+      if (payload.stateAllowedDeduction !== undefined) setStateAllowedDeduction(numberValue(payload.stateAllowedDeduction, stateAllowedDeduction));
       const nextDeductionMethod = stringValue(payload.deductionMethod);
       if (deductionMethodValues.has(nextDeductionMethod as DeductionMethod)) setDeductionMethod(nextDeductionMethod as DeductionMethod);
       if (payload.itemizedDeductions && typeof payload.itemizedDeductions === "object") {
@@ -533,7 +535,7 @@ function App() {
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [investmentA, investmentAmount, investmentB, taxableIncome]);
+  }, [investmentA, investmentAmount, investmentB, taxableIncome, stateAllowedDeduction]);
 
   async function copyShareLink() {
     try {
@@ -677,6 +679,11 @@ function App() {
         onItemizedChange={setItemizedDeductions}
       />
 
+      <section className="deductions-panel">
+        <NumberField label="State deductions and exclusions (already allowed)" prefix="$" value={stateAllowedDeduction} onChange={setStateAllowedDeduction} />
+        <p className="muted">Separate from federal deductions. Defaults to $0: enter your state-allowed amount to refine this estimate. Enter federal itemized amounts only after eligibility limits and SALT caps; the calculator does not establish eligibility.</p>
+      </section>
+
       <section className="results-panel">
         <div className="results-main">
           <ComparisonBars a={resultA} b={resultB} nameA={scenarioAName} nameB={scenarioBName} label="Before-tax income" valueKey="beforeTaxIncome" scaleMax={incomeBarScaleMax} />
@@ -712,7 +719,7 @@ function App() {
           </form>
         </section>
       )}
-      <p className="muted">2025 planning estimate, not a tax return. Uses the same deduction as a state-base approximation. Excludes local taxes, credits, AMT, state-specific adjustments, and tax effects on existing Social Security or investment income. Verify fund tax treatment and enter allowable itemized deductions.</p>
+      <p className="muted">2025 planning estimate using the portfolio tax engine, not a tax return. Federal and state deductions are separate. Excludes local/payroll taxes, credits, AMT, automatic state eligibility adjustments, and tax effects on existing Social Security or investment income. In-state muni treatment requires your residency and the fund's eligible income composition to match. Yields are samples or your entries, not current market data.</p>
     </main>
   );
 }

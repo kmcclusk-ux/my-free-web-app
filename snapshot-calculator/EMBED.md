@@ -6,9 +6,10 @@ Use the snapshot calculator as an iframe in a chatbot shell, AI answer card, hel
 
 ```html
 <iframe
-  src="https://calculator.aftertaxus.com/?embed=1&state=CA&filingStatus=mfj&income=300000&deductionMethod=standard&amount=250000&aSymbol=BIL&aYield=4.8&aTaxType=ordinary&bSymbol=NAC&bYield=4.4&bTaxType=treasury"
+  src="https://calculator.aftertaxus.com/?embed=1&state=CA&filingStatus=mfj&income=300000&deductionMethod=standard&stateDeduction=10000&amount=250000&aSymbol=ExampleA&aYield=4.8&aTaxType=ordinary&bSymbol=ExampleB&bYield=4.4&bTaxType=treasury"
   title="AfterTax US investment comparison"
   loading="lazy"
+  referrerpolicy="strict-origin-when-cross-origin"
   style="width:100%;max-width:920px;height:760px;border:0;border-radius:24px;overflow:hidden"
 ></iframe>
 ```
@@ -20,7 +21,8 @@ Use the snapshot calculator as an iframe in a chatbot shell, AI answer card, hel
 - `state` accepts a two-letter state code like `CA`, `TX`, or `NY`.
 - `income` is income before deductions and before the two compared investments.
 - `deductionMethod` accepts `standard` or `itemized`.
-- `mortgageInterest`, `propertyTax`, `charitable`, and `otherDeductions` are used when `deductionMethod=itemized`.
+- `mortgageInterest`, `propertyTax`, `charitable`, and `otherDeductions` are already-allowed federal amounts used when `deductionMethod=itemized`. Eligibility limits and SALT caps must be applied before entry.
+- `stateDeduction` is the separate, already-allowed state deduction/exclusion total. It defaults to zero, not the federal deduction. Automatic state eligibility, credits and special taxes are outside this simplified model.
 - `amount` is the shared investment amount used for both scenarios.
 - `aSymbol`, `aYield`, `aTaxType` configure Investment A.
 - `bSymbol`, `bYield`, `bTaxType` configure Investment B.
@@ -33,6 +35,7 @@ The iframe posts live results to its parent window whenever inputs change:
 
 ```js
 window.addEventListener("message", (event) => {
+  if (event.source !== iframe.contentWindow || event.origin !== "https://calculator.aftertaxus.com") return;
   if (event.data?.type !== "aftertaxus-snapshot-result") return;
   console.log(event.data.payload);
 });
@@ -47,13 +50,22 @@ iframe.contentWindow.postMessage({
     filingStatus: "mfj",
     stateCode: "CA",
     taxableIncome: 300000,
+    stateAllowedDeduction: 10000,
     deductionMethod: "itemized",
     itemizedDeductions: { mortgageInterest: 12000, propertyTax: 10000, charitable: 2500, other: 0 },
     investmentAmount: 250000,
-    investmentA: { symbol: "BIL", yieldPercent: 4.8, taxType: "ordinary" },
-    investmentB: { symbol: "NAC", yieldPercent: 4.4, taxType: "treasury" }
+    investmentA: { symbol: "ExampleA", yieldPercent: 4.8, taxType: "ordinary" },
+    investmentB: { symbol: "ExampleB", yieldPercent: 4.4, taxType: "treasury" }
   }
 }, "https://calculator.aftertaxus.com");
 ```
 
-Normal ChatGPT chats cannot render arbitrary third-party iframes inline, but this works well for a custom chatbot web app, GPT action landing page, embedded browser surface, or any page that can host an iframe.
+Messaging requires an HTTP(S) embedding parent whose origin is available in the iframe's referrer. The calculator checks both message source and origin and sends results only to that origin, never a wildcard. With a suppressed referrer the calculator remains usable, but cross-window messaging is disabled. Do not put personal information or credentials in share-link parameters.
+
+## Calculation scope
+
+Uses the 2025 shared portfolio engine for incremental federal ordinary/preferred income tax, NIIT and state bracket tax. The baseline is ordinary income, not a complete existing portfolio. Existing investment-income NIIT effects, Social Security taxation, local/payroll taxes, AMT, credits and automatic state exclusions are not modeled. A municipal exemption must match residency and the fund's actual eligible income; the symbol alone does not establish tax treatment.
+
+Catalog yields and the examples here are illustrative, not live market quotes. Selecting a symbol resets tax treatment to ordinary income for user confirmation. Dollar inputs support zero through $1 trillion and yields zero through 1,000%; invalid interactive drafts retain the last valid calculation with a visible warning. Invalid URL/message numbers retain the prior/default value.
+
+The `taxableIncome` message field retains its legacy name for compatibility but means income **before** deductions and the compared investment. An iframe-capable host is required; this is not an MCP Apps implementation.

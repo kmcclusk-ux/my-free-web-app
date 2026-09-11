@@ -3,7 +3,7 @@ import {
   calculateLocalTax2025,
   localTaxBaseKeys,
   localTaxProfiles2025,
-} from "../amplify/backend/function/helloWorld/taxCalcs.js";
+} from "../amplify/backend/function/helloWorld/src/taxCalcs";
 
 const allBaseAmounts = Object.fromEntries(localTaxBaseKeys.map((key) => [key, 10000]));
 

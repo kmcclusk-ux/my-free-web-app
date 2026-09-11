@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { accountAllowsCurrentIncome, effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInterestTreatment, isNonInvestmentIncomeType, localIncomeCategory, localIncomeCategories, whatIfInvestmentIncome } from "./portfolioIncome.js";
+import { accountAllowsCurrentIncome, effectiveInvestmentRate, incomeCalculationModes, resolveIncomeCalculationMode, investmentNetIncome, isFederalTaxExemptInterestTreatment, isNonInvestmentIncomeType, localIncomeCategory, localIncomeCategories, whatIfInvestmentIncome } from "./portfolioIncome.js";
 
 export const DEFAULT_API_BASE_URL =
   "https://j4evba8fpj.execute-api.us-west-2.amazonaws.com/portfolio/hello";
@@ -17,6 +17,9 @@ export type PortfolioServerConfig = {
   portfolioMcpToken?: string;
   uiAppOrigin?: string;
   loadUiHtml?: () => Promise<string>;
+  apiRequestTimeoutMs?: number;
+  apiMaxReadRetries?: number;
+  signal?: AbortSignal;
 };
 
 type ResolvedPortfolioServerConfig = {
@@ -26,6 +29,9 @@ type ResolvedPortfolioServerConfig = {
   portfolioMcpToken: string;
   uiAppOrigin: string;
   loadUiHtml?: () => Promise<string>;
+  apiRequestTimeoutMs: number;
+  apiMaxReadRetries: number;
+  signal?: AbortSignal;
 };
 
 type WorkbookResponse = {
@@ -33,6 +39,7 @@ type WorkbookResponse = {
   tabs: Record<string, unknown>;
   settings: Record<string, unknown>;
   updatedAt: string | null;
+  revision?: number;
 };
 
 type WorkbookRow = Record<string, unknown>;
@@ -126,6 +133,7 @@ type WorkbookSaveResponse = {
   workspaceId: string;
   updatedAt: string;
   savedKeys: string[];
+  revision?: number;
 };
 
 type ApiSuccess<T> = T & { error?: never };
@@ -141,6 +149,9 @@ export function resolvePortfolioConfig(
     portfolioMcpToken: config.portfolioMcpToken || "",
     uiAppOrigin: (config.uiAppOrigin || DEFAULT_UI_APP_ORIGIN).replace(/\/+$/, ""),
     loadUiHtml: config.loadUiHtml,
+    apiRequestTimeoutMs: Math.max(1, Math.min(config.apiRequestTimeoutMs ?? 15_000, 60_000)),
+    apiMaxReadRetries: Math.max(0, Math.min(config.apiMaxReadRetries ?? 2, 2)),
+    signal: config.signal,
   };
 }
 
@@ -168,6 +179,15 @@ function jsonToolResult(payload: unknown) {
   };
 }
 
+export class PortfolioApiError extends Error {
+  constructor(message: string, readonly code: string, readonly status?: number) {
+    super(message);
+    this.name = "PortfolioApiError";
+  }
+}
+
+const inFlightApiReads = new WeakMap<ResolvedPortfolioServerConfig, Map<string, Promise<unknown>>>();
+
 async function postPortfolioApi<T>(
   config: ResolvedPortfolioServerConfig,
   body: Record<string, unknown>
@@ -181,22 +201,54 @@ async function postPortfolioApi<T>(
     headers["X-Portfolio-Sync-Token"] = config.portfolioSyncToken;
   }
 
-  const response = await fetch(config.apiBaseUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  const data = (await response.json()) as T | ApiFailure;
-  if (!response.ok) {
-    const message =
-      typeof data === "object" && data && "error" in data
-        ? String(data.error)
-        : `Portfolio API request failed with status ${response.status}`;
-    throw new Error(message);
-  }
-
-  return data as ApiSuccess<T>;
+  const serializedBody = JSON.stringify(body);
+  const retryable = ["WORKBOOK_GET", "TAX_PLAN_2025"].includes(String(body.calc));
+  const pending = inFlightApiReads.get(config) ?? new Map<string, Promise<unknown>>();
+  inFlightApiReads.set(config, pending);
+  const existing = retryable ? pending.get(serializedBody) : undefined;
+  if (existing) return structuredClone(await existing) as ApiSuccess<T>;
+  const request = async () => {
+    for (let attempt = 0; ; attempt++) {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      config.signal?.addEventListener("abort", abort, { once: true });
+      const timeout = setTimeout(abort, config.apiRequestTimeoutMs);
+      let retryDelay = 100 * 2 ** attempt;
+      try {
+        if (config.signal?.aborted) controller.abort();
+        const response = await fetch(config.apiBaseUrl, { method: "POST", headers, body: serializedBody, signal: controller.signal });
+        const responseText = await response.text();
+        let data: unknown;
+        try { data = JSON.parse(responseText); } catch { data = undefined; }
+        if (!response.ok) {
+          const retryAfter = response.headers.get("retry-after");
+          if (retryAfter) retryDelay = /^\d+(\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Math.max(Date.parse(retryAfter) - Date.now(), 0);
+          const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : `Portfolio API returned HTTP ${response.status}`;
+          throw new PortfolioApiError(message, "HTTP_ERROR", response.status);
+        }
+        if (!data || typeof data !== "object") throw new PortfolioApiError("Portfolio API returned an invalid JSON response", "INVALID_RESPONSE");
+        if ("error" in data) throw new PortfolioApiError(String(data.error), "API_ERROR");
+        return data as ApiSuccess<T>;
+      } catch (error) {
+        if (controller.signal.aborted) throw new PortfolioApiError(config.signal?.aborted ? "Portfolio API request was aborted" : "Portfolio API request timed out", config.signal?.aborted ? "ABORTED" : "TIMEOUT");
+        const transient = error instanceof PortfolioApiError && [429, 502, 503, 504].includes(error.status ?? 0);
+        if (!retryable || !transient || attempt >= config.apiMaxReadRetries || !Number.isFinite(retryDelay) || retryDelay > 2_000) throw error;
+      } finally {
+        clearTimeout(timeout);
+        config.signal?.removeEventListener("abort", abort);
+      }
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => { clearTimeout(timer); reject(new PortfolioApiError("Portfolio API request was aborted", "ABORTED")); };
+        const timer = setTimeout(() => { config.signal?.removeEventListener("abort", onAbort); resolve(); }, retryDelay);
+        config.signal?.addEventListener("abort", onAbort, { once: true });
+        if (config.signal?.aborted) onAbort();
+      });
+    }
+  };
+  const promise = request();
+  if (retryable) pending.set(serializedBody, promise);
+  try { return structuredClone(await promise); }
+  finally { if (retryable) pending.delete(serializedBody); }
 }
 
 async function getWorkbook(config: ResolvedPortfolioServerConfig, workspaceId?: string) {
@@ -214,8 +266,9 @@ async function saveWorkbook(config: ResolvedPortfolioServerConfig, workbook: Wor
     source: "aftertaxus-mcp",
     serverVersion: SERVER_VERSION,
   };
-  return postPortfolioApi<WorkbookSaveResponse>(config, {
+  const result = await postPortfolioApi<WorkbookSaveResponse>(config, {
     calc: "WORKBOOK_SAVE",
+    expectedRevision: workbook.revision ?? 0,
     workspaceId: workbook.workspaceId || config.defaultWorkspaceId,
     tabs: workbook.tabs,
     settings: {
@@ -226,6 +279,9 @@ async function saveWorkbook(config: ResolvedPortfolioServerConfig, workbook: Wor
       },
     },
   });
+  workbook.revision = result.revision ?? workbook.revision ?? 0;
+  workbook.updatedAt = result.updatedAt;
+  return result;
 }
 
 function toWorkbookRows(value: unknown): WorkbookRow[] {
@@ -579,25 +635,37 @@ function nextInvestmentId(investments: InvestmentRow[]) {
 
 function findInvestmentByIdOrQuery(investments: InvestmentRow[], id?: number, query?: string) {
   if (id !== undefined) {
-    return investments.find((row) => Number(row.id) === id) ?? null;
+    const matches = investments.filter((row) => Number(row.id) === id);
+    if (matches.length > 1) throw new Error(`Duplicate row ID ${id}; repair row identities before editing.`);
+    return matches[0] ?? null;
   }
   if (!query) return null;
   const matches = investments.filter((row) => matchQuery(row, query));
+  if (matches.length > 1) throw new Error(`Query is ambiguous: matched ${matches.length} rows.`);
   return matches.length === 1 ? matches[0] : null;
 }
 
-function findInvestmentByVisibleRowOrId(investments: InvestmentRow[], rowNumber?: number, id?: number, query?: string) {
-  const visibleRowNumber = Number(rowNumber ?? id);
-  if (Number.isFinite(visibleRowNumber)) {
-    const visibleRowMatch = investments.find((row) => Number(row.spreadsheetRowNumber) === visibleRowNumber);
-    if (visibleRowMatch) return visibleRowMatch;
-  }
-  return findInvestmentByIdOrQuery(investments, id, query);
+function visibleInvestmentRowNumber(row: InvestmentRow, index: number) {
+  return normalizeRowId(row.spreadsheetRowNumber) ?? (index >= 0 ? index + 1 : null);
+}
+
+function findInvestmentByVisibleRowOrId(investments: InvestmentRow[], rowNumber?: number, id?: number, query?: string, rowId?: number, visibleRowNumber?: number) {
+  const selectors = [rowNumber, id, query, rowId, visibleRowNumber].filter((value) => value !== undefined);
+  if (selectors.length > 1) throw new Error("Use exactly one of rowId, visibleRowNumber, legacy id/rowNumber, or query.");
+  if (rowId !== undefined) return findInvestmentByIdOrQuery(investments, rowId);
+  if (query !== undefined) return findInvestmentByIdOrQuery(investments, undefined, query);
+  const requestedNumber = visibleRowNumber ?? rowNumber ?? id;
+  if (requestedNumber === undefined) return null;
+  const matches = investments.filter((row, index) => visibleInvestmentRowNumber(row, index) === requestedNumber || (id !== undefined && Number(row.id) === id));
+  if (matches.length > 1) throw new Error(`Ambiguous legacy or duplicate visible row selector ${requestedNumber}; use rowId or a unique visibleRowNumber.`);
+  const target = matches[0] ?? null;
+  if (target) findInvestmentByIdOrQuery(investments, Number(target.id));
+  return target;
 }
 
 function normalizeRowId(value: unknown) {
   const id = Number(value);
-  return Number.isFinite(id) && id > 0 ? id : null;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 function uniqueNumericIds(values: unknown[]) {
@@ -609,23 +677,29 @@ function investmentRowsMatchingSelectors(
   selectors: {
     rowNumbers?: Array<number | string>;
     ids?: Array<number | string>;
+    rowIds?: Array<number | string>;
+    visibleRowNumbers?: Array<number | string>;
     symbols?: string[];
     queries?: string[];
     allRows?: boolean;
   }
 ) {
   if (selectors.allRows) return investments;
-  const requestedRowNumbers = uniqueNumericIds(selectors.rowNumbers || []);
-  const requestedIds = uniqueNumericIds(selectors.ids || []);
+  const requestedRowNumbers = uniqueNumericIds([...(selectors.rowNumbers || []), ...(selectors.visibleRowNumbers || [])]);
+  const requestedIds = uniqueNumericIds(selectors.rowIds || []);
+  const legacyRows = uniqueNumericIds(selectors.ids || []).map((id) => findInvestmentByVisibleRowOrId(investments, undefined, id));
+  for (const id of requestedIds) findInvestmentByIdOrQuery(investments, id);
+  for (const number of requestedRowNumbers) findInvestmentByVisibleRowOrId(investments, number);
   const symbolSelectors = (selectors.symbols || []).map((symbol) => symbol.trim()).filter(Boolean);
   const querySelectors = (selectors.queries || []).map((query) => query.trim()).filter(Boolean);
 
-  return investments.filter((row) => {
+  return investments.filter((row, index) => {
     const internalId = normalizeRowId(row.id);
-    const visibleRowNumber = normalizeRowId(row.spreadsheetRowNumber);
+    const visibleRowNumber = visibleInvestmentRowNumber(row, index);
     return (
       (internalId !== null && requestedIds.includes(internalId)) ||
-      (visibleRowNumber !== null && (requestedRowNumbers.includes(visibleRowNumber) || requestedIds.includes(visibleRowNumber))) ||
+      legacyRows.includes(row) ||
+      (visibleRowNumber !== null && requestedRowNumbers.includes(visibleRowNumber)) ||
       symbolSelectors.some((symbol) => investmentMatchesSelector(row, symbol, true)) ||
       querySelectors.some((query) => investmentMatchesSelector(row, query, false))
     );
@@ -663,7 +737,7 @@ function investmentMatchesSelector(row: InvestmentRow, selector: string, exactSy
   const normalizedSelector = selector.trim().toLowerCase();
   if (!normalizedSelector) return false;
   if (exactSymbolOnly) {
-    return [getInvestmentSymbol(row), rowText(row, "newSymbol", "new_symbol", "overrideSymbol")]
+    return [getInvestmentSymbol(row)]
       .some((value) => value.trim().toLowerCase() === normalizedSelector);
   }
   return matchQuery(row, selector);
@@ -681,6 +755,9 @@ function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
     "symbol",
     "newSymbol",
     "newPercent",
+    "incomeCalculationMode",
+    "incomeMode",
+    "incomeKind",
   ]);
 
   return Object.fromEntries(
@@ -690,11 +767,42 @@ function safeInvestmentUpdate(values: Partial<InvestmentRow>) {
 
 function investmentUpdateWithSelectAlias(values: Partial<InvestmentRow> & { select?: boolean }) {
   const update = safeInvestmentUpdate(values);
+  if (values.incomeCalculationMode !== undefined || values.incomeMode !== undefined) {
+    const legacyMode = values.incomeCalculationMode === "annualIncome" ? "annual-income" : "principal-yield";
+    if (values.incomeMode !== undefined && values.incomeCalculationMode !== undefined && values.incomeMode !== legacyMode) throw new Error("Conflicting income modes were supplied.");
+    update.incomeMode = values.incomeMode ?? legacyMode;
+    update.incomeCalculationMode = update.incomeMode === "annual-income" ? "annualIncome" : "principalYield";
+  }
+  if (Object.hasOwn(update, "newSymbol") && !Object.hasOwn(update, "newPercent")) update.newPercent = null;
   if (typeof values.select === "boolean" && update.includeIncome === undefined) {
     update.includeIncome = values.select;
   }
   return update;
 }
+
+export const investmentFieldManifest = {
+  version: 1,
+  selectors: { rowId: "Immutable positive integer ID", visibleRowNumber: "Current unfiltered Row column number", id: "Deprecated: rejects ID/visible-row collisions", rowNumber: "Deprecated alias for visibleRowNumber" },
+  fields: {
+    "✓": { field: "includeIncome", unit: "boolean", effect: "calculation inclusion only" },
+    WhatIf: { field: "overrideProposal", unit: "boolean", effect: "proposal only while global WhatIf is open" },
+    Highlight: { field: "settings.ui.selectedAssetIds", unit: "row IDs", effect: "visual only" },
+    Dividend: { field: "effectivePercent", unit: "decimal rate; 0.09 = 9%", source: "derived active scenario" },
+    Investment: { field: "totalInvestment", unit: "USD" },
+    Year: { field: "yearlyIncome", unit: "USD/year", source: "derived active scenario; editable only in annualIncome mode" },
+    Month: { field: "yearlyIncome / 12", unit: "USD/month", source: "derived active scenario; editable only in annualIncome mode" },
+    "New %": { field: "newPercent", unit: "decimal rate; null clears the override; 0 is explicit zero" },
+  },
+} as const;
+
+const singleInvestmentSelectorSchema = {
+  rowId: z.number().int().positive().optional().describe(investmentFieldManifest.selectors.rowId),
+  visibleRowNumber: z.number().int().positive().optional().describe(investmentFieldManifest.selectors.visibleRowNumber),
+};
+const bulkInvestmentSelectorSchema = {
+  rowIds: z.array(z.number().int().positive()).max(500).optional().describe("Immutable row IDs only; never visible row numbers."),
+  visibleRowNumbers: z.array(z.number().int().positive()).max(500).optional().describe("Current unfiltered Row column numbers only; never IDs."),
+};
 
 function investmentUiColumns(row: InvestmentRow, tickerMap: Record<string, WorkbookRow> = {}) {
   const ticker = tickerMap[normalizeLookupKey(getInvestmentSymbol(row))];
@@ -782,17 +890,15 @@ function inferAccountTypeFromAccountName(accountName: unknown) {
 }
 
 function inferAccountTypeTaxStatus(typeName: unknown) {
-  const key = normalizeLookupKey(typeName);
-  if (!key) return "";
-  if (key.includes("w2") || key.includes("wage")) return "taxable";
-  if (key.includes("401") || key.includes("ira")) return "deferred";
-  if (key.includes("brokerage")) return "taxable";
+  const key = normalizeTaxTreatmentKey(typeName);
+  if (["w2", "w2income", "wages", "brokerage", "brokerageaccount", "inheritedbrokerage"].includes(key)) return "taxable";
+  if (["ira", "traditionalira", "inheritedira", "401k", "403b", "457b", "taxdeferred"].includes(key)) return "deferred";
+  if (["rothira", "roth401k"].includes(key)) return "taxfree";
   return "";
 }
 
 function isW2AccountType(value: unknown) {
-  const key = normalizeLookupKey(value);
-  return key.includes("w2") || key.includes("wage");
+  return ["w2", "w2income", "wages", "w2wages"].includes(normalizeTaxTreatmentKey(value));
 }
 
 function isTaxableAccountStatus(value: unknown, forceTaxable = false) {
@@ -812,6 +918,7 @@ function defaultTaxTreatmentRule(label: unknown): TaxTreatmentRule {
   if (["qualifieddiv", "longtermgain"].includes(key)) return { ...base, ordinaryShare: 0, preferredShare: 1, localCategory: key === "qualifieddiv" ? "dividends" : "capitalGains" };
   if (isSocialSecurityTaxTreatment(label)) return { ...base, ordinaryShare: 0.85, stateRule: "exempt", niitIncluded: false, localCategory: "socialSecurity" };
   if (isW2TaxTreatment(label)) return { ...base, niitIncluded: false, localCategory: "wages" };
+  if (["retirementincome", "pension", "distribution", "deferredcompensation"].includes(key)) return { ...base, niitIncluded: false, localCategory: "retirementIncome" };
   if (key === "realestate") return { ...base, localCategory: "rentalIncome" };
   if (key === "nonqualifieddiv") return { ...base, localCategory: "dividends" };
   if (key === "shorttermgain") return { ...base, localCategory: "capitalGains" };
@@ -858,10 +965,9 @@ function isW2IncomeType(incomeType: unknown) {
 }
 
 function sumTaxWhatIfItems(items: unknown, legacyAmount = 0) {
-  const itemTotal = Array.isArray(items)
-    ? items.reduce((total, item) => total + normalizeNumberValue((item as TaxWhatIfItem).amount), 0)
-    : 0;
-  return itemTotal > 0 ? itemTotal : normalizeNumberValue(legacyAmount);
+  return Array.isArray(items)
+    ? items.reduce((total, item) => total + (String(item?.incomeType || "").trim() ? normalizeNumberValue(item?.amount) : 0), 0)
+    : normalizeNumberValue(legacyAmount);
 }
 
 function sumW2TaxWhatIfItems(items: unknown) {
@@ -920,10 +1026,10 @@ function buildAccountMaps(workbook: WorkbookResponse) {
     const accountKey = normalizeLookupKey(accountName);
     if (!accountKey) continue;
     accountMap[accountKey] = row;
-    const typeName = rowText(row, "accountType", "account_type", "type") || inferAccountTypeFromAccountName(accountName);
+    const typeName = rowText(row, "accountType", "account_type", "type");
     accountTaxStatusByName[accountKey] =
-      accountTypes[normalizeLookupKey(typeName)] ||
       rowText(row, "taxStatus", "tax_status", "tax_treatment") ||
+      accountTypes[normalizeLookupKey(typeName)] ||
       inferAccountTypeTaxStatus(typeName) ||
       "taxable";
   }
@@ -941,59 +1047,61 @@ function buildTickerMap(workbook: WorkbookResponse) {
 }
 
 function investmentUiColumnsForWorkbook(workbook: WorkbookResponse, row: InvestmentRow) {
-  return investmentUiColumns(row, buildTickerMap(workbook));
+  const resolved = derivePortfolioRows({ ...workbook, tabs: { ...workbook.tabs, investments: [row] } }, normalizeBooleanValue(settingsSection(workbook.settings, "ui").investmentWhatIfOpen))[0];
+  return {
+    ...investmentUiColumns(row, buildTickerMap(workbook)),
+    Row: visibleInvestmentRowNumber(row, toInvestmentRows(workbook.tabs.investments).indexOf(row)),
+    "✓": resolved.includeIncome,
+    Dividend: resolved.effectivePercent,
+    Year: resolved.yearlyIncome,
+    Month: resolved.yearlyIncome / 12,
+    "New %": resolved.proposedPercent,
+  };
 }
 
-async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPortfolioServerConfig, options: PortfolioCalculationOptions = {}) {
-  const federalSettings = settingsSection(workbook.settings, "federal");
-  const stateSettings = settingsSection(workbook.settings, "state");
-  const filingStatus = options.filingStatus || normalizeFilingStatus(federalSettings.filingStatus || "mfj");
-  const selectedStateCode = normalizeStateCode(options.stateCode || stateSettings.stateCode || "CA");
-  const deductionMode = options.deductionMode || normalizeDeductionMode(federalSettings.deductionMode || "standard");
-  const whatIfActive = options.whatIfActive ?? normalizeBooleanValue(settingsSection(workbook.settings, "ui").investmentWhatIfOpen);
-  const federalWhatIfOpen = Boolean(options.federalWhatIfOpen);
-  const stateWhatIfOpen = Boolean(options.stateWhatIfOpen);
+function derivePortfolioRows(workbook: WorkbookResponse, whatIfActive: boolean, selectedStateCode = "CA") {
   const tickerMap = buildTickerMap(workbook);
   const { accountMap, accountTaxStatusByName } = buildAccountMaps(workbook);
   const taxTreatmentRuleMap = buildTaxTreatmentRuleMap(workbook);
 
-  const flowSeed = {
-    totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0,
-    investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0, longTermCapitalGainIncome: 0,
-    displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0,
-    displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0,
-    w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0,
-  };
-  const derivedRows = toInvestmentRows(workbook.tabs.investments).map((row) => {
-    const currentTicker = isPlaceholderAssetSymbol(row.symbol) ? undefined : tickerMap[normalizeLookupKey(row.symbol)];
+  return toInvestmentRows(workbook.tabs.investments).map((row, index) => {
+    const currentTicker = isPlaceholderAssetSymbol(getInvestmentSymbol(row)) ? undefined : tickerMap[normalizeLookupKey(getInvestmentSymbol(row))];
     const rowWhatIfActive = whatIfActive && normalizeBooleanValue(row.overrideProposal);
     const effectiveSymbol = rowWhatIfActive && row.newSymbol ? String(row.newSymbol) : getInvestmentSymbol(row);
     const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
     const effectiveTicker = isPlaceholderAssetSymbol(effectiveSymbol) ? undefined : tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
     const totalInvestment = getInvestmentTotal(row);
     const currentPercent = normalizeRate(rowValue(currentTicker || {}, "percentReturn", "percent_return"));
-    const proposedPercent = normalizeRate(rowValue(proposedTicker || {}, "percentReturn", "percent_return") ?? row.newPercent);
+    const proposedPercent = normalizeRate(rowValue(row, "newPercent", "new_percent", "overridePercent") ?? rowValue(proposedTicker || {}, "percentReturn", "percent_return") ?? currentPercent);
     const effectivePercent = effectiveInvestmentRate(currentPercent, proposedPercent, rowWhatIfActive);
     const importedYearlyIncome = getInvestmentIncome(row);
     const accountKey = normalizeLookupKey(getInvestmentAccount(row));
     const account = accountMap[accountKey];
-    const accountType = rowText(account || {}, "accountType", "account_type", "type") || inferAccountTypeFromAccountName(getInvestmentAccount(row));
+    const accountType = rowText(account || {}, "accountType", "account_type", "type");
     const isW2IncomeAccount = isW2AccountType(accountType);
-    const assetType = rowText(effectiveTicker || {}, "assetType", "asset_type");
-    const incomeItem = isW2IncomeAccount || isIncomeAssetType(assetType) || (!assetType && normalizeBooleanValue(rowValue(effectiveTicker || {}, "incomeItem", "income_item"))) || (totalInvestment === 0 && importedYearlyIncome !== 0);
+    const incomeCalculationMode = resolveIncomeCalculationMode({
+      incomeMode: row.incomeMode,
+      incomeCalculationMode: row.incomeCalculationMode,
+      incomeItem: rowValue(row, "incomeItem", "income_item") ?? rowValue(currentTicker || {}, "incomeItem", "income_item"),
+      assetType: rowValue(currentTicker || {}, "assetType", "asset_type"),
+      wageAccount: isW2IncomeAccount,
+    });
+    const incomeItem = incomeCalculationMode === "annualIncome";
     const yearlyIncome = incomeItem ? importedYearlyIncome : totalInvestment * effectivePercent;
     const included = getInvestmentIncluded(row);
-    const filteredIncome = included ? yearlyIncome : 0;
     const includeInAfterTaxValue = rowValue(account || {}, "includeInFreeCashflow", "include_in_free_cashflow");
     const includeInAfterTaxIncome = includeInAfterTaxValue === undefined ? true : normalizeYesNo(includeInAfterTaxValue) === "yes";
-    const displayFilteredIncome = included && includeInAfterTaxIncome ? yearlyIncome : 0;
     const accountTypeTaxStatus = inferAccountTypeTaxStatus(accountType);
     const taxStatus = String(isW2IncomeAccount ? "taxable" : accountTaxStatusByName[accountKey] || accountTypeTaxStatus || "taxable").toLowerCase();
+    const shelteredAccrual = !incomeItem && ["deferred", "taxdeferred", "taxfree", "roth"].includes(normalizeTaxTreatmentKey(taxStatus));
+    const filteredIncome = included && !shelteredAccrual ? yearlyIncome : 0;
+    const displayFilteredIncome = includeInAfterTaxIncome ? filteredIncome : 0;
+    const retirementDistribution = incomeItem && ["deferred", "taxdeferred"].includes(normalizeTaxTreatmentKey(taxStatus));
     const isTaxableAccount = accountAllowsCurrentIncome(taxStatus, incomeItem, isW2IncomeAccount);
-    const taxTreatment = isW2IncomeAccount ? "W2 income" : rowText(effectiveTicker || {}, "taxTreatment", "tax_treatment") || "income";
-    const taxTreatmentRule = taxTreatmentRuleMap[normalizeLookupKey(taxTreatment)] || defaultTaxTreatmentRule(taxTreatment);
+    const taxTreatment = retirementDistribution ? "retirement income" : isW2IncomeAccount ? "W2 income" : rowText(effectiveTicker || {}, "taxTreatment", "tax_treatment") || rowText(row, "taxTreatment", "tax_treatment") || "income";
+    const taxTreatmentRule = retirementDistribution ? defaultTaxTreatmentRule("retirement income") : taxTreatmentRuleMap[normalizeLookupKey(taxTreatment)] || defaultTaxTreatmentRule(taxTreatment);
     const investmentType = normalizeLookupKey(rowText(effectiveTicker || {}, "category"));
-    const isNonInvestmentIncome = isW2IncomeAccount || isW2TaxTreatment(taxTreatment) || isSocialSecurityTaxTreatment(taxTreatment) || isNonInvestmentIncomeType(investmentType);
+    const isNonInvestmentIncome = retirementDistribution || isW2IncomeAccount || isW2TaxTreatment(taxTreatment) || isSocialSecurityTaxTreatment(taxTreatment) || isNonInvestmentIncomeType(investmentType);
     const taxableMonthlyBase = isTaxableAccount && included ? filteredIncome / 12 : 0;
     const displayTaxableMonthlyBase = isTaxableAccount && included && includeInAfterTaxIncome ? displayFilteredIncome / 12 : 0;
     const ordinaryMonthly = fedTaxAdjust(taxableMonthlyBase, taxTreatment, false, taxTreatmentRule);
@@ -1003,10 +1111,20 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
     const displayPreferredMonthly = fedTaxAdjust(displayTaxableMonthlyBase, taxTreatment, true, taxTreatmentRule);
     const displayStateMonthly = stateTaxAdjust(displayTaxableMonthlyBase, taxTreatment, selectedStateCode, taxTreatmentRule);
     const w2Income = isW2IncomeAccount || isW2TaxTreatment(taxTreatment) ? filteredIncome : 0;
-    const localCategory = localIncomeCategory({ account: getInvestmentAccount(row), effectiveSymbol, investmentType, localTaxCategory: taxTreatmentRule.localCategory, nonInvestmentIncome: isNonInvestmentIncome ? filteredIncome : 0, taxStatus, taxTreatment, w2Income, incomeItem });
+    const localCategory = localIncomeCategory({ account: getInvestmentAccount(row), effectiveSymbol, investmentType, localTaxCategory: rowText(effectiveTicker || {}, "localTaxCategory") || taxTreatmentRule.localCategory, incomeKind: rowText(row, "incomeKind") || rowText(effectiveTicker || {}, "incomeKind"), nonInvestmentIncome: isNonInvestmentIncome ? filteredIncome : 0, taxStatus, taxTreatment, w2Income, incomeItem });
     const federalExempt = isTaxFreeTaxTreatment(taxTreatment) || normalizeTaxTreatmentKey(taxTreatment) === "fedtaxfree";
     return {
       id: row.id,
+      rowId: row.id,
+      visibleRowNumber: visibleInvestmentRowNumber(row, index),
+      incomeCalculationMode,
+      currentPercent,
+      proposedPercent,
+      effectivePercent,
+      sourceValues: { currentSymbol: getInvestmentSymbol(row), currentPercent, proposedSymbol: row.newSymbol ?? null, proposedPercentOverride: row.newPercent ?? null, storedYearlyIncome: importedYearlyIncome },
+      accruedIncome: shelteredAccrual ? yearlyIncome : 0,
+      distributionIncome: retirementDistribution ? filteredIncome : 0,
+      warnings: retirementDistribution ? ["Traditional distributions are modeled as fully taxable ordinary retirement income; basis, QCDs and early-withdrawal penalties are not modeled."] : [],
       description: rowText(row, "description", "desc"),
       account: getInvestmentAccount(row),
       symbol: getInvestmentSymbol(row),
@@ -1041,9 +1159,29 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
       w2Income,
       nonInvestmentIncome: isNonInvestmentIncome ? filteredIncome : 0,
       displayNonInvestmentIncome: isNonInvestmentIncome && includeInAfterTaxIncome ? filteredIncome : 0,
-      nonTaxableIncome: !isTaxableAccount && included ? yearlyIncome : 0,
+      nonTaxableIncome: !isTaxableAccount ? filteredIncome : 0,
     };
   });
+}
+
+async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPortfolioServerConfig, options: PortfolioCalculationOptions = {}) {
+  const federalSettings = settingsSection(workbook.settings, "federal");
+  const stateSettings = settingsSection(workbook.settings, "state");
+  const uiSettings = settingsSection(workbook.settings, "ui");
+  const filingStatus = options.filingStatus || normalizeFilingStatus(federalSettings.filingStatus || "mfj");
+  const selectedStateCode = normalizeStateCode(options.stateCode || stateSettings.stateCode || "CA");
+  const deductionMode = options.deductionMode || normalizeDeductionMode(federalSettings.deductionMode || "standard");
+  const whatIfActive = options.whatIfActive ?? normalizeBooleanValue(uiSettings.investmentWhatIfOpen);
+  const federalWhatIfOpen = options.federalWhatIfOpen ?? normalizeBooleanValue(uiSettings.federalWhatIfOpen);
+  const stateWhatIfOpen = options.stateWhatIfOpen ?? normalizeBooleanValue(uiSettings.stateWhatIfOpen);
+  const derivedRows = derivePortfolioRows(workbook, whatIfActive, selectedStateCode);
+  const flowSeed = {
+    totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0,
+    investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0, longTermCapitalGainIncome: 0,
+    displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0,
+    displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0,
+    w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0,
+  };
   const flows = derivedRows.reduce((acc, row) => {
     acc.totalInvestmentAmount += row.includedTotal;
     acc.totalIncome += row.filteredIncome;
@@ -1071,11 +1209,12 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
     incomeType: String(item?.incomeType || ""),
     deductionType: String(item?.deductionType || ""),
   }));
-  const ordinaryItems = normalizeItems(federalSettings.extraOrdinaryItems);
-  const preferredItems = normalizeItems(federalSettings.extraPreferredItems);
+  const ordinaryItems = Array.isArray(federalSettings.extraOrdinaryItems) ? normalizeItems(federalSettings.extraOrdinaryItems) : undefined;
+  const preferredItems = Array.isArray(federalSettings.extraPreferredItems) ? normalizeItems(federalSettings.extraPreferredItems) : undefined;
   const extraOrdinary = federalWhatIfOpen ? options.extraOrdinaryIncome ?? sumTaxWhatIfItems(ordinaryItems, normalizeNumberValue(federalSettings.extraOrdinaryIncome)) : 0;
   const extraPreferred = federalWhatIfOpen ? options.extraPreferredIncome ?? sumTaxWhatIfItems(preferredItems, normalizeNumberValue(federalSettings.extraPreferredIncome)) : 0;
   const extraW2 = federalWhatIfOpen && options.extraOrdinaryIncome === undefined ? sumW2TaxWhatIfItems(ordinaryItems) : 0;
+  const extraLongTermGains = federalWhatIfOpen && options.extraPreferredIncome === undefined ? sumLongTermCapitalGainWhatIfItems(preferredItems) : 0;
   const extraState = stateWhatIfOpen ? options.extraStateIncome ?? normalizeNumberValue(stateSettings.extraStateIncome) : 0;
   const extraNiit = federalWhatIfOpen
     ? whatIfInvestmentIncome(options.extraOrdinaryIncome === undefined ? ordinaryItems : undefined, extraOrdinary)
@@ -1084,8 +1223,9 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
   const localSettings = settingsSection(workbook.settings, "local");
   const localExtraAmounts = Object.fromEntries(localIncomeCategories.map((key) => [key, 0]));
   const addExtraLocal = (items: typeof ordinaryItems, fallback: number, preferred: boolean) => {
-    const activeItems = items.length ? items : [{ amount: fallback, incomeType: preferred ? "Capital gains" : "Other business income", deductionType: "" }];
+    const activeItems = items ?? [{ amount: fallback, incomeType: preferred ? "Capital gains" : "Other business income", deductionType: "" }];
     for (const item of activeItems) {
+      if (!item.incomeType.trim()) continue;
       const kind = item.incomeType.toLowerCase();
       const category = /w2|wage|salary/.test(kind) ? "wages" : /self/.test(kind) ? "selfEmployment"
         : /rental/.test(kind) ? "rentalIncome" : /dividend/.test(kind) ? "dividends"
@@ -1094,8 +1234,8 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
     }
   };
   if (federalWhatIfOpen) {
-    addExtraLocal(options.extraOrdinaryIncome === undefined ? ordinaryItems : [], extraOrdinary, false);
-    addExtraLocal(options.extraPreferredIncome === undefined ? preferredItems : [], extraPreferred, true);
+    addExtraLocal(options.extraOrdinaryIncome === undefined ? ordinaryItems : undefined, extraOrdinary, false);
+    addExtraLocal(options.extraPreferredIncome === undefined ? preferredItems : undefined, extraPreferred, true);
   }
   const buildRequest = (rows: typeof derivedRows) => {
     const sum = (read: (row: typeof derivedRows[number]) => number) => rows.reduce((total, row) => total + read(row), 0);
@@ -1110,7 +1250,7 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
       state: selectedStateCode,
       ordinaryIncomeExcludingSocialSecurity: Math.max(sum((row) => row.federalOrdinary) - scheduledSocialSecurity + extraOrdinary, 0),
       preferredIncome: sum((row) => row.federalPreferred) + extraPreferred,
-      longTermCapitalGainIncome: sum((row) => row.longTermCapitalGainIncome) + sumLongTermCapitalGainWhatIfItems(preferredItems),
+      longTermCapitalGainIncome: sum((row) => row.longTermCapitalGainIncome) + extraLongTermGains,
       socialSecurityBenefits,
       taxExemptInterest: sum((row) => row.taxExemptInterest),
       netInvestmentIncome: sum((row) => row.niitIncome) + extraNiit,
@@ -1139,7 +1279,12 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
     federal: z.object({
       incomeTax: z.number().finite(), total: z.number().finite(), adjustedGrossIncome: z.number().finite(),
       ordinaryTaxable: z.number().finite(), prefTaxable: z.number().finite(), taxableIncome: z.number().finite(),
-      deductions: z.record(z.number().finite()),
+      deductions: z.object({
+        standardOrItemizedDeduction: z.number().finite(),
+        capitalLossRaw: z.number().finite(),
+        capitalLossDeduction: z.number().finite(),
+        aboveLineDeduction: z.number().finite(),
+      }).passthrough(),
     }).passthrough(),
     state: z.object({ incomeTax: z.number().finite(), taxableIncome: z.number().finite(), deduction: z.number().finite() }).passthrough(),
     local: z.object({ tax: z.number().finite() }).passthrough(),
@@ -1160,6 +1305,9 @@ async function calculatePortfolio(workbook: WorkbookResponse, config: ResolvedPo
   return {
     workspaceId: workbook.workspaceId,
     updatedAt: workbook.updatedAt,
+    revision: workbook.revision ?? 0,
+    persisted: true,
+    activationSource: { investments: options.whatIfActive === undefined ? "saved" : "temporary", federal: options.federalWhatIfOpen === undefined ? "saved" : "temporary", state: options.stateWhatIfOpen === undefined ? "saved" : "temporary" },
     options: { whatIfActive, federalWhatIfOpen, stateWhatIfOpen, stateCode: selectedStateCode, filingStatus, deductionMode },
     income: {
       annualBeforeTax: flows.totalIncome, monthlyBeforeTax: flows.totalIncome / 12,
@@ -1362,17 +1510,27 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     async ({ body }) => {
       const calc = String(body.calc || "");
       const allowedCalculations = new Set([
+        "WORKBOOK_GET",
+        "WORKBOOK_REVISION",
         "WORKBOOK_SAVE",
         "TAX_CONFIG_2025",
         "TAX_PLAN_2025",
         "STATE_TAX_2025",
       ]);
       if (!allowedCalculations.has(calc)) throw new Error(`${calc || "Missing calc"} is not available to the focused model UI.`);
-      const response = await postPortfolioApi<Record<string, unknown>>(resolvedConfig, body);
-      return {
-        structuredContent: { status: 200, body: response },
-        content: [{ type: "text" as const, text: `${calc} completed for the focused model UI.` }],
-      };
+      try {
+        const response = await postPortfolioApi<Record<string, unknown>>(resolvedConfig, body);
+        return {
+          structuredContent: { status: 200, body: response },
+          content: [{ type: "text" as const, text: `${calc} completed for the focused model UI.` }],
+        };
+      } catch (error) {
+        if (!(error instanceof PortfolioApiError) || !error.status) throw error;
+        return {
+          structuredContent: { status: error.status, body: { error: error.message } },
+          content: [{ type: "text" as const, text: `${calc} did not complete (HTTP ${error.status}).` }],
+        };
+      }
     }
   );
 
@@ -1399,8 +1557,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   const earlyCalculationOptionsSchema = {
     workspaceId: z.string().optional(),
     whatIfActive: z.boolean().optional().describe("Omit to use the saved Investments WhatIf switch; false explicitly calculates the current portfolio."),
-    federalWhatIfOpen: z.boolean().default(false),
-    stateWhatIfOpen: z.boolean().default(false),
+    federalWhatIfOpen: z.boolean().optional(),
+    stateWhatIfOpen: z.boolean().optional(),
     stateCode: z.string().optional(),
     filingStatus: earlyFilingStatusSchema.optional(),
     deductionMode: z.enum(["standard", "itemized"]).optional(),
@@ -1410,14 +1568,21 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     includeRows: z.boolean().default(false),
   };
   const earlyWhatIfProposalSchema = z.object({
-    id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+    id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+    ...singleInvestmentSelectorSchema,
     rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
     query: z.string().optional(),
     newSymbol: z.string().min(1).describe("UI column New."),
-    newPercent: z.number().nonnegative().optional().describe("UI column New %."),
+    newPercent: z.number().nonnegative().nullable().optional().describe("UI column New %."),
     active: z.boolean().default(true).describe("UI column WhatIf checkbox state."),
   });
+  const investmentIncomeFieldsSchema = {
+    incomeMode: z.enum(["principal-yield", "annual-income"]).optional().describe("Principal × Dividend or directly entered Year/Month income."),
+    incomeCalculationMode: z.enum(incomeCalculationModes).optional().describe("Compatibility alias for incomeMode."),
+    incomeKind: z.enum(localIncomeCategories).optional().describe("Explicit income category, independent of incomeMode and row checkboxes."),
+  };
   const investmentUpdateValuesSchema = z.object({
+    ...investmentIncomeFieldsSchema,
     description: z.string().optional(),
     account: z.string().optional().describe("UI column Account."),
     category: z.string().optional().describe("Asset class/category lookup value."),
@@ -1427,10 +1592,11 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     overrideProposal: z.boolean().optional().describe("UI column WhatIf, the row WhatIf checkbox."),
     symbol: z.string().optional().describe("UI column Asset."),
     newSymbol: z.string().optional().describe("UI column New."),
-    newPercent: z.number().nonnegative().optional().describe("UI column New %."),
+    newPercent: z.number().nonnegative().nullable().optional().describe("UI column New %."),
     select: z.boolean().optional().describe("Alias for UI column ✓, the main selected/included checkbox."),
   });
   const investmentReplacementRowSchema = z.object({
+    ...investmentIncomeFieldsSchema,
     id: z.union([z.number(), z.string()]).optional(),
     description: z.string().default(""),
     account: z.string().default(""),
@@ -1441,11 +1607,12 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     overrideProposal: z.boolean().default(false),
     symbol: z.string().default(""),
     newSymbol: z.string().default(""),
-    newPercent: z.number().nonnegative().default(0),
+    newPercent: z.number().nonnegative().nullable().optional(),
   });
   const earlyInvestmentSelectionSchema = {
     workspaceId: z.string().optional(),
     rowNumbers: z.array(z.union([z.number(), z.string()])).optional().describe("Visible Row column numbers to check/uncheck in UI column ✓."),
+    ...bulkInvestmentSelectorSchema,
     ids: z.array(z.union([z.number(), z.string()])).optional().describe("Visible Row column numbers or internal row ids to check/uncheck in UI column ✓."),
     symbols: z.array(z.string()).optional().describe("Asset symbols to match against the current Asset column only, then check/uncheck UI column ✓."),
     queries: z.array(z.string()).optional().describe("Free-text row queries to match, then check/uncheck UI column ✓."),
@@ -1453,8 +1620,10 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     checked: z.boolean().default(true).describe("true selects/includes rows by checking UI column ✓; false deselects/excludes rows by unchecking UI column ✓."),
     returnCalculation: z.boolean().default(false),
   };
-  const selectRowsForCalculations = async ({ workspaceId, rowNumbers, ids, symbols, queries, allRows, checked, returnCalculation }: {
+  const selectRowsForCalculations = async ({ workspaceId, rowNumbers, ids, rowIds, visibleRowNumbers, symbols, queries, allRows, checked, returnCalculation }: {
     workspaceId?: string;
+    rowIds?: number[];
+    visibleRowNumbers?: number[];
     rowNumbers?: Array<number | string>;
     ids?: Array<number | string>;
     symbols?: string[];
@@ -1465,8 +1634,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   }) => {
     const workbook = await getWorkbook(resolvedConfig, workspaceId);
     const investments = toInvestmentRows(workbook.tabs.investments);
-    const matchedRows = investmentRowsMatchingSelectors(investments, { rowNumbers, ids, symbols, queries, allRows });
-    const hasSelector = allRows || (rowNumbers?.length || 0) + (ids?.length || 0) + (symbols?.length || 0) + (queries?.length || 0) > 0;
+    const matchedRows = investmentRowsMatchingSelectors(investments, { rowNumbers, ids, rowIds, visibleRowNumbers, symbols, queries, allRows });
+    const hasSelector = allRows || (rowNumbers?.length || 0) + (ids?.length || 0) + (rowIds?.length || 0) + (visibleRowNumbers?.length || 0) + (symbols?.length || 0) + (queries?.length || 0) > 0;
     if (!hasSelector) throw new Error("select_rows requires allRows=true, rowNumbers, ids, symbols, or queries.");
     if (matchedRows.length === 0) throw new Error("select_rows found no matching investment rows for UI column ✓.");
 
@@ -1481,6 +1650,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       ok: true,
       workspaceId: workbook.workspaceId,
       savedAt: saveResult.updatedAt,
+      revision: saveResult.revision ?? 0,
+      persisted: true,
       checked,
       selected: checked,
       changedCount: updatedRows.length,
@@ -1571,16 +1742,17 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Latest AfterTaxUS row updater. Updates one investment row by exact row id or by a query that matches exactly one row. Use this for direct ChatGPT edits to investment data.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       query: z.string().optional(),
       values: investmentUpdateValuesSchema,
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, rowNumber, query, values, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, query, values, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, query);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, query, rowId, visibleRowNumber);
       if (!target) {
         const matchingCount = query ? investments.filter((row) => matchQuery(row, query)).length : 0;
         throw new Error(
@@ -1604,6 +1776,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         investment: updatedRow,
         uiColumns: updatedRow ? investmentUiColumnsForWorkbook(workbook, updatedRow) : undefined,
         selected: typeof values.select === "boolean" ? values.select : undefined,
@@ -1617,15 +1791,16 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set UI column ✓ in the Investments table for exactly one row. This changes the main included/selected checkbox and affects calculations; it is not WhatIf and not visual highlighting.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       checked: z.boolean().describe("true checks/selects the row; false unchecks/deselects it."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, rowNumber, checked, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, checked, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, undefined, rowId, visibleRowNumber);
       if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
       const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
@@ -1638,6 +1813,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         id: targetId,
         rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         selected: checked,
@@ -1654,15 +1831,16 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set UI column WhatIf in the Investments table for one visible row. Use this exact tool when the user asks to check/uncheck WhatIf. This changes only the WhatIf checkbox and opens the WhatIf columns; it does not visually highlight rows and does not change UI column ✓.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       checked: z.boolean().describe("true checks the row's WhatIf checkbox; false unchecks it."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, rowNumber, checked, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, checked, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, undefined, rowId, visibleRowNumber);
       if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
       const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
@@ -1676,6 +1854,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         id: targetId,
         rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         whatIfActive: checked,
@@ -1693,15 +1873,16 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set UI column WhatIf for exactly one investment row. Use this for WhatIf checkbox changes. This changes only the WhatIf checkbox; it is not UI column ✓ and not visual highlighting.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       checked: z.boolean().describe("true activates the row's WhatIf; false deactivates it."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, rowNumber, checked, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, checked, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, undefined, rowId, visibleRowNumber);
       if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
       const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
@@ -1715,6 +1896,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         id: targetId,
         rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         whatIfActive: checked,
@@ -1731,16 +1914,17 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Update one Investments-table cell by the exact visible column label. Preferred for ChatGPT: use column='WhatIf' for the WhatIf checkbox, column='✓' for the main selected checkbox, column='Asset' for current asset, column='New' for WhatIf asset, column='New %' for WhatIf percent, column='Investment' for investment amount, column='Year' or 'Month' for income.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       column: z.enum(["✓", "WhatIf", "Account", "Asset", "New", "New %", "Investment", "Year", "Month"]),
       value: z.union([z.string(), z.number(), z.boolean()]),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, rowNumber, column, value, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, column, value, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, undefined, rowId, visibleRowNumber);
       if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
       const targetId = Number(target.id);
       const update: Partial<InvestmentRow> = {};
@@ -1767,6 +1951,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         id: targetId,
         rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         column,
@@ -1783,16 +1969,17 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set both the visible row selection/checkmark and the WhatIf active checkbox for one investment row in a single save. Use this when the user asks to deselect/select a row and also disable/enable WhatIf.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column. Prefer rowNumber; this is kept for ChatGPT compatibility."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       selected: z.boolean().describe("UI column ✓, the main included/selected checkbox."),
       whatIfActive: z.boolean().describe("UI column WhatIf, the row WhatIf checkbox."),
       returnCalculation: z.boolean().default(false),
     },
-    async ({ workspaceId, id, rowNumber, selected, whatIfActive, returnCalculation }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, selected, whatIfActive, returnCalculation }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, undefined, rowId, visibleRowNumber);
       if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
       const targetId = Number(target.id);
       workbook.tabs.investments = investments.map((row) =>
@@ -1806,6 +1993,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         id: targetId,
         rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         selected,
@@ -1825,12 +2014,13 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     {
       workspaceId: z.string().optional(),
       updates: z.array(z.object({
-        id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+        id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+        ...singleInvestmentSelectorSchema,
         rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
         query: z.string().optional(),
         values: investmentUpdateValuesSchema,
         addIfMissing: z.boolean().default(false).describe("When true and no row matches, add a new investment row using values plus defaults."),
-      })).min(1),
+      })).min(1).max(500),
       returnCalculation: z.boolean().default(false),
     },
     async ({ workspaceId, updates, returnCalculation }) => {
@@ -1840,7 +2030,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       let nextId = nextInvestmentId(investments);
 
       for (const request of updates) {
-        const target = findInvestmentByVisibleRowOrId(investments, request.rowNumber, request.id, request.query);
+        const target = findInvestmentByVisibleRowOrId(investments, request.rowNumber, request.id, request.query, request.rowId, request.visibleRowNumber);
         const update = investmentUpdateWithSelectAlias(request.values);
         if (Object.keys(update).length === 0) {
           throw new Error("bulk_update_investments received an update with no valid row fields.");
@@ -1856,6 +2046,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
             );
           }
           const newRow: InvestmentRow = {
+            ...update,
             id: nextId++,
             description: String(update.description || "New Investment"),
             account: String(update.account || ""),
@@ -1866,7 +2057,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
             overrideProposal: update.overrideProposal ?? false,
             symbol: String(update.symbol || ""),
             newSymbol: String(update.newSymbol || update.symbol || ""),
-            newPercent: normalizeNumberValue(update.newPercent),
+            newPercent: update.newPercent ?? null,
           };
           investments = [...investments, newRow];
           changedRows.push(newRow);
@@ -1886,6 +2077,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         changedCount: changedRows.length,
         changedRows,
         calculation,
@@ -1898,7 +2091,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Latest AfterTaxUS table replacement. Replaces the entire Investments table in one operation for ChatGPT-driven scratch population or complete portfolio imports.",
     {
       workspaceId: z.string().optional(),
-      rows: z.array(investmentReplacementRowSchema).min(1),
+      rows: z.array(investmentReplacementRowSchema).min(1).max(500),
       clearHighlights: z.boolean().default(true),
       returnCalculation: z.boolean().default(true),
     },
@@ -1910,6 +2103,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         nextId = Math.max(nextId, id + 1);
         const symbol = row.symbol || "";
         return {
+          ...investmentUpdateWithSelectAlias(row),
           id,
           description: row.description,
           account: row.account,
@@ -1933,6 +2127,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         rowCount: replacedRows.length,
         rows: replacedRows,
         calculation,
@@ -1945,7 +2141,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Latest AfterTaxUS bulk WhatIf setter. Sets investment-row WhatIf symbols/choices, saves them, and returns the recalculated portfolio result with investment WhatIf mode active.",
     {
       workspaceId: z.string().optional(),
-      proposals: z.array(earlyWhatIfProposalSchema).min(1),
+      proposals: z.array(earlyWhatIfProposalSchema).min(1).max(500),
       clearOtherWhatIfs: z.boolean().default(false),
       includeRows: z.boolean().default(false),
     },
@@ -1955,10 +2151,10 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const tickerMap = buildTickerMap(workbook);
       const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
       if (clearOtherWhatIfs) {
-        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: null }));
       }
       for (const proposal of proposals) {
-        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query);
+        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query, proposal.rowId, proposal.visibleRowNumber);
         if (!target) throw new Error(`apply_whatif_choices could not find a unique investment row for ${proposal.rowNumber ?? proposal.id ?? proposal.query ?? ""}.`);
         const targetId = Number(target.id);
         const newSymbol = proposal.newSymbol.trim();
@@ -1974,7 +2170,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       workbook.settings = setInvestmentWhatIfOpenInSettings(workbook.settings, true);
       const saveResult = await saveWorkbook(resolvedConfig, workbook);
       const calculation = await calculatePortfolio(workbook, resolvedConfig, { workspaceId, whatIfActive: true, includeRows });
-      return jsonToolResult({ ok: true, workspaceId: workbook.workspaceId, savedAt: saveResult.updatedAt, updates, calculation });
+      return jsonToolResult({ ok: true, workspaceId: workbook.workspaceId, savedAt: saveResult.updatedAt, revision: saveResult.revision ?? 0, persisted: true, updates, calculation });
     }
   );
 
@@ -1983,7 +2179,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Latest AfterTaxUS WhatIf comparison. Compares the saved portfolio against temporary investment WhatIf choices and returns baseline, scenario, and after-tax deltas.",
     {
       workspaceId: z.string().optional(),
-      proposals: z.array(earlyWhatIfProposalSchema).min(1),
+      proposals: z.array(earlyWhatIfProposalSchema).min(1).max(500),
       clearOtherWhatIfs: z.boolean().default(false),
       saveScenario: z.boolean().default(false),
       includeRows: z.boolean().default(false),
@@ -2000,10 +2196,10 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const tickerMap = buildTickerMap(scenarioWorkbook);
       const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
       if (clearOtherWhatIfs) {
-        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: null }));
       }
       for (const proposal of proposals) {
-        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query);
+        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query, proposal.rowId, proposal.visibleRowNumber);
         if (!target) throw new Error(`compare_whatif_choices could not find a unique investment row for ${proposal.rowNumber ?? proposal.id ?? proposal.query ?? ""}.`);
         const targetId = Number(target.id);
         const newSymbol = proposal.newSymbol.trim();
@@ -2211,6 +2407,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Add one investment row to the current workbook. Use this only when the user explicitly asks to add a holding.",
     {
       workspaceId: z.string().optional(),
+      ...investmentIncomeFieldsSchema,
       description: z.string().min(1),
       account: z.string().min(1),
       category: z.string().default("core"),
@@ -2220,10 +2417,13 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       overrideProposal: z.boolean().default(false),
       symbol: z.string().default(""),
       newSymbol: z.string().default(""),
-      newPercent: z.number().nonnegative().default(0),
+      newPercent: z.number().nonnegative().nullable().optional(),
     },
     async ({
       workspaceId,
+      incomeMode,
+      incomeCalculationMode,
+      incomeKind,
       description,
       account,
       category,
@@ -2239,6 +2439,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const investments = toInvestmentRows(workbook.tabs.investments);
       const id = nextInvestmentId(investments);
       const row: InvestmentRow = {
+        ...investmentUpdateWithSelectAlias({ incomeMode, incomeCalculationMode, incomeKind }),
         id,
         description,
         account,
@@ -2258,6 +2459,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         investment: row,
       });
     }
@@ -2271,6 +2474,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       id: z.number().optional(),
       query: z.string().optional(),
       values: z.object({
+        ...investmentIncomeFieldsSchema,
         description: z.string().optional(),
         account: z.string().optional(),
         category: z.string().optional(),
@@ -2281,7 +2485,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         select: z.boolean().optional().describe("Set the investment row's checkmark/select checkbox. This maps to includeIncome in the frontend."),
         symbol: z.string().optional(),
         newSymbol: z.string().optional(),
-        newPercent: z.number().nonnegative().optional(),
+        newPercent: z.number().nonnegative().nullable().optional(),
       }),
     },
     async ({ workspaceId, id, query, values }) => {
@@ -2313,6 +2517,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         investment: updatedRow,
         selected: typeof values.select === "boolean" ? values.select : undefined,
       });
@@ -2324,15 +2530,16 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set one investment checkbox field by visible row number. Use field='select' or field='includeIncome' for UI column ✓, field='overrideProposal' for UI column WhatIf. Use highlight tools only for visual row highlighting.",
     {
       workspaceId: z.string().optional(),
-      id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+      id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+      ...singleInvestmentSelectorSchema,
       rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
       field: z.enum(["includeIncome", "overrideProposal", "select"]),
       checked: z.boolean(),
     },
-    async ({ workspaceId, id, rowNumber, field, checked }) => {
+    async ({ workspaceId, id, rowNumber, rowId, visibleRowNumber, field, checked }) => {
       const workbook = await getWorkbook(resolvedConfig, workspaceId);
       const investments = toInvestmentRows(workbook.tabs.investments);
-      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id);
+      const target = findInvestmentByVisibleRowOrId(investments, rowNumber, id, undefined, rowId, visibleRowNumber);
       if (!target) throw new Error(`Investment row ${rowNumber ?? id} was not found.`);
       const targetId = Number(target.id);
 
@@ -2345,6 +2552,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         id: targetId,
         rowNumber: Number(target.spreadsheetRowNumber) || rowNumber || id,
         field,
@@ -2357,6 +2566,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   const investmentSelectionSchema = {
     workspaceId: z.string().optional(),
     rowNumbers: z.array(z.union([z.number(), z.string()])).optional().describe("Visible Row column numbers to check/uncheck in UI column ✓."),
+    ...bulkInvestmentSelectorSchema,
     ids: z.array(z.union([z.number(), z.string()])).optional().describe("Visible Row column numbers or internal row ids to check/uncheck in UI column ✓."),
     symbols: z.array(z.string()).optional().describe("Asset symbols to match against the current Asset column only, then check/uncheck UI column ✓."),
     queries: z.array(z.string()).optional().describe("Free-text row queries to match, then check/uncheck UI column ✓."),
@@ -2364,8 +2574,10 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     checked: z.boolean().default(true).describe("true selects/includes rows by checking UI column ✓; false deselects/excludes rows by unchecking UI column ✓."),
     returnCalculation: z.boolean().default(false),
   };
-  const selectInvestmentRows = async ({ workspaceId, rowNumbers, ids, symbols, queries, allRows, checked, returnCalculation }: {
+  const selectInvestmentRows = async ({ workspaceId, rowNumbers, ids, rowIds, visibleRowNumbers, symbols, queries, allRows, checked, returnCalculation }: {
     workspaceId?: string;
+    rowIds?: number[];
+    visibleRowNumbers?: number[];
     rowNumbers?: Array<number | string>;
     ids?: Array<number | string>;
     symbols?: string[];
@@ -2376,8 +2588,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   }) => {
     const workbook = await getWorkbook(resolvedConfig, workspaceId);
     const investments = toInvestmentRows(workbook.tabs.investments);
-    const matchedRows = investmentRowsMatchingSelectors(investments, { rowNumbers, ids, symbols, queries, allRows });
-    const hasSelector = allRows || (rowNumbers?.length || 0) + (ids?.length || 0) + (symbols?.length || 0) + (queries?.length || 0) > 0;
+    const matchedRows = investmentRowsMatchingSelectors(investments, { rowNumbers, ids, rowIds, visibleRowNumbers, symbols, queries, allRows });
+    const hasSelector = allRows || (rowNumbers?.length || 0) + (ids?.length || 0) + (rowIds?.length || 0) + (visibleRowNumbers?.length || 0) + (symbols?.length || 0) + (queries?.length || 0) > 0;
     if (!hasSelector) {
       throw new Error("select_investment_rows requires allRows=true, rowNumbers, ids, symbols, or queries.");
     }
@@ -2396,6 +2608,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       ok: true,
       workspaceId: workbook.workspaceId,
       savedAt: saveResult.updatedAt,
+      revision: saveResult.revision ?? 0,
+      persisted: true,
       checked,
       selected: checked,
       changedCount: updatedRows.length,
@@ -2419,6 +2633,7 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   const investmentRowHighlightSchema = {
     workspaceId: z.string().optional(),
     ids: z.array(z.union([z.number(), z.string()])).optional().describe("Investment row ids to visually highlight only. This does not set WhatIf or row selection checkboxes."),
+    ...bulkInvestmentSelectorSchema,
     symbols: z.array(z.string()).optional().describe("Symbols/tickers to highlight by exact current or WhatIf symbol match."),
     queries: z.array(z.string()).optional().describe("Free-text queries to match against exported investment row fields."),
     mode: z.enum(["replace", "add", "remove"]).default("replace").describe("replace overwrites current highlights; add appends; remove clears matching row highlights."),
@@ -2469,6 +2684,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         mode: clear ? "clear" : mode,
         selectedAssetIds,
         matchedRows: matchedRows.map((row) => ({
@@ -2534,6 +2751,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         tableName,
         row: updatedRows[index],
       });
@@ -2613,6 +2832,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         tableName,
         updated,
         added,
@@ -2658,6 +2879,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         tableName,
         totalRows: nextRows.length,
       });
@@ -2689,8 +2912,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
   const portfolioCalculationOptionsSchema = {
     workspaceId: z.string().optional(),
     whatIfActive: z.boolean().optional().describe("Omit to use the saved Investments WhatIf switch; false explicitly calculates the current portfolio."),
-    federalWhatIfOpen: z.boolean().default(false).describe("When true, the Federal Tax tab extra income WhatIf rows are included."),
-    stateWhatIfOpen: z.boolean().default(false).describe("When true, the State Tax tab extra state income WhatIf value is included."),
+    federalWhatIfOpen: z.boolean().optional().describe("When true, the Federal Tax tab extra income WhatIf rows are included."),
+    stateWhatIfOpen: z.boolean().optional().describe("When true, the State Tax tab extra state income WhatIf value is included."),
     stateCode: z.string().optional().describe("Two-letter state code. Defaults to workbook state settings."),
     filingStatus: filingStatusSchema.optional().describe("Federal/state filing status. Defaults to workbook federal settings."),
     deductionMode: z.enum(["standard", "itemized"]).optional().describe("Deduction mode. Defaults to workbook federal settings."),
@@ -2700,11 +2923,12 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     includeRows: z.boolean().default(false).describe("When true, include row-level derived calculation details."),
   };
   const whatIfProposalSchema = z.object({
-    id: z.number().optional().describe("Visible investment row number from the app's Row column; falls back to internal id if no visible row matches."),
+    id: z.number().optional().describe("Deprecated legacy selector: rejects collisions between row IDs and visible rows; prefer rowId or visibleRowNumber."),
+    ...singleInvestmentSelectorSchema,
     rowNumber: z.number().optional().describe("Visible investment row number from the app's Row column."),
     query: z.string().optional().describe("Free text query that must match exactly one investment row if id is not supplied."),
     newSymbol: z.string().min(1).describe("UI column New, the WhatIf replacement asset/symbol for the row."),
-    newPercent: z.number().nonnegative().optional().describe("UI column New %, optional WhatIf dividend/yield. Defaults from the Assets table when possible."),
+    newPercent: z.number().nonnegative().nullable().optional().describe("UI column New %, optional WhatIf dividend/yield. Defaults from the Assets table when possible."),
     active: z.boolean().default(true).describe("UI column WhatIf checkbox state."),
   });
 
@@ -2724,12 +2948,12 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
     "Set one or more investment-row WhatIf asset choices in bulk, optionally clear other WhatIfs, save the workbook, and return the recalculated after-tax portfolio result.",
     {
       workspaceId: z.string().optional(),
-      proposals: z.array(whatIfProposalSchema).min(1),
+      proposals: z.array(whatIfProposalSchema).min(1).max(500),
       clearOtherWhatIfs: z.boolean().default(false).describe("When true, clears all existing row WhatIf overrides before applying these proposals."),
       returnCalculation: z.boolean().default(true).describe("When true, return a full portfolio calculation after saving."),
       calculationOptions: z.object({
-        federalWhatIfOpen: z.boolean().default(false),
-        stateWhatIfOpen: z.boolean().default(false),
+        federalWhatIfOpen: z.boolean().optional(),
+        stateWhatIfOpen: z.boolean().optional(),
         stateCode: z.string().optional(),
         filingStatus: filingStatusSchema.optional(),
         deductionMode: z.enum(["standard", "itemized"]).optional(),
@@ -2744,11 +2968,11 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
 
       if (clearOtherWhatIfs) {
-        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: null }));
       }
 
       for (const proposal of proposals) {
-        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query);
+        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query, proposal.rowId, proposal.visibleRowNumber);
         if (!target) {
           const matchingCount = proposal.query ? investments.filter((row) => matchQuery(row, proposal.query || "")).length : 0;
           throw new Error(
@@ -2784,6 +3008,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
         ok: true,
         workspaceId: workbook.workspaceId,
         savedAt: saveResult.updatedAt,
+        revision: saveResult.revision ?? 0,
+        persisted: true,
         updatedIds,
         updates,
         calculation,
@@ -2801,8 +3027,8 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       saveScenario: z.boolean().default(false).describe("When true, save the proposal rows to the workbook before returning the comparison."),
       clearOtherWhatIfs: z.boolean().default(false),
       calculationOptions: z.object({
-        federalWhatIfOpen: z.boolean().default(false),
-        stateWhatIfOpen: z.boolean().default(false),
+        federalWhatIfOpen: z.boolean().optional(),
+        stateWhatIfOpen: z.boolean().optional(),
         stateCode: z.string().optional(),
         filingStatus: filingStatusSchema.optional(),
         deductionMode: z.enum(["standard", "itemized"]).optional(),
@@ -2825,10 +3051,10 @@ export function createPortfolioServer(config: PortfolioServerConfig = {}) {
       const tickerMap = buildTickerMap(scenarioWorkbook);
       const updates: Array<{ id: number; previousSymbol: string; newSymbol: string; active: boolean }> = [];
       if (clearOtherWhatIfs) {
-        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: 0 }));
+        investments = investments.map((row) => ({ ...row, overrideProposal: false, newSymbol: getInvestmentSymbol(row), newPercent: null }));
       }
       for (const proposal of proposals || []) {
-        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query);
+        const target = findInvestmentByVisibleRowOrId(investments, proposal.rowNumber, proposal.id, proposal.query, proposal.rowId, proposal.visibleRowNumber);
         if (!target) throw new Error(`compare_portfolio_whatif could not find a unique row for proposal ${proposal.id ?? proposal.query ?? ""}.`);
         const targetId = Number(target.id);
         const symbol = proposal.newSymbol.trim();

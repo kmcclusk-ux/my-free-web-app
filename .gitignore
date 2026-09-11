@@ -55,3 +55,14 @@ Thumbs.db
 
 # TypeScript incremental build
 *.tsbuildinfo
+
+# Known local credentials and financial exports (never source directories)
+/aftertaxus-admin-analytics-token.txt
+/google-sheet/investments-sheet-managed-by-ChatGPT.xlsx
+/google-sheet/federal-tax-tab-corrected.tsv
+/google-sheet/main-sheet-tax-formula-fixes.tsv
+/google-sheet/state-tax-tab-corrected.tsv
+/backup/
+/tmp/
+/xlsx_edit_*/
+/.backend-concurrency-state*.json

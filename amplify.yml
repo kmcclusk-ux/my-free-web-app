@@ -5,13 +5,14 @@ applications:
       phases:
         preBuild:
           commands:
+            - nvm install "$(cat ../.nvmrc)"
+            - nvm use "$(cat ../.nvmrc)"
             - npm ci --prefix ..
-            - npm ci
+            - npm run install:packages --prefix ..
         build:
           commands:
-            - npm run test:tax-treatments --prefix ..
             - export VITE_APP_VERSION="${AWS_BRANCH}-$(echo ${CODEBUILD_RESOLVED_SOURCE_VERSION:-local} | cut -c1-7)"
-            - npm run build
+            - npm run validate --prefix ..
       artifacts:
         baseDirectory: dist
         files:

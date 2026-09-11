@@ -70,7 +70,7 @@ describe("MCP to authoritative tax engine", () => {
     expect(requests[1].taxExemptInterest).toBe(0);
     expect(result.taxes.localIncomeTax).toBe(3_000);
     expect(result.income.excludedFromAfterTaxIncome).toBe(300_000);
-    expect(result.income.annualAfterTax).toBeCloseTo(15_000 - result.taxes.totalTax, 6);
+    expect(result.income.annualAfterTax).toBeCloseTo(10_000 - result.taxes.totalTax, 6);
     expect(result.portfolio.investmentTax).toBeCloseTo(calculateTaxPlan2025(requests[0]).totalTax - calculateTaxPlan2025(requests[1]).totalTax, 6);
   });
   test("saved WhatIf activates a zero yield, while an explicit false restores the original", async () => {
@@ -113,6 +113,7 @@ describe("MCP field contracts", () => {
   test("selection and visual highlighting persist as separate fields", async () => {
     const workbook = {
       workspaceId: "default",
+      revision: 0,
       updatedAt: "2026-09-08T20:00:00.000Z",
       tabs: {
         investments: [{ id: 101, spreadsheetRowNumber: 17, symbol: "BIL", includeIncome: true }],
@@ -126,8 +127,12 @@ describe("MCP field contracts", () => {
     vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(String(init.body)) : {};
       if (body.calc === "WORKBOOK_SAVE") {
+        if (body.expectedRevision !== workbook.revision) return Response.json({ error: "Workbook changed" }, { status: 409 });
         saves.push(body);
-        return Response.json({ workspaceId: "default", updatedAt: "2026-09-08T20:00:01.000Z", savedKeys: ["investments", "settings"] });
+        Object.assign(workbook.tabs, structuredClone(body.tabs));
+        Object.assign(workbook.settings, structuredClone(body.settings));
+        workbook.revision += 1;
+        return Response.json({ workspaceId: "default", revision: workbook.revision, updatedAt: "2026-09-08T20:00:01.000Z", savedKeys: ["investments", "settings"] });
       }
       if (body.calc === "WORKBOOK_GET") return Response.json(workbook);
       throw new Error(`Unexpected API calculation: ${body.calc}`);
@@ -144,8 +149,11 @@ describe("MCP field contracts", () => {
       expect(saves).toHaveLength(2);
       expect(saves[0].tabs.investments[0].includeIncome).toBe(false);
       expect(saves[0].settings.ui.selectedAssetIds).toEqual([101]);
-      expect(saves[1].tabs.investments[0].includeIncome).toBe(true);
+      expect(saves[1].tabs.investments[0].includeIncome).toBe(false);
       expect(saves[1].settings.ui.selectedAssetIds).toEqual([101]);
+      expect(saves.map((save) => save.expectedRevision)).toEqual([0, 1]);
+      expect(workbook.tabs.investments[0].includeIncome).toBe(false);
+      expect(workbook.revision).toBe(2);
     } finally {
       await client.close();
       await server.close();

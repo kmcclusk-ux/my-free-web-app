@@ -1,10 +1,12 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
-  BatchWriteCommand,
   GetCommand,
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
+  TransactGetCommand,
+  TransactWriteCommand,
+  type TransactWriteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 
 export type WorkbookEntityKey =
@@ -14,9 +16,11 @@ export type WorkbookEntityKey =
   | "tab#taxTreatment"
   | "tab#accounts"
   | "tab#accountTaxType"
+  | "tab#accountType"
   | "tab#investmentType"
   | "settings#federal"
   | "settings#state"
+  | "settings#local"
   | "settings#planner"
   | "settings#formulas"
   | "settings#ui"
@@ -25,7 +29,26 @@ export type WorkbookEntityKey =
 export type WorkbookPayload = {
   tabs?: Partial<Record<string, unknown>>;
   settings?: Partial<Record<string, unknown>>;
+  expectedRevision?: number;
 };
+
+export class WorkbookConflictError extends Error {
+  readonly statusCode = 409;
+  constructor() {
+    super("This workbook changed in another session. Reload the latest version before saving; your changes were not applied.");
+    this.name = "WorkbookConflictError";
+  }
+}
+
+const REVISION_KEY = "meta#revision";
+const MAX_ITEM_BYTES = 240_000;
+
+function validateItemSize(item: Record<string, unknown>) {
+  const serialized = JSON.stringify(item);
+  if (Buffer.byteLength(serialized, "utf8") > MAX_ITEM_BYTES) {
+    throw new Error(`Workbook item ${String(item.entityKey)} exceeds the ${MAX_ITEM_BYTES}-byte safety limit. Reduce saved versions or formula data before saving.`);
+  }
+}
 
 type WorkbookItem = {
   workspaceId: string;
@@ -101,9 +124,11 @@ const ENTITY_KEYS: WorkbookEntityKey[] = [
   "tab#taxTreatment",
   "tab#accounts",
   "tab#accountTaxType",
+  "tab#accountType",
   "tab#investmentType",
   "settings#federal",
   "settings#state",
+  "settings#local",
   "settings#planner",
   "settings#formulas",
   "settings#ui",
@@ -116,9 +141,11 @@ const TAB_TO_ENTITY: Record<string, WorkbookEntityKey> = {
   taxTreatment: "tab#taxTreatment",
   accounts: "tab#accounts",
   accountTaxType: "tab#accountTaxType",
+  accountType: "tab#accountType",
   investmentType: "tab#investmentType",
   federalSettings: "settings#federal",
   stateSettings: "settings#state",
+  localSettings: "settings#local",
   plannerSettings: "settings#planner",
   formulaSettings: "settings#formulas",
   uiSettings: "settings#ui",
@@ -131,9 +158,11 @@ const ENTITY_TO_RESPONSE_KEY: Partial<Record<WorkbookEntityKey, { group: "tabs" 
   "tab#taxTreatment": { group: "tabs", key: "taxTreatment" },
   "tab#accounts": { group: "tabs", key: "accounts" },
   "tab#accountTaxType": { group: "tabs", key: "accountTaxType" },
+  "tab#accountType": { group: "tabs", key: "accountType" },
   "tab#investmentType": { group: "tabs", key: "investmentType" },
   "settings#federal": { group: "settings", key: "federal" },
   "settings#state": { group: "settings", key: "state" },
+  "settings#local": { group: "settings", key: "local" },
   "settings#planner": { group: "settings", key: "planner" },
   "settings#formulas": { group: "settings", key: "formulas" },
   "settings#ui": { group: "settings", key: "ui" },
@@ -183,8 +212,12 @@ export class WorkbookStore {
   private readonly client: DynamoDBDocumentClient;
   private readonly tableName: string;
 
-  constructor() {
-    this.tableName = getRequiredEnv("WORKBOOK_TABLE_NAME");
+  constructor(options?: { client?: DynamoDBDocumentClient; tableName?: string }) {
+    this.tableName = options?.tableName ?? getRequiredEnv("WORKBOOK_TABLE_NAME");
+    if (options?.client) {
+      this.client = options.client;
+      return;
+    }
     const baseClient = new DynamoDBClient({});
     this.client = DynamoDBDocumentClient.from(baseClient, {
       marshallOptions: {
@@ -193,14 +226,49 @@ export class WorkbookStore {
     });
   }
 
-  async getWorkspace(workspaceId: string) {
-    const response = await this.client.send(
-      new QueryCommand({
+  private async queryPartition(workspaceId: string) {
+    const items: Record<string, unknown>[] = [];
+    let cursor: Record<string, unknown> | undefined;
+    do {
+      const response = await this.client.send(new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: "workspaceId = :workspaceId",
-        ExpressionAttributeValues: {
-          ":workspaceId": workspaceId,
-        },
+        ExpressionAttributeValues: { ":workspaceId": workspaceId },
+        ExclusiveStartKey: cursor,
+        ConsistentRead: true,
+      }));
+      items.push(...(response.Items ?? []));
+      cursor = response.LastEvaluatedKey;
+    } while (cursor && Object.keys(cursor).length > 0);
+    return items;
+  }
+
+  private async transact(items: NonNullable<TransactWriteCommandInput["TransactItems"]>) {
+    for (const item of items) {
+      if (item.Put?.Item) validateItemSize(item.Put.Item);
+    }
+    await this.client.send(new TransactWriteCommand({ TransactItems: items }));
+  }
+
+  async getRevision(workspaceId: string) {
+    const response = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { workspaceId, entityKey: REVISION_KEY },
+      ConsistentRead: true,
+    }));
+    return {
+      workspaceId,
+      revision: Number(response.Item?.revision ?? 0),
+      updatedAt: (response.Item?.updatedAt as string | undefined) ?? null,
+    };
+  }
+
+  async getWorkspace(workspaceId: string) {
+    const response = await this.client.send(
+      new TransactGetCommand({
+        TransactItems: [...ENTITY_KEYS, REVISION_KEY].map((entityKey) => ({
+          Get: { TableName: this.tableName, Key: { workspaceId, entityKey } },
+        })),
       })
     );
 
@@ -208,7 +276,14 @@ export class WorkbookStore {
     const settings: Record<string, unknown> = {};
     let updatedAt: string | null = null;
 
-    for (const rawItem of response.Items ?? []) {
+    let revision = 0;
+    for (const entry of response.Responses ?? []) {
+      const rawItem = entry.Item;
+      if (!rawItem) continue;
+      if (rawItem.entityKey === REVISION_KEY) {
+        revision = Number(rawItem.revision ?? 0);
+        continue;
+      }
       const item = rawItem as WorkbookItem;
       const mapping = ENTITY_TO_RESPONSE_KEY[item.entityKey];
       if (!mapping) continue;
@@ -229,6 +304,7 @@ export class WorkbookStore {
       tabs,
       settings,
       updatedAt,
+      revision,
     };
   }
 
@@ -238,47 +314,54 @@ export class WorkbookStore {
       throw new Error(`Unsupported workbook tab: ${tabName}`);
     }
 
-    const workspace = await this.getWorkspace(workspaceId);
-    const mapping = ENTITY_TO_RESPONSE_KEY[entityKey];
-    if (!mapping) {
-      throw new Error(`Unsupported workbook tab: ${tabName}`);
-    }
-    const data =
-      mapping.group === "tabs"
-        ? workspace.tabs[mapping.key]
-        : workspace.settings[mapping.key];
+    const response = await this.client.send(new TransactGetCommand({
+      TransactItems: [entityKey, REVISION_KEY].map((key) => ({
+        Get: { TableName: this.tableName, Key: { workspaceId, entityKey: key } },
+      })),
+    }));
+    const item = response.Responses?.[0]?.Item;
+    const metadata = response.Responses?.[1]?.Item;
 
     return {
       workspaceId,
       tab: tabName,
-      data: data ?? null,
-      updatedAt: workspace.updatedAt,
+      data: item?.data ?? null,
+      updatedAt: metadata?.updatedAt ?? item?.updatedAt ?? null,
+      revision: Number(metadata?.revision ?? 0),
     };
   }
 
-  async putTab(workspaceId: string, tabName: string, data: unknown) {
+  async putTab(workspaceId: string, tabName: string, data: unknown, expectedRevision = 0) {
     const entityKey = toEntityKey(tabName);
     if (!entityKey) {
       throw new Error(`Unsupported workbook tab: ${tabName}`);
     }
 
-    const updatedAt = toNowIso();
-    await this.client.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: {
-          workspaceId,
-          entityKey,
-          data,
-          updatedAt,
-        },
-      })
-    );
-
-    return { workspaceId, tab: tabName, updatedAt };
+    const mapping = ENTITY_TO_RESPONSE_KEY[entityKey]!;
+    const result = await this.saveWorkspace(workspaceId, {
+      [mapping.group]: { [mapping.key]: data },
+      expectedRevision,
+    });
+    return { workspaceId, tab: tabName, updatedAt: result.updatedAt, revision: result.revision };
   }
 
   async saveWorkspace(workspaceId: string, payload: WorkbookPayload) {
+    const expectedRevision = payload.expectedRevision ?? 0;
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision >= Number.MAX_SAFE_INTEGER) {
+      throw new Error("expectedRevision must be a non-negative safe integer.");
+    }
+    for (const group of ["tabs", "settings"] as const) {
+      const source = payload[group];
+      if (source === undefined) continue;
+      if (!source || Array.isArray(source) || typeof source !== "object") {
+        throw new Error(`${group} must be an object.`);
+      }
+      const allowed = new Set(Object.values(ENTITY_TO_RESPONSE_KEY).filter((mapping) => mapping?.group === group).map((mapping) => mapping!.key));
+      for (const key of Object.keys(source)) {
+        if (!allowed.has(key)) throw new Error(`Unsupported workbook ${group} field: ${key}`);
+        if (source[key] === undefined) throw new Error(`Workbook ${group}.${key} cannot be undefined.`);
+      }
+    }
     const updatedAt = toNowIso();
     const items: WorkbookItem[] = [];
 
@@ -299,50 +382,48 @@ export class WorkbookStore {
     }
 
     if (items.length === 0) {
-      return { workspaceId, updatedAt, savedKeys: [] as string[] };
+      return { ...await this.getRevision(workspaceId), savedKeys: [] as string[] };
     }
 
-    await this.client.send(
-      new BatchWriteCommand({
-        RequestItems: {
-          [this.tableName]: items.map((item) => ({
-            PutRequest: { Item: item },
-          })),
-        },
-      })
-    );
+    const revision = expectedRevision + 1;
+    try {
+      await this.transact([
+        ...items.map((item) => ({ Put: { TableName: this.tableName, Item: item } })),
+        { Put: {
+          TableName: this.tableName,
+          Item: { workspaceId, entityKey: REVISION_KEY, revision, updatedAt },
+          ConditionExpression: expectedRevision === 0 ? "attribute_not_exists(#revision) OR #revision = :expected" : "#revision = :expected",
+          ExpressionAttributeNames: { "#revision": "revision" },
+          ExpressionAttributeValues: { ":expected": expectedRevision },
+        } },
+      ]);
+    } catch (error) {
+      const failure = error as { name?: string; CancellationReasons?: { Code?: string }[] };
+      if (failure.name === "ConditionalCheckFailedException" || failure.CancellationReasons?.some((reason) => reason.Code === "ConditionalCheckFailed")) {
+        throw new WorkbookConflictError();
+      }
+      throw error;
+    }
 
     return {
       workspaceId,
       updatedAt,
+      revision,
       savedKeys: items.map((item) => item.entityKey),
     };
   }
 
   async putMcpToken(record: McpTokenRecord) {
-    await this.client.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: {
-          workspaceId: mcpTokenLookupWorkspaceId(record.tokenHash),
-          entityKey: "auth#mcpToken",
-          data: record,
-          updatedAt: record.createdAt,
-        },
-      })
-    );
-
-    await this.client.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: {
-          workspaceId: mcpTokenUserWorkspaceId(record.ownerSub),
-          entityKey: `token#${record.tokenId}`,
-          data: record,
-          updatedAt: record.createdAt,
-        },
-      })
-    );
+    await this.transact([
+      { Put: { TableName: this.tableName, Item: {
+        workspaceId: mcpTokenLookupWorkspaceId(record.tokenHash), entityKey: "auth#mcpToken",
+        data: record, updatedAt: record.createdAt,
+      } } },
+      { Put: { TableName: this.tableName, Item: {
+        workspaceId: mcpTokenUserWorkspaceId(record.ownerSub), entityKey: `token#${record.tokenId}`,
+        data: record, updatedAt: record.createdAt,
+      } } },
+    ]);
 
     return {
       tokenId: record.tokenId,
@@ -368,17 +449,8 @@ export class WorkbookStore {
   }
 
   async listMcpTokensForUser(ownerSub: string): Promise<McpTokenRecord[]> {
-    const response = await this.client.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        KeyConditionExpression: "workspaceId = :workspaceId",
-        ExpressionAttributeValues: {
-          ":workspaceId": mcpTokenUserWorkspaceId(ownerSub),
-        },
-      })
-    );
-
-    return (response.Items ?? [])
+    const items = await this.queryPartition(mcpTokenUserWorkspaceId(ownerSub));
+    return items
       .map((rawItem) => (rawItem as WorkbookItem).data)
       .filter((data): data is McpTokenRecord => Boolean(data) && typeof data === "object");
   }
@@ -393,29 +465,16 @@ export class WorkbookStore {
       revokedAt: token.revokedAt || toNowIso(),
     };
 
-    await this.client.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: {
-          workspaceId: mcpTokenLookupWorkspaceId(revoked.tokenHash),
-          entityKey: "auth#mcpToken",
-          data: revoked,
-          updatedAt: revoked.revokedAt,
-        },
-      })
-    );
-
-    await this.client.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: {
-          workspaceId: mcpTokenUserWorkspaceId(ownerSub),
-          entityKey: `token#${revoked.tokenId}`,
-          data: revoked,
-          updatedAt: revoked.revokedAt,
-        },
-      })
-    );
+    await this.transact([
+      { Put: { TableName: this.tableName, Item: {
+        workspaceId: mcpTokenLookupWorkspaceId(revoked.tokenHash), entityKey: "auth#mcpToken",
+        data: revoked, updatedAt: revoked.revokedAt,
+      } } },
+      { Put: { TableName: this.tableName, Item: {
+        workspaceId: mcpTokenUserWorkspaceId(ownerSub), entityKey: `token#${revoked.tokenId}`,
+        data: revoked, updatedAt: revoked.revokedAt,
+      } } },
+    ]);
 
     return {
       tokenId: revoked.tokenId,
@@ -448,17 +507,8 @@ export class WorkbookStore {
 
     while (cursor <= last) {
       const date = cursor.toISOString().slice(0, 10);
-      const response = await this.client.send(
-        new QueryCommand({
-          TableName: this.tableName,
-          KeyConditionExpression: "workspaceId = :workspaceId",
-          ExpressionAttributeValues: {
-            ":workspaceId": analyticsEventWorkspaceId(date),
-          },
-        })
-      );
-
-      for (const item of response.Items ?? []) {
+      const items = await this.queryPartition(analyticsEventWorkspaceId(date));
+      for (const item of items) {
         const record = item.data as AnalyticsVisitorEvent | undefined;
         if (record?.eventId && record?.at) events.push(record);
       }
@@ -534,17 +584,8 @@ export class WorkbookStore {
   }
 
   async listPublicReportsForUser(ownerSub: string): Promise<PublicReportRecord[]> {
-    const response = await this.client.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        KeyConditionExpression: "workspaceId = :workspaceId",
-        ExpressionAttributeValues: {
-          ":workspaceId": publicReportUserWorkspaceId(ownerSub),
-        },
-      })
-    );
-
-    return (response.Items ?? [])
+    const items = await this.queryPartition(publicReportUserWorkspaceId(ownerSub));
+    return items
       .map((item) => item.data as PublicReportRecord | undefined)
       .filter((record): record is PublicReportRecord => Boolean(record?.reportId && record?.payload))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -562,8 +603,8 @@ export class WorkbookStore {
       createdAt: existing?.createdAt || record.createdAt,
     };
 
-    await this.client.send(
-      new PutCommand({
+    const writes: NonNullable<TransactWriteCommandInput["TransactItems"]> = [{
+      Put: {
         TableName: this.tableName,
         Item: {
           workspaceId: publicReportLookupWorkspaceId(savedRecord.slug),
@@ -578,11 +619,8 @@ export class WorkbookStore {
           ":reportId": savedRecord.reportId,
           ":ownerSub": savedRecord.ownerSub,
         },
-      })
-    );
-
-    await this.client.send(
-      new PutCommand({
+      },
+    }, { Put: {
         TableName: this.tableName,
         Item: {
           ...ownerKey,
@@ -591,8 +629,8 @@ export class WorkbookStore {
           data: savedRecord,
           updatedAt: savedRecord.updatedAt,
         },
-      })
-    );
+      },
+    }];
 
     if (previousSlug && previousSlug !== savedRecord.slug) {
       const alias: PublicReportAlias = {
@@ -603,8 +641,7 @@ export class WorkbookStore {
         createdAt: savedRecord.createdAt,
         updatedAt: savedRecord.updatedAt,
       };
-      await this.client.send(
-        new PutCommand({
+      writes.push({ Put: {
           TableName: this.tableName,
           Item: {
             workspaceId: publicReportLookupWorkspaceId(previousSlug),
@@ -619,10 +656,11 @@ export class WorkbookStore {
             ":reportId": savedRecord.reportId,
             ":ownerSub": savedRecord.ownerSub,
           },
-        })
-      );
+        },
+      });
     }
 
+    await this.transact(writes);
     return savedRecord;
   }
 
@@ -635,14 +673,10 @@ export class WorkbookStore {
     const existing = existingResponse.Item?.data as PublicReportRecord | undefined;
     if (!existing || existing.ownerSub !== ownerSub || existing.reportId !== reportId) return false;
 
-    await this.client.send(new BatchWriteCommand({
-      RequestItems: {
-        [this.tableName]: [
-          { DeleteRequest: { Key: ownerKey } },
-          { DeleteRequest: { Key: { workspaceId: publicReportLookupWorkspaceId(existing.slug), entityKey: "report#public" } } },
-        ],
-      },
-    }));
+    await this.transact([
+      { Delete: { TableName: this.tableName, Key: ownerKey } },
+      { Delete: { TableName: this.tableName, Key: { workspaceId: publicReportLookupWorkspaceId(existing.slug), entityKey: "report#public" } } },
+    ]);
     return true;
   }
 }

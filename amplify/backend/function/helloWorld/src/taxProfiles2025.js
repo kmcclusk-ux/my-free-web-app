@@ -7,6 +7,19 @@ exports.getStateTaxProfile = getStateTaxProfile;
 exports.stateTax2025 = stateTax2025;
 const none = [];
 const same = (brackets) => ({ single: brackets, mfj: brackets });
+const missouriSchedule = [
+    { threshold: 1313, rate: 0.02, baseTax: 0 },
+    { threshold: 2626, rate: 0.025, baseTax: 26 },
+    { threshold: 3939, rate: 0.03, baseTax: 59 },
+    { threshold: 5252, rate: 0.035, baseTax: 98 },
+    { threshold: 6565, rate: 0.04, baseTax: 144 },
+    { threshold: 7878, rate: 0.045, baseTax: 197 },
+    { threshold: 9191, rate: 0.047, baseTax: 256 },
+];
+const wisconsinSingle = [
+    { threshold: 0, rate: 0.035 }, { threshold: 14680, rate: 0.044 },
+    { threshold: 50480, rate: 0.053 }, { threshold: 323290, rate: 0.0765 },
+];
 const marylandSingle = [
     { threshold: 0, rate: 0.02 }, { threshold: 1000, rate: 0.03 }, { threshold: 2000, rate: 0.04 },
     { threshold: 3000, rate: 0.0475 }, { threshold: 100000, rate: 0.05 }, { threshold: 125000, rate: 0.0525 },
@@ -44,7 +57,7 @@ exports.stateTaxProfiles = [
     { code: "MI", name: "Michigan", ...same([{ threshold: 0, rate: 0.0425 }]) },
     { code: "MN", name: "Minnesota", single: [{ threshold: 0, rate: 0.0535 }, { threshold: 32570, rate: 0.068 }, { threshold: 106990, rate: 0.0785 }, { threshold: 198630, rate: 0.0985 }], mfj: [{ threshold: 0, rate: 0.0535 }, { threshold: 47620, rate: 0.068 }, { threshold: 189180, rate: 0.0785 }, { threshold: 330410, rate: 0.0985 }] },
     { code: "MS", name: "Mississippi", ...same([{ threshold: 10000, rate: 0.044 }]) },
-    { code: "MO", name: "Missouri", single: [{ threshold: 1313, rate: 0.02 }, { threshold: 2626, rate: 0.025 }, { threshold: 3939, rate: 0.03 }, { threshold: 5252, rate: 0.035 }, { threshold: 6565, rate: 0.04 }, { threshold: 7878, rate: 0.045 }, { threshold: 9191, rate: 0.047 }], mfj: [{ threshold: 1313, rate: 0.015 }, { threshold: 2626, rate: 0.025 }, { threshold: 3939, rate: 0.03 }, { threshold: 5252, rate: 0.035 }, { threshold: 6565, rate: 0.04 }, { threshold: 7878, rate: 0.045 }, { threshold: 9191, rate: 0.047 }] },
+    { code: "MO", name: "Missouri", single: missouriSchedule, mfj: missouriSchedule, mfs: missouriSchedule, hoh: missouriSchedule, note: "Uses the official 2025 Tax Chart base amounts before final whole-dollar return rounding. Taxable income is per taxpayer, not combined spouses; compute each spouse separately. Deductions, adjustments and allocation are not modeled here. Source: https://dor.mo.gov/forms/2025%20Tax%20Chart_2025.pdf" },
     { code: "MT", name: "Montana", single: [{ threshold: 0, rate: 0.047 }, { threshold: 21100, rate: 0.059 }], mfj: [{ threshold: 0, rate: 0.047 }, { threshold: 42200, rate: 0.059 }] },
     { code: "NE", name: "Nebraska", single: [{ threshold: 0, rate: 0.0246 }, { threshold: 4030, rate: 0.0351 }, { threshold: 24120, rate: 0.0501 }, { threshold: 38870, rate: 0.052 }], mfj: [{ threshold: 0, rate: 0.0246 }, { threshold: 8040, rate: 0.0351 }, { threshold: 48250, rate: 0.0501 }, { threshold: 77730, rate: 0.052 }] },
     { code: "NV", name: "Nevada", single: none, mfj: none, note: "No broad-based individual income tax." },
@@ -68,13 +81,16 @@ exports.stateTaxProfiles = [
     { code: "VA", name: "Virginia", ...same([{ threshold: 0, rate: 0.02 }, { threshold: 3000, rate: 0.03 }, { threshold: 5000, rate: 0.05 }, { threshold: 17000, rate: 0.0575 }]) },
     { code: "WA", name: "Washington", single: none, mfj: none, note: "No broad-based individual income tax; Washington capital-gains excise tax is not modeled." },
     { code: "WV", name: "West Virginia", ...same([{ threshold: 0, rate: 0.0222 }, { threshold: 10000, rate: 0.0296 }, { threshold: 25000, rate: 0.0333 }, { threshold: 40000, rate: 0.0444 }, { threshold: 60000, rate: 0.0482 }]) },
-    { code: "WI", name: "Wisconsin", single: [{ threshold: 0, rate: 0.035 }, { threshold: 14680, rate: 0.044 }, { threshold: 29370, rate: 0.053 }, { threshold: 323290, rate: 0.0765 }], mfj: [{ threshold: 0, rate: 0.035 }, { threshold: 19580, rate: 0.044 }, { threshold: 39150, rate: 0.053 }, { threshold: 431060, rate: 0.0765 }] },
+    { code: "WI", name: "Wisconsin", single: wisconsinSingle, hoh: wisconsinSingle, mfj: [{ threshold: 0, rate: 0.035 }, { threshold: 19580, rate: 0.044 }, { threshold: 67300, rate: 0.053 }, { threshold: 431060, rate: 0.0765 }], mfs: [{ threshold: 0, rate: 0.035 }, { threshold: 9790, rate: 0.044 }, { threshold: 33650, rate: 0.053 }, { threshold: 215530, rate: 0.0765 }], note: "Full-year resident 2025 rate schedules on already-taxable income, before credits and return rounding. Sliding deductions, retirement subtractions and nonresident proration are not modeled here. Source: https://www.revenue.wi.gov/TaxForms2025/2025-form1-ES-inst.pdf" },
     { code: "WY", name: "Wyoming", single: none, mfj: none, note: "No broad-based individual income tax." },
     { code: "DC", name: "Washington, D.C.", ...same([{ threshold: 0, rate: 0.04 }, { threshold: 10000, rate: 0.06 }, { threshold: 40000, rate: 0.065 }, { threshold: 60000, rate: 0.085 }, { threshold: 250000, rate: 0.0925 }, { threshold: 500000, rate: 0.0975 }, { threshold: 1000000, rate: 0.1075 }]) },
 ];
 function getStateTaxProfile(stateCode) {
-    const normalized = String(stateCode || "CA").trim().toUpperCase();
-    return exports.stateTaxProfiles.find((profile) => profile.code === normalized) ?? exports.stateTaxProfiles.find((profile) => profile.code === "CA");
+    const normalized = typeof stateCode === "string" ? stateCode.trim().toUpperCase() : "";
+    const profile = exports.stateTaxProfiles.find((candidate) => candidate.code === normalized);
+    if (!profile)
+        throw new RangeError("A valid two-letter state or DC code is required.");
+    return profile;
 }
 function computeThresholdTax(taxableIncome, brackets) {
     const reachedBaseBracket = [...brackets].reverse().find((bracket) => taxableIncome > bracket.threshold && bracket.baseTax !== undefined);

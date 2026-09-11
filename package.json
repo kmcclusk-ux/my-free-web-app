@@ -4,13 +4,21 @@
   "description": "Tax calculation Lambda function",
   "main": "index.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=24.13.1 <25"
+  },
+  "packageManager": "npm@11.8.0",
   "scripts": {
-    "build": "cd amplify/backend/function/helloWorld && npm run build",
+    "build": "npm --prefix amplify/backend/function/helloWorld run build",
+    "build:check": "node amplify/backend/function/helloWorld/syncCompiledToSource.js --check",
+    "install:packages": "npm ci --prefix amplify/backend/function/helloWorld && npm ci --prefix frontend && npm ci --prefix mcp-server && npm ci --prefix snapshot-calculator",
     "clean": "rimraf build",
     "rebuild": "npm run clean && npm run build",
     "pretest": "npm run build",
     "test": "vitest run",
-    "test:tax-treatments": "vitest run tests/tax-treatment.test.ts"
+    "test:targeted": "npm run build && vitest run",
+    "test:tax-treatments": "npm run test:targeted -- tests/tax-treatment.test.ts",
+    "validate": "npm test && npm run build:check && npm --prefix frontend run lint && npm --prefix frontend run build && npm --prefix mcp-server run build && npm --prefix snapshot-calculator run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

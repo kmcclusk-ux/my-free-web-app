@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.localTaxProfiles2025 = exports.localTaxBaseKeys = void 0;
 exports.getLocalTaxProfile2025 = getLocalTaxProfile2025;
+exports.resolveLocalTaxProfile2025 = resolveLocalTaxProfile2025;
 exports.localTaxBaseKeys = [
     "wages",
     "selfEmployment",
@@ -74,5 +75,57 @@ exports.localTaxProfiles2025 = [
     { id: "al-gadsden", locality: "Gadsden", state: "AL", kind: "flat", residentRate: 0.02, base: earningsLocalTaxBase(), note: "Occupational tax rules vary; verify the current local rate." },
 ];
 function getLocalTaxProfile2025(localityId) {
-    return exports.localTaxProfiles2025.find((profile) => profile.id === localityId) || exports.localTaxProfiles2025[0];
+    const profile = exports.localTaxProfiles2025.find((candidate) => candidate.id === localityId);
+    if (!profile)
+        throw new RangeError("Unknown local tax jurisdiction. Select a listed locality or the custom profile.");
+    return profile;
+}
+function resolveLocalTaxProfile2025(input = {}) {
+    const preset = getLocalTaxProfile2025(input.localityId ?? "none");
+    const residency = input.residency === "nonresident" ? "nonresident" : "resident";
+    const hasOverrides = input.customRate !== undefined || input.customNonresidentRate !== undefined || input.customTaxableBase !== undefined;
+    const mode = input.overrideMode ?? (preset.id !== "none" && (preset.id === "custom" || hasOverrides) ? "override" : "preset");
+    if (mode !== "preset" && mode !== "override")
+        throw new RangeError("Invalid local tax override mode.");
+    const override = mode === "override";
+    const presetBase = residency === "nonresident" ? preset.nonresidentBase ?? preset.base : preset.base;
+    const baseSelection = { ...presetBase };
+    const baseProvenance = {};
+    for (const key of exports.localTaxBaseKeys) {
+        const value = override ? input.customTaxableBase?.[key] : undefined;
+        if (value !== undefined && typeof value !== "boolean")
+            throw new TypeError(`Local tax base ${key} must be boolean.`);
+        baseSelection[key] = value ?? presetBase[key];
+        baseProvenance[key] = value === undefined ? "preset" : "override";
+    }
+    const residentRate = override ? input.customRate ?? preset.residentRate : preset.residentRate;
+    const nonresidentRate = override ? input.customNonresidentRate ?? preset.nonresidentRate ?? residentRate : preset.nonresidentRate ?? preset.residentRate;
+    for (const rate of [residentRate, nonresidentRate]) {
+        if (!Number.isFinite(rate) || rate < 0 || rate > 1)
+            throw new RangeError("Local tax rates must be finite fractions between 0 and 1.");
+    }
+    const rateOverridden = override && (residency === "nonresident"
+        ? input.customNonresidentRate !== undefined || (preset.nonresidentRate === undefined && input.customRate !== undefined)
+        : input.customRate !== undefined);
+    if (preset.kind === "progressive" && override && ((input.customRate !== undefined && input.customRate !== preset.residentRate) || (input.customNonresidentRate !== undefined && input.customNonresidentRate !== (preset.nonresidentRate ?? 0)))) {
+        throw new RangeError("Use the custom flat profile to replace a progressive local tax schedule with a rate.");
+    }
+    if (preset.kind === "none" && override)
+        throw new RangeError("Select a locality or the custom profile before applying overrides.");
+    const profile = {
+        ...preset,
+        residentRate,
+        nonresidentRate,
+        base: residency === "resident" ? { ...baseSelection } : { ...preset.base },
+        nonresidentBase: residency === "nonresident" ? { ...baseSelection } : preset.nonresidentBase ? { ...preset.nonresidentBase } : undefined,
+        brackets: preset.brackets?.map((bracket) => ({ ...bracket })),
+        bracketsByStatus: preset.bracketsByStatus ? Object.fromEntries(Object.entries(preset.bracketsByStatus).map(([status, brackets]) => [status, brackets?.map((bracket) => ({ ...bracket }))])) : undefined,
+    };
+    return {
+        profile,
+        residency,
+        rate: residency === "nonresident" ? nonresidentRate : residentRate,
+        baseSelection,
+        provenance: { mode, presetId: preset.id, rate: rateOverridden ? "override" : "preset", base: baseProvenance },
+    };
 }

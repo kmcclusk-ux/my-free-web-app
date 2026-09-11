@@ -32,6 +32,7 @@ export type FocusedModelSurface = {
 
 export type McpWorkbookSnapshot = {
   workspaceId: string;
+  revision?: number;
   tabs: Record<string, unknown>;
   settings: Record<string, unknown>;
   updatedAt: string | null;
@@ -107,6 +108,7 @@ export function parseMcpWorkbookSnapshot(toolOutput: unknown): McpWorkbookSnapsh
   if (!workbook || !tabs || !settings || typeof workbook.workspaceId !== "string") return null;
   return {
     workspaceId: workbook.workspaceId,
+    ...(typeof workbook.revision === "number" && Number.isSafeInteger(workbook.revision) && workbook.revision >= 0 ? { revision: workbook.revision } : {}),
     tabs,
     settings,
     updatedAt: typeof workbook.updatedAt === "string" ? workbook.updatedAt : null,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { caTax2025Mfj } from "../amplify/backend/function/helloWorld/taxCalcs.js";
+import { caTax2025Mfj } from "../amplify/backend/function/helloWorld/src/taxCalcs";
 
 describe("STATE_TAX_2025_CA_MFJ", () => {
   test("0 => 0", () => {

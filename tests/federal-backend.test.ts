@@ -93,7 +93,8 @@ describe("2025 federal backend engine", () => {
     expect(federalSaltCap2025("single", 550000)).toBe(25000);
     expect(federalSaltCap2025("hoh", 700000)).toBe(10000);
     expect(federalSaltCap2025("mfs", 250000)).toBe(20000);
-    expect(federalSaltCap2025("mfs", 300000)).toBe(5000);
+    expect(federalSaltCap2025("mfs", 300000)).toBe(12500);
+    expect(federalSaltCap2025("mfs", 350000)).toBe(5000);
   });
 
   test("455k of MFJ ordinary income produces federal income tax, not payroll tax alone", () => {

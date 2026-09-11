@@ -1,14 +1,22 @@
-import { Fragment, cloneElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode, type SetStateAction } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { cloneElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
 import { isW2IncomeType } from "./taxMath";
+import { toNumber } from "./numericInput";
+import { useCurrencyDraft } from "./useCurrencyDraft";
+import { ASSISTANT_MESSAGE_HISTORY_KEY, ASSISTANT_PROMPT_HISTORY_KEY, clearAssistantHistoryStorage, readAssistantHistory, writeAssistantHistory } from "./assistantHistoryStorage";
+import { accountStatusAllowsCurrentTaxableIncome, canonicalStateRuleForTaxTreatment, defaultTaxTreatmentLabels, defaultTaxTreatmentRule, fedTaxAdjust, isKnownDefaultTaxTreatment, isReturnOfCapitalTaxTreatment, isSocialSecurityTaxTreatment, isTaxFreeTaxTreatment, isW2TaxTreatment, normalizeTaxTreatmentKey, stateTaxAdjust, taxTreatmentAliases, type TaxTreatmentRow } from "./taxTreatmentRules";
 import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUsername } from "./publicReportUrls";
 import { readFocusedModelSurface, readMcpWorkbookSnapshot, rememberFocusedModelSurface, type FocusedModelSurface } from "./mcpSurface";
-import { installMcpApiFetchBridge, isMcpUiHost } from "./mcpApiBridge";
+import { installMcpApiFetchBridge, isMcpUiHost, isTrustedMcpNotification } from "./mcpApiBridge";
 import { buildInvestmentRowHash, buildSelectedInvestmentHashes, normalizeSelectedInvestmentHashes, resolveSelectedInvestmentIds } from "./investmentRowIdentity";
 import { isCurrentTaxCalculation, isTaxCalculationAbort, taxCalculationRequestKey, type TaxPlanRequest } from "./taxRecalculation";
+import { accountCashflowInclusion, incrementalInvestmentTax, investmentAnnualIncome, investmentFavoritesError, normalizeInvestmentFavorites, normalizeTaxWhatIfItems, proposedInvestmentRate, resolveIncomeMode, sumTaxWhatIfItems, WorkbookSyncGuard, type IncomeMode } from "./workbookAdapters";
 import "./App.css";
 import { readAuthCallback } from "./authCallback";
-import { accountAllowsCurrentIncome, effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInterestTreatment, isNonInvestmentIncomeType, localIncomeCategory, persistInvestmentInputs, whatIfInvestmentIncome } from "../../mcp-server/src/portfolioIncome";
+import { parseQuickCalculatorHandoff, quickCalculatorIncomeRecords } from "./quickCalculatorHandoff";
+import { effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInterestTreatment, isNonInvestmentIncomeType, localIncomeCategory, whatIfInvestmentIncome } from "../../mcp-server/src/portfolioIncome";
+import { buildCombinedTaxThermometerMarkers, taxScheduleBaseRate, type ThermometerMarker } from "./taxThermometer";
+import { TaxThermometer, type ThermometerStat, type ThermometerValue } from "./TaxThermometerView";
 
 type TabKey =
   | "investments"
@@ -69,42 +77,23 @@ type TaxPlanResult = {
 type TaxConfigResult = { calc: "TAX_CONFIG_2025"; taxYear: number; states: LocalStateTaxProfile[]; localities: LocalTaxProfile[] };
 type ApiError = { error: string };
 type SaveState = "loading" | "ready" | "saving" | "saved" | "error";
-type QuickCalculatorHandoff = {
-  version: 1;
-  id: string;
-  createdAt: string;
-  ordinaryIncome: number;
-  investmentIncome: number;
-  investmentTaxTreatment: string;
-  filingStatus: FilingStatus;
-  deductionMode: FederalDeductionMode;
-  itemizedDeduction: number;
-  stateCode: string;
-  localityId: string;
-};
 const QUICK_CALCULATOR_HANDOFF_KEY = "aftertaxus-quick-calculator-handoff-v1";
-const QUICK_CALCULATOR_HANDOFF_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-function readQuickCalculatorHandoff(): QuickCalculatorHandoff | null {
+function readQuickCalculatorHandoff() {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(QUICK_CALCULATOR_HANDOFF_KEY);
     if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<QuickCalculatorHandoff>;
-    const createdAt = Date.parse(String(value.createdAt || ""));
-    if (value.version !== 1 || !value.id || !Number.isFinite(createdAt) || Date.now() - createdAt > QUICK_CALCULATOR_HANDOFF_MAX_AGE_MS) {
+    const value = parseQuickCalculatorHandoff(JSON.parse(raw));
+    if (!value) {
       window.localStorage.removeItem(QUICK_CALCULATOR_HANDOFF_KEY);
       return null;
     }
-    return value as QuickCalculatorHandoff;
+    return value;
   } catch {
     return null;
   }
 }
-type ThermometerMarker = { amount: number; label: string; detail: string; tone?: string };
-type ThermometerValue = { amount: number; label: string; value: string; tone: string; content?: React.ReactNode };
-type ThermometerStat = { label: string; value: string; tone?: string };
-type ThermometerRateBand = { start: number; end: number; label: string; index: number; total: number; colorIndex: number; colorTotal: number };
 
 type InvestmentRow = {
   id: number;
@@ -119,7 +108,8 @@ type InvestmentRow = {
   overrideProposal: boolean;
   symbol: string;
   newSymbol: string;
-  newPercent: number;
+  newPercent?: number;
+  incomeMode?: IncomeMode;
 };
 
 type IncomeEntryInput = {
@@ -155,6 +145,7 @@ type QuickAssetInput = {
 type AssetTaxTone = "fully-taxable" | "tax-free" | "federal-taxable-state-free" | "federal-free-state-taxable";
 
 type DerivedInvestmentRow = InvestmentRow & {
+  newPercent: number;
   monthlyIncome: number;
   currentPercent: number;
   effectiveSymbol: string;
@@ -204,7 +195,6 @@ type DerivedInvestmentRow = InvestmentRow & {
 
 type TickerRow = { id: number; symbol: string; percentReturn: number; assetType: string; category: string; taxTreatment: string; incomeItem: boolean; extraData: number; description: string; exDividend: string; divPayout: string };
 type CategoryRow = { id: number; name: string; includeInAllocation: boolean };
-type TaxTreatmentRow = { id: number; label: string; ordinaryShare: number; preferredShare: number; stateRule: string; niitIncluded: boolean; localCategory: string; description: string; includeInAllocation: boolean };
 type AccountRow = { id: number; account: string; accountType: string; taxStatus: string; dividendAccrued: string; includeInFreeCashflow: string };
 type AccountTaxTypeRow = { id: number; taxStatus: string; includeInAllocation: boolean };
 type AccountTypeRow = { id: number; name: string; taxStatus: string; includeInAllocation: boolean };
@@ -241,7 +231,7 @@ type ModelDataSnapshot = {
 type ModelVersion = { id: string; name: string; createdAt: string; updatedAt: string; snapshot: ModelDataSnapshot };
 type ScenarioLandingPage = { id: string; name: string; slug?: string; createdAt: string; updatedAt: string; payload: string };
 type IncomePrimaryPeriod = "monthly" | "annual";
-type UiSettings = ModelUiSnapshot & { selectedInvestmentHashes: string[]; publicUsername?: string; savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
+type UiSettings = ModelUiSnapshot & { selectedInvestmentHashes: string[]; publicUsername?: string; savedScenarios: SummaryReportScenario[]; scenarioLibraryMigrated?: boolean; modelVersions: ModelVersion[]; incomePrimaryPeriod: IncomePrimaryPeriod; darkMode: boolean; investmentWhatIfOpen?: boolean; federalWhatIfOpen?: boolean; stateWhatIfOpen?: boolean; mcpRefresh?: { requestedAt?: string; source?: string; serverVersion?: string } };
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string; actions?: AssistantAction[]; createdAt: string; error?: boolean };
 type AuthTokens = { idToken: string; accessToken: string; refreshToken?: string; expiresAt: number };
 type AuthUser = { sub: string; email?: string; name?: string; username?: string };
@@ -359,6 +349,7 @@ type FederalNumericField = Exclude<keyof FederalSettings, "filingStatus" | "dedu
 
 type WorkbookResponse = {
   workspaceId: string;
+  revision?: number;
   tabs?: Partial<{
     investments: InvestmentRow[];
     tickers: TickerRow[];
@@ -452,7 +443,7 @@ const WORKBOOK_REMOTE_REFRESH_INTERVAL_MS = 5000;
 const MCP_UI_HOST = isMcpUiHost();
 const INITIAL_FOCUSED_MODEL_SURFACE = MCP_UI_HOST ? readFocusedModelSurface() : null;
 const INITIAL_MCP_WORKBOOK_SNAPSHOT = MCP_UI_HOST ? readMcpWorkbookSnapshot() as WorkbookResponse | null : null;
-if (INITIAL_FOCUSED_MODEL_SURFACE) installMcpApiFetchBridge();
+if (INITIAL_FOCUSED_MODEL_SURFACE) installMcpApiFetchBridge(`${API_BASE_URL}/hello`);
 
 function normalizeMcpConnectorBaseUrl(rawBaseUrl?: string) {
   const fallbackUrl = `https://my-free-web-app.kmcclusk.workers.dev${CURRENT_MCP_CONNECTOR_PATH}`;
@@ -492,14 +483,12 @@ const BROWSER_ROOT_URI = typeof window !== "undefined"
 const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI || BROWSER_ROOT_URI;
 const COGNITO_LOGOUT_URI = import.meta.env.VITE_COGNITO_LOGOUT_URI || COGNITO_REDIRECT_URI;
 const COGNITO_SCOPES = import.meta.env.VITE_COGNITO_SCOPES || "openid email profile";
-const ASSISTANT_MESSAGE_HISTORY_KEY = "portfolio-assistant-message-history";
 const ASSISTANT_MESSAGE_HISTORY_LIMIT = 100;
 const WORKBOOK_HISTORY_LIMIT = 100;
 const MODEL_VERSION_LIMIT = 10;
 const SAVED_SCENARIO_LIMIT = 50;
 const SCENARIO_LANDING_PAGE_LIMIT = 20;
 const PUBLISHED_SCENARIO_LIMIT = 4;
-const ASSISTANT_PROMPT_HISTORY_KEY = "portfolio-assistant-prompt-history";
 const ASSISTANT_PROMPT_HISTORY_LIMIT = 50;
 const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
@@ -898,6 +887,8 @@ async function completeCognitoSignInFromUrl(): Promise<AuthState | null> {
 }
 
 function signOutCognito() {
+  const currentAuth = readStoredAuth();
+  clearAssistantHistory(currentAuth.status === "signedIn" ? currentAuth.user.sub : undefined);
   clearStoredAuth();
   if (!isCognitoEnabled() || !COGNITO_CLIENT_ID) {
     window.location.reload();
@@ -1084,22 +1075,6 @@ const initialTickers: TickerRow[] = ([
 ] as Array<Omit<TickerRow, "incomeItem">>).map((row) => ({ ...row, incomeItem: isIncomeAssetType(row.assetType) || isDefaultIncomeTicker(row) }));
 
 const initialCategories: CategoryRow[] = categoryLabels.map((name, index) => ({ id: index + 1, name, includeInAllocation: true }));
-export function defaultTaxTreatmentRule(label: string): Omit<TaxTreatmentRow, "id" | "label" | "includeInAllocation"> {
-  const key = normalizeTaxTreatmentKey(label);
-  const base = { ordinaryShare: 1, preferredShare: 0, stateRule: "taxable", niitIncluded: true, localCategory: "interest", description: "Ordinary taxable investment income" };
-  if (isTaxFreeTaxTreatment(label)) return { ...base, ordinaryShare: 0, stateRule: "exempt", niitIncluded: false, localCategory: "", description: isReturnOfCapitalTaxTreatment(label) ? "Return of capital excluded from current federal, state, local, and NIIT taxable income" : "Excluded from current federal, state, local, and NIIT taxable income" };
-  if (key === "fedtaxfree") return { ...base, ordinaryShare: 0, stateRule: "taxable", niitIncluded: false, description: "Federally exempt but state taxable" };
-  if (key === "statetaxfree") return { ...base, stateRule: "treasury-exempt", description: "Federally taxable U.S. Treasury interest; exempt from state and local income tax" };
-  if (isSection1256TaxTreatment(label)) return { ...base, ordinaryShare: 0.4, preferredShare: 0.6, localCategory: "capitalGains", description: "Section 1256-style 40% short-term / 60% long-term gain" };
-  if (["qualifieddiv", "longtermgain"].includes(key)) return { ...base, ordinaryShare: 0, preferredShare: 1, localCategory: key === "qualifieddiv" ? "dividends" : "capitalGains", description: key === "qualifieddiv" ? "Qualified dividend income" : "Long-term capital gain" };
-  if (isSocialSecurityTaxTreatment(label)) return { ...base, ordinaryShare: 0.85, stateRule: "exempt", niitIncluded: false, localCategory: "socialSecurity", description: "Social Security estimate; federal taxable share is capped at 85%" };
-  if (isW2TaxTreatment(label)) return { ...base, niitIncluded: false, localCategory: "wages", description: "W-2 wage income taxed as ordinary income and excluded from NIIT" };
-  if (key === "realestate") return { ...base, localCategory: "rentalIncome", description: "Ordinary real-estate income before property-specific deductions" };
-  if (key === "nonqualifieddiv") return { ...base, localCategory: "dividends", description: "Nonqualified dividend taxed as ordinary income" };
-  if (["shorttermgain"].includes(key)) return { ...base, localCategory: "capitalGains", description: "Short-term capital gain taxed as ordinary income" };
-  return base;
-}
-export const defaultTaxTreatmentLabels = ["state tax free", "fed tax free", "section 1256", "W2 income", "income", "social security", "qualified-div", "non-qualified-div", "short term gain", "long term gain", "return of capital"] as const;
 const initialTaxTreatments: TaxTreatmentRow[] = defaultTaxTreatmentLabels.map((label, index) => ({ id: index + 1, label, ...defaultTaxTreatmentRule(label), includeInAllocation: true }));
 const initialAccountTaxTypes: AccountTaxTypeRow[] = ["tax-free", "taxable", "deferred"].map((taxStatus, index) => ({ id: index + 1, taxStatus, includeInAllocation: true }));
 const initialAccountTypes: AccountTypeRow[] = [
@@ -1197,8 +1172,8 @@ function classifyLocalWhatIfIncomeType(incomeType: string, preferred: boolean): 
   return preferred ? "capitalGains" : "businessIncome";
 }
 function addLocalTaxWhatIfItems(base: Record<LocalTaxBaseKey, number>, items: TaxWhatIfItem[] | undefined, preferred: boolean, legacyAmount = 0) {
-  const activeItems = (Array.isArray(items) ? items : []).filter((item) => toNumber(item.amount) > 0);
-  if (activeItems.length === 0) {
+  const activeItems = (Array.isArray(items) ? items : []).filter((item) => item.incomeType.trim() && toNumber(item.amount) > 0);
+  if (!Array.isArray(items)) {
     const amount = toNumber(legacyAmount);
     if (amount > 0) addLocalTaxBaseAmount(base, preferred ? "capitalGains" : "businessIncome", amount);
     return;
@@ -1226,30 +1201,7 @@ const initialPlannerSettings: PlannerSettings = { federalWithholding: 0, stateWi
 const initialUiSettings: UiSettings = { publicUsername: "", investmentFavorites: [], selectedAssetIds: [], selectedInvestmentHashes: [], savedScenarios: [], scenarioLibraryMigrated: false, modelVersions: [], incomePrimaryPeriod: "annual", darkMode: false, investmentWhatIfOpen: false };
 const GOOGLE_SHEET_INVESTMENT_START_ROW = 8;
 
-function toNumber(value: number | string | boolean | null | undefined) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-  if (typeof value === "boolean") {
-    return value ? 1 : 0;
-  }
-  const str = String(value || "")
-    .replace(/[$,]/g, "")
-    .replace(/%/g, "")
-    .trim();
-  const parsed = Number(str);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
 
-function formatDollarInputValue(value: number | string | boolean | null | undefined) {
-  const rawValue = String(value ?? "").replace(/[$,%\s]/g, "");
-  if (rawValue === "" || rawValue === "-" || rawValue === "." || rawValue === "-.") return rawValue;
-  const isNegative = rawValue.startsWith("-");
-  const unsignedValue = isNegative ? rawValue.slice(1) : rawValue;
-  const [integerPart = "", decimalPart] = unsignedValue.split(".");
-  const formattedInteger = integerPart.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
-  return `${isNegative ? "-" : ""}${formattedInteger}${decimalPart !== undefined ? `.${decimalPart}` : ""}`;
-}
 
 function isPlaceholderAssetSymbol(value: string) {
   const normalized = normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
@@ -1264,6 +1216,7 @@ function getStateTaxRateMarkers(profile: LocalStateTaxProfile, filingStatus: Loc
     .filter((bracket) => bracket.threshold > 0)
     .map((bracket) => ({
       amount: bracket.threshold,
+      rate: bracket.rate,
       label: `${Number((bracket.rate * 100).toFixed(2))}%`,
       detail: `${profile.name} ${Number((bracket.rate * 100).toFixed(2))}% bracket starts`,
       tone: "state",
@@ -1272,8 +1225,7 @@ function getStateTaxRateMarkers(profile: LocalStateTaxProfile, filingStatus: Loc
 
 function getStateTaxBaseRateLabel(profile: LocalStateTaxProfile, filingStatus: LocalStateTaxFilingStatus) {
   const brackets = stateTaxBracketsForProfile(profile, filingStatus);
-  const firstBracket = [...brackets].sort((first, second) => first.threshold - second.threshold)[0];
-  return firstBracket ? `${Number((firstBracket.rate * 100).toFixed(2))}%` : "0%";
+  return `${Number((taxScheduleBaseRate(brackets) * 100).toFixed(3))}%`;
 }
 
 function distributeAmountEvenly(total: number, count: number) {
@@ -1312,56 +1264,6 @@ function normalizeLookupKey(value: unknown) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
-}
-export function normalizeTaxTreatmentKey(value: unknown) {
-  return normalizeLookupKey(value).replace(/[^a-z0-9]/g, "");
-}
-function isReturnOfCapitalTaxTreatment(value: unknown) {
-  return ["returnofcapital", "hold"].includes(normalizeTaxTreatmentKey(value));
-}
-function isTaxFreeTaxTreatment(value: unknown) {
-  return ["taxfree", "taxexempt"].includes(normalizeTaxTreatmentKey(value)) || isReturnOfCapitalTaxTreatment(value);
-}
-function isSocialSecurityTaxTreatment(value: unknown) {
-  return ["socialsecurity", "ss85fed"].includes(normalizeTaxTreatmentKey(value));
-}
-function isSection1256TaxTreatment(value: unknown) {
-  return ["section1256", "index6040"].includes(normalizeTaxTreatmentKey(value));
-}
-function isW2TaxTreatment(value: unknown) {
-  return ["w2income", "wages", "w2wages"].includes(normalizeTaxTreatmentKey(value));
-}
-function isKnownDefaultTaxTreatment(value: unknown) {
-  return [
-    "cash",
-    "fedtaxfree",
-    "income",
-    "longtermgain",
-    "nonqualifieddiv",
-    "qualifieddiv",
-    "realestate",
-    "shorttermgain",
-    "statetaxfree",
-    "taxfree",
-  ].includes(normalizeTaxTreatmentKey(value)) ||
-    isReturnOfCapitalTaxTreatment(value) ||
-    isSocialSecurityTaxTreatment(value) ||
-    isSection1256TaxTreatment(value) ||
-    isW2TaxTreatment(value);
-}
-function taxTreatmentAliases(value: unknown) {
-  const label = String(value || "").trim();
-  const aliases = [label];
-  if (isReturnOfCapitalTaxTreatment(label)) aliases.push("hold", "return of capital");
-  if (isSocialSecurityTaxTreatment(label)) aliases.push("ss-85-fed", "social security");
-  if (isSection1256TaxTreatment(label)) aliases.push("index-60-40", "section 1256");
-  return aliases;
-}
-export function canonicalStateRuleForTaxTreatment(value: unknown) {
-  if (isTaxFreeTaxTreatment(value) || isSocialSecurityTaxTreatment(value)) return "exempt";
-  const key = normalizeTaxTreatmentKey(value);
-  if (["statetaxfree", "treasuryinterest", "ustreasuryinterest"].includes(key)) return "treasury-exempt";
-  return "";
 }
 function stockAnalysisDividendUrl(symbol: unknown, assetType: unknown = "ETF") {
   const normalizedSymbol = String(symbol || "").trim().toLowerCase();
@@ -1501,9 +1403,6 @@ function isTaxableAccountStatus(value: unknown, forceTaxable = false) {
 function isDeprecatedAccountTaxStatus(value: unknown) {
   return normalizeTaxTreatmentKey(value) === "taxdeduction";
 }
-export function accountStatusAllowsCurrentTaxableIncome(value: unknown, incomeItem: boolean, forceTaxable = false) {
-  return accountAllowsCurrentIncome(value, incomeItem, forceTaxable);
-}
 function buildAccountTypeTaxStatusMap(rows: AccountTypeRow[]) {
   const map: Record<string, string> = {};
   for (const row of rows) {
@@ -1560,11 +1459,13 @@ function accountInitials(accountName: unknown) {
 }
 
 function AccountFavicon({ accountName }: { accountName: string }) {
-  const [hasImageError, setHasImageError] = useState(false);
   const domain = accountFaviconDomain(accountName);
   const src = domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32` : "";
+  return <AccountFaviconImage key={src} src={src} accountName={accountName} />;
+}
 
-  useEffect(() => setHasImageError(false), [src]);
+function AccountFaviconImage({ src, accountName }: { src: string; accountName: string }) {
+  const [hasImageError, setHasImageError] = useState(false);
 
   if (!src || hasImageError) {
     return <span className="account-favicon account-favicon--fallback" aria-hidden="true">{accountInitials(accountName)}</span>;
@@ -1889,16 +1790,10 @@ function AccountInput({ value, onChange }: { value: string; onChange: (value: st
 }
 
 function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: string) => void; ariaLabel: string }) {
-  const [draftValue, setDraftValue] = useState(formatDollarInputValue(value));
-
-  useEffect(() => {
-    if (toNumber(draftValue) === toNumber(value)) return;
-    setDraftValue(formatDollarInputValue(value));
-  }, [draftValue, value]);
+  const { text, updateDraft } = useCurrencyDraft(value);
 
   function handleChange(rawValue: string) {
-    setDraftValue(formatDollarInputValue(rawValue));
-    onChange(String(toNumber(rawValue)));
+    onChange(String(updateDraft(rawValue)));
   }
 
   return (
@@ -1907,7 +1802,7 @@ function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (
       type="text"
       inputMode="decimal"
       aria-label={ariaLabel}
-      value={draftValue}
+      value={text}
       onFocus={(event) => {
         event.currentTarget.select();
       }}
@@ -1962,30 +1857,6 @@ function migrateInvestmentFavoritesToHashes(favorites: InvestmentFavorite[], row
     return { ...favorite, investmentKeys: [...migratedKeys] };
   });
 }
-function normalizeInvestmentFavorites(raw: unknown): InvestmentFavorite[] {
-  if (!Array.isArray(raw)) return [];
-  const favorites: InvestmentFavorite[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const obj = entry as Record<string, unknown>;
-    const name = normalizeFavoriteName(obj.name);
-    if (!name) continue;
-    const keySet = new Set<string>();
-    const keyCandidates = Array.isArray(obj.investmentKeys) ? obj.investmentKeys : [];
-    for (const key of keyCandidates) {
-      const normalized = String(key || "").trim();
-      if (normalized.startsWith("row|") || normalized.startsWith("rowhash:v1:")) keySet.add(normalized);
-    }
-    if (keySet.size === 0) continue;
-    favorites.push({
-      name,
-      investmentKeys: [...keySet],
-      createdAt: String(obj.createdAt || new Date().toISOString()),
-    });
-  }
-  return favorites;
-}
-
 function normalizeSelectedAssetIds(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
   return [...new Set(raw.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0))];
@@ -2151,25 +2022,6 @@ function parseStringFromSection(
   return undefined;
 }
 
-function normalizeTaxWhatIfItems(raw: unknown, defaultType: string, legacyAmount = 0): TaxWhatIfItem[] {
-  const sourceRows = Array.isArray(raw) ? raw : [];
-  const rows = sourceRows
-    .map((entry, index) => {
-      if (!entry || typeof entry !== "object") return null;
-      const obj = entry as Record<string, unknown>;
-      const amount = toNumber(obj.amount as number | string | boolean | null | undefined);
-      const incomeType = String(obj.incomeType || defaultType).trim() || defaultType;
-      return {
-        id: Number(obj.id) || Date.now() + index,
-        amount,
-        incomeType,
-      };
-    })
-    .filter((row): row is TaxWhatIfItem => Boolean(row));
-  if (rows.length > 0) return rows;
-  return [{ id: Date.now(), amount: toNumber(legacyAmount), incomeType: defaultType }];
-}
-
 function normalizeDeductionItems(raw: unknown, mortgageInterest = 0, propertyTax = 0): DeductionItem[] {
   const sourceRows = Array.isArray(raw) ? raw : [];
   const rows = sourceRows
@@ -2257,8 +2109,9 @@ function normalizeLocalTaxSettings(raw: unknown): LocalTaxSettings {
 
 function normalizeFederalSettings(raw: unknown): FederalSettings {
   const merged = mergeSettings(initialFederalSettings, raw) as FederalSettings;
-  const extraOrdinaryItems = normalizeTaxWhatIfItems(merged.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
-  const extraPreferredItems = normalizeTaxWhatIfItems(merged.extraPreferredItems, preferredWhatIfTypes[0], merged.extraPreferredIncome);
+  const incoming = raw && typeof raw === "object" ? raw as Partial<FederalSettings> : {};
+  const extraOrdinaryItems = normalizeTaxWhatIfItems(incoming.extraOrdinaryItems, ordinaryWhatIfTypes[0], merged.extraOrdinaryIncome);
+  const extraPreferredItems = normalizeTaxWhatIfItems(incoming.extraPreferredItems, preferredWhatIfTypes[0], merged.extraPreferredIncome);
   const aboveLineDeductionItems = normalizeAboveLineDeductionItems(merged.aboveLineDeductionItems);
   const deductionItems = normalizeDeductionItems(merged.deductionItems, merged.mortgageInterest, merged.propertyTax);
   return {
@@ -2268,8 +2121,8 @@ function normalizeFederalSettings(raw: unknown): FederalSettings {
     extraPreferredItems,
     aboveLineDeductionItems,
     deductionItems,
-    extraOrdinaryIncome: extraOrdinaryItems.reduce((total, row) => total + toNumber(row.amount), 0),
-    extraPreferredIncome: extraPreferredItems.reduce((total, row) => total + toNumber(row.amount), 0),
+    extraOrdinaryIncome: sumTaxWhatIfItems(extraOrdinaryItems),
+    extraPreferredIncome: sumTaxWhatIfItems(extraPreferredItems),
     mortgageInterest: deductionTotalByType(deductionItems, "Mortgage interest"),
     propertyTax: deductionTotalByType(deductionItems, "Property tax"),
   };
@@ -2386,7 +2239,7 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
     : undefined;
   return {
     publicUsername: normalizePublicReportSlug(sectionObj.publicUsername).slice(0, 32),
-    investmentFavorites: normalizeInvestmentFavorites(sectionObj.investmentFavorites),
+    investmentFavorites: sectionObj.investmentFavorites === undefined ? undefined : normalizeInvestmentFavorites(sectionObj.investmentFavorites),
     selectedAssetIds: normalizeSelectedAssetIds(sectionObj.selectedAssetIds),
     selectedInvestmentHashes: normalizeSelectedInvestmentHashes(sectionObj.selectedInvestmentHashes),
     savedScenarios: normalizeSavedScenarios(sectionObj.savedScenarios),
@@ -2395,6 +2248,8 @@ function parseUiSettingsSection(section: unknown): Partial<UiSettings> {
     incomePrimaryPeriod: sectionObj.incomePrimaryPeriod === "monthly" ? "monthly" : "annual",
     darkMode: sectionObj.darkMode === true,
     investmentWhatIfOpen: sectionObj.investmentWhatIfOpen === true,
+    federalWhatIfOpen: sectionObj.federalWhatIfOpen === true,
+    stateWhatIfOpen: sectionObj.stateWhatIfOpen === true,
     mcpRefresh,
   };
 }
@@ -2413,7 +2268,7 @@ function parseWorkbookSettings(settings: unknown) {
     planner,
     ui: {
       publicUsername: ui.publicUsername || "",
-      investmentFavorites: ui.investmentFavorites && ui.investmentFavorites.length > 0
+      investmentFavorites: ui.investmentFavorites !== undefined
         ? ui.investmentFavorites
         : legacyFavorites,
       selectedAssetIds: ui.selectedAssetIds || [],
@@ -2424,6 +2279,8 @@ function parseWorkbookSettings(settings: unknown) {
       incomePrimaryPeriod: ui.incomePrimaryPeriod || "annual",
       darkMode: ui.darkMode === true,
       investmentWhatIfOpen: ui.investmentWhatIfOpen === true,
+      federalWhatIfOpen: ui.federalWhatIfOpen === true,
+      stateWhatIfOpen: ui.stateWhatIfOpen === true,
       mcpRefresh: ui.mcpRefresh,
     },
   };
@@ -2431,33 +2288,16 @@ function parseWorkbookSettings(settings: unknown) {
 function formatCurrency(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
 function formatCurrencyDetailed(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
 function formatPercent(value: number) { return `${(value * 100).toFixed(1)}%`; }
+function formatTaxBracketRate(value: number) { return `${Number((value * 100).toFixed(3))}%`; }
 function truncatePercentInputValue(value: number) { return Math.trunc(value * 100) / 100; }
 function formatPercentInputValue(value: number) {
   const truncated = truncatePercentInputValue(value);
   return Number.isFinite(truncated) ? String(truncated) : "";
 }
 function formatGridCurrency(value: number) { return formatCurrency(toNumber(value)); }
-function formatCurrencyInput(value: number) { return formatDollarInputValue(value); }
-function parseCurrencyInput(value: string) { return toNumber(value); }
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.5) return "$0";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
-}
-export function fedTaxAdjust(amount: number, taxTreatment: string, pref: boolean, rule?: TaxTreatmentRow) {
-  if (rule) {
-    const ordinary = Math.max(0, Math.min(1, toNumber(rule.ordinaryShare)));
-    const preferred = Math.max(0, Math.min(1, toNumber(rule.preferredShare)));
-    const scale = ordinary + preferred > 1 ? 1 / (ordinary + preferred) : 1;
-    return amount * (pref ? preferred : ordinary) * scale;
-  }
-  const fallback = defaultTaxTreatmentRule(taxTreatment);
-  return amount * (pref ? fallback.preferredShare : fallback.ordinaryShare);
-}
-export function stateTaxAdjust(amount: number, taxTreatment: string, stateCode = "CA", rule?: TaxTreatmentRow) {
-  void stateCode;
-  const canonicalStateRule = canonicalStateRuleForTaxTreatment(taxTreatment);
-  const stateRule = normalizeTaxTreatmentKey(canonicalStateRule || rule?.stateRule || defaultTaxTreatmentRule(taxTreatment).stateRule);
-  return ["exempt", "treasuryexempt"].includes(stateRule) ? 0 : amount;
 }
 function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: string, rule?: TaxTreatmentRow): AssetTaxTone {
   const normalizedStatus = String(taxStatus || "").trim().toLowerCase();
@@ -2478,19 +2318,26 @@ async function postTaxCalculation<T = TaxResult>(payload: object, signal?: Abort
   return json as T;
 }
 
-async function loadWorkbook(workspaceId: string, idToken?: string) {
+async function loadWorkbook(workspaceId: string, idToken?: string, signal?: AbortSignal) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_GET", workspaceId }) });
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_GET", workspaceId }), signal });
   const json = (await response.json()) as WorkbookResponse | ApiError;
   if (!response.ok) throw new Error((json as ApiError).error || "Workbook load failed");
   return json as WorkbookResponse;
 }
 
-async function saveWorkbook(workspaceId: string, payload: WorkbookResponse, idToken?: string) {
+async function loadWorkbookRevision(workspaceId: string, idToken?: string, signal?: AbortSignal) {
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_REVISION", workspaceId }), signal });
+  const json = await response.json() as { revision: number; updatedAt?: string; error?: string };
+  if (!response.ok) throw new Error(json.error || "Workbook revision check failed");
+  return json;
+}
+
+async function saveWorkbook(workspaceId: string, payload: WorkbookResponse, expectedRevision: number, idToken?: string) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_SAVE", workspaceId, tabs: payload.tabs, settings: payload.settings }) });
-  const json = (await response.json()) as { updatedAt?: string; error?: string };
-  if (!response.ok) throw new Error(json.error || "Workbook save failed");
+  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: authHeaders(idToken), body: JSON.stringify({ calc: "WORKBOOK_SAVE", workspaceId, expectedRevision, tabs: payload.tabs, settings: payload.settings }) });
+  const json = (await response.json()) as { revision: number; updatedAt?: string; error?: string };
+  if (!response.ok) throw Object.assign(new Error(json.error || "Workbook save failed"), { status: response.status });
   return json;
 }
 
@@ -2650,7 +2497,7 @@ function isSameStarterInvestment(row: InvestmentRow, starter: InvestmentRow) {
     normalizedText(row.newSymbol) === normalizedText(starter.newSymbol) &&
     Math.abs(row.totalInvestment - starter.totalInvestment) < 0.01 &&
     Math.abs(row.yearlyIncome - starter.yearlyIncome) < 0.01 &&
-    Math.abs(row.newPercent - starter.newPercent) < 0.000001 &&
+    Math.abs((row.newPercent ?? 0) - (starter.newPercent ?? 0)) < 0.000001 &&
     row.includeIncome === starter.includeIncome &&
     row.overrideProposal === starter.overrideProposal
   );
@@ -2722,7 +2569,8 @@ function workbookToInvestmentRow(row: Record<string, unknown>, index: number): I
     overrideProposal: overrideValue !== undefined ? normalizeBoolean(overrideValue) : base.overrideProposal,
     symbol: workbookField(row, "symbol", "current_symbol", "ticker") ?? base.symbol,
     newSymbol: workbookField(row, "newSymbol", "new_symbol", "proposed_symbol") ?? base.newSymbol,
-    newPercent: newPercentValue !== undefined ? toNumber(newPercentValue) : base.newPercent,
+    newPercent: newPercentValue !== undefined && newPercentValue !== null && newPercentValue !== "" ? normalizeRate(newPercentValue) : undefined,
+    incomeMode: workbookField(row, "incomeMode", "income_mode") === "annual-income" ? "annual-income" : workbookField(row, "incomeMode", "income_mode") === "principal-yield" ? "principal-yield" : normalizeBoolean(workbookField(row, "incomeItem", "income_item")) ? "annual-income" : undefined,
   };
 }
 function workbookToTickerRow(row: Record<string, unknown>, index: number): TickerRow {
@@ -2771,7 +2619,7 @@ function workbookToAccountRow(row: Record<string, unknown>, index: number): Acco
     accountType,
     taxStatus: workbookField(row, "tax_status", "taxStatus", "tax_treatment") ?? base.taxStatus,
     dividendAccrued: workbookField(row, "dividend_accrued", "dividendAccrued") ?? base.dividendAccrued,
-    includeInFreeCashflow: normalizeYesNo(workbookField(row, "include_in_free_cashflow", "includeInFreeCashflow", "include_in_free_cash_flow", "include")),
+    includeInFreeCashflow: accountCashflowInclusion(row),
   };
 }
 function workbookToTaxTreatmentRow(row: Record<string, unknown>, index: number): TaxTreatmentRow {
@@ -2815,10 +2663,6 @@ function workbookToAccountTypeRow(row: Record<string, unknown>, index: number): 
   };
 }
 function mergeSettings<T extends object>(fallback: T, incoming: unknown): T { return incoming && typeof incoming === "object" ? ({ ...fallback, ...(incoming as Partial<T>) } as T) : fallback; }
-function sumTaxWhatIfItems(items: TaxWhatIfItem[] | undefined, legacyAmount = 0) {
-  const itemTotal = Array.isArray(items) ? items.reduce((total, item) => total + toNumber(item.amount), 0) : 0;
-  return itemTotal > 0 ? itemTotal : toNumber(legacyAmount);
-}
 function sumW2TaxWhatIfItems(items: TaxWhatIfItem[] | undefined) {
   return (Array.isArray(items) ? items : []).reduce((total, item) => total + (isW2IncomeType(item.incomeType) ? toNumber(item.amount) : 0), 0);
 }
@@ -3038,23 +2882,17 @@ function TaxSummaryModal({ eyebrow, title, subtitle, totalLabel, totalValue, tot
 }
 
 function CurrencyInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const [draftValue, setDraftValue] = useState(formatCurrencyInput(value));
-
-  useEffect(() => {
-    if (toNumber(draftValue) === toNumber(value)) return;
-    setDraftValue(formatCurrencyInput(value));
-  }, [draftValue, value]);
+  const { text, updateDraft } = useCurrencyDraft(value);
 
   function handleChange(rawValue: string) {
-    setDraftValue(formatDollarInputValue(rawValue));
-    onChange(parseCurrencyInput(rawValue));
+    onChange(updateDraft(rawValue));
   }
 
   return (
     <input
       type="text"
       inputMode="decimal"
-      value={draftValue}
+      value={text}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => handleChange(event.target.value)}
     />
@@ -3272,7 +3110,6 @@ function getValueDigits(value: string) {
 
 function OdometerValue({ value, previousValue, spinning }: { value: string; previousValue: string; spinning: boolean }) {
   const previousDigits = getValueDigits(previousValue);
-  let digitIndex = 0;
 
   return (
     <strong className="kpi-pill__value" aria-label={value}>
@@ -3281,9 +3118,9 @@ function OdometerValue({ value, previousValue, spinning }: { value: string; prev
           return <span className="kpi-odometer-char" key={`${character}-${index}`}>{character}</span>;
         }
 
+        const digitIndex = getValueDigits(value.slice(0, index)).length;
         const fromDigit = previousDigits[digitIndex] ?? character;
         const toDigit = character;
-        digitIndex += 1;
         const fromNumber = Number(fromDigit);
         const toNumber = Number(toDigit);
         const style = {
@@ -3425,32 +3262,19 @@ function KpiPill({ label, value, valueLabel, secondaryValue, numericValue, prima
 
 function SnapshotValue({ label, delta, suffix }: { label: string; delta: number; suffix: string }) {
   const roundedDelta = Math.round(delta);
-  const previousDelta = useRef<number | null>(null);
+  const [previousDelta, setPreviousDelta] = useState(roundedDelta);
   const [isTumbling, setIsTumbling] = useState(false);
   const deltaClassName = roundedDelta >= 0 ? "income-snapshot__value--up" : "income-snapshot__value--down";
   const displayLabel = label.toLowerCase();
 
-  useEffect(() => {
-    if (previousDelta.current === null) {
-      previousDelta.current = roundedDelta;
-      return;
-    }
-    if (previousDelta.current === roundedDelta) return;
-
-    previousDelta.current = roundedDelta;
-    setIsTumbling(false);
-    const animationFrame = window.requestAnimationFrame(() => setIsTumbling(true));
-    const timeoutId = window.setTimeout(() => setIsTumbling(false), 620);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.clearTimeout(timeoutId);
-    };
-  }, [roundedDelta]);
+  if (previousDelta !== roundedDelta) {
+    setPreviousDelta(roundedDelta);
+    setIsTumbling(true);
+  }
 
   return (
     <strong className={`income-snapshot__value ${deltaClassName} ${isTumbling ? "income-snapshot__value--tumble" : ""}`.trim()}>
-      <em>
+      <em key={roundedDelta} onAnimationEnd={() => setIsTumbling(false)}>
         <span className="income-snapshot__delta-marker" aria-hidden="true">{"\u0394"}</span>
         {formatSignedCurrency(roundedDelta)} <small>{suffix} {displayLabel}</small>
       </em>
@@ -3706,77 +3530,6 @@ function Section({ title, subtitle, children, className = "", hideHeading = fals
   return <section className={`sheet-section ${className}`.trim()}>{!shouldHideHeading && <div className="section-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>}{children}</section>;
 }
 
-function getThermometerScale(values: ThermometerValue[], markers: ThermometerMarker[]) {
-  const valueMax = Math.max(1000, ...values.map((value) => value.amount));
-  const sortedMarkers = [...markers].sort((a, b) => a.amount - b.amount);
-  const nearbyCeiling = Math.max(valueMax * 1.35, valueMax + 75000);
-  const nextMarker = sortedMarkers.find((marker) => marker.amount > valueMax);
-  const nearbyMarkers = sortedMarkers.filter((marker) => marker.amount <= nearbyCeiling);
-  const shouldIncludeNextInScale = Boolean(
-    nextMarker &&
-    (nearbyMarkers.length === 0 || nextMarker.amount <= Math.max(valueMax * 1.75, valueMax + 125000))
-  );
-  const scaleBase = Math.max(
-    valueMax,
-    ...nearbyMarkers.map((marker) => marker.amount),
-    ...(shouldIncludeNextInScale && nextMarker ? [nextMarker.amount] : [])
-  );
-  const increment = scaleBase <= 100000 ? 10000 : scaleBase <= 500000 ? 25000 : 50000;
-  const scaleMax = Math.ceil((scaleBase * 1.08) / increment) * increment;
-  return {
-    scaleMax,
-    visibleMarkers: sortedMarkers.filter((marker) => marker.amount <= scaleMax || marker === nextMarker),
-  };
-}
-
-function buildThermometerRateBands(markers: ThermometerMarker[], scaleMax: number, baseRateLabel: string): ThermometerRateBand[] {
-  const sortedMarkers = [...markers].sort((first, second) => first.amount - second.amount);
-  const allBands = [
-    { start: 0, end: sortedMarkers[0]?.amount ?? scaleMax, label: baseRateLabel },
-    ...sortedMarkers.map((marker, index) => ({
-      start: marker.amount,
-      end: sortedMarkers[index + 1]?.amount ?? scaleMax,
-      label: marker.label,
-    })),
-  ].filter((band) => band.end > band.start);
-  const visibleBands = allBands
-    .map((band, colorIndex) => ({ ...band, colorIndex, colorTotal: allBands.length }))
-    .filter((band) => band.start < scaleMax)
-    .map((band) => ({ ...band, end: Math.min(band.end, scaleMax) }));
-  return visibleBands.map((band, index) => ({ ...band, index, total: visibleBands.length }));
-}
-
-function rateBandStyle(band: ThermometerRateBand, scaleMax: number) {
-  const start = Math.max(0, Math.min(100, (band.start / scaleMax) * 100));
-  const end = Math.max(start, Math.min(100, (band.end / scaleMax) * 100));
-  const { background, border } = rateBandColors(band);
-  return {
-    "--rate-start": `${start}%`,
-    "--rate-size": `${end - start}%`,
-    "--rate-band-bg": background,
-    "--rate-band-border": border,
-  } as React.CSSProperties;
-}
-
-function rateBandColors(band: ThermometerRateBand) {
-  const position = band.colorTotal <= 1 ? 0 : band.colorIndex / (band.colorTotal - 1);
-  const hue = Math.round(145 - position * 145);
-  const saturation = Math.round(58 + position * 14);
-  const lightness = Math.round(85 - position * 14);
-  return {
-    background: `hsl(${hue} ${saturation}% ${lightness}% / .82)`,
-    border: `hsl(${hue} ${saturation}% ${Math.max(34, lightness - 26)}% / .42)`,
-  };
-}
-
-function rateBandGradientStops(bands: ThermometerRateBand[], scaleMax: number) {
-  if (bands.length === 0) return "rgba(248, 250, 252, .82) 0% 100%";
-  return bands.map((band) => {
-    const start = Math.max(0, Math.min(100, (band.start / scaleMax) * 100));
-    const end = Math.max(start, Math.min(100, (band.end / scaleMax) * 100));
-    return `${rateBandColors(band).background} ${start}% ${end}%`;
-  }).join(", ");
-}
 
 function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | "find" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
   if (name === "add") {
@@ -3988,124 +3741,6 @@ function TopbarActionIcon({ name }: { name: "copy" | "delete" | "signIn" | "sign
   );
 }
 
-function TaxThermometer({ title, titleLabel, titleValue, subtitle, taxableIncome, values, markers, stats, footerLabel, footerValue, baseRateLabel, currentRateLabel, noTaxStamp }: { title: React.ReactNode; titleLabel?: string; titleValue?: string; subtitle: string; taxableIncome: number; values: ThermometerValue[]; markers: ThermometerMarker[]; stats: ThermometerStat[]; footerLabel: string; footerValue: string; baseRateLabel: string; currentRateLabel?: string; noTaxStamp?: string }) {
-  const labelText = titleLabel || (typeof title === "string" ? title : "Tax thermometer");
-  const { scaleMax, visibleMarkers } = getThermometerScale(values, markers);
-  const positionStyle = (amount: number) => ({ "--thermo-position": `${Math.max(0, Math.min(100, (amount / scaleMax) * 100))}%` } as React.CSSProperties);
-  const sortedRateMarkers = [...markers].sort((first, second) => first.amount - second.amount);
-  const lowerBracketBoundary = [...sortedRateMarkers].reverse().find((marker) => marker.amount <= taxableIncome);
-  const upperBracketBoundary = sortedRateMarkers.find((marker) => marker.amount > taxableIncome);
-  const rateBands = buildThermometerRateBands(markers, scaleMax, baseRateLabel);
-  const trackStyle = { "--rate-gradient-stops": rateBandGradientStops(rateBands, scaleMax) } as React.CSSProperties;
-
-  return (
-    <div className="tax-thermometer" aria-label={`${labelText}. ${subtitle}`}>
-      <>
-          {titleValue && <div className="tax-thermometer__title-value">{titleValue}</div>}
-          <div className="tax-thermometer__track" aria-label={`${labelText} tax threshold thermometer`} style={trackStyle}>
-            {noTaxStamp && <div className="tax-thermometer__no-tax-stamp" aria-label={noTaxStamp}>{noTaxStamp}</div>}
-            {rateBands.map((band) => (
-              <div
-                key={`${band.label}-${band.start}-${band.end}`}
-                className={`tax-thermometer__rate-band ${band.index === 0 ? "tax-thermometer__rate-band--first" : ""} ${band.index === band.total - 1 ? "tax-thermometer__rate-band--last" : ""} ${band.end - band.start < scaleMax * 0.055 ? "tax-thermometer__rate-band--compact" : ""}`.trim()}
-                style={rateBandStyle(band, scaleMax)}
-                title={`${band.label} bracket: ${formatCurrency(band.start)} to ${band.end >= scaleMax ? `${formatCurrency(scaleMax)}+` : formatCurrency(band.end)}`}
-              >
-                <span>{currentRateLabel && taxableIncome >= band.start && taxableIncome <= band.end ? currentRateLabel : band.label}</span>
-              </div>
-            ))}
-            {values.map((value) => (
-              <div
-                key={`${value.label}-${value.tone}-fill`}
-                className={`tax-thermometer__value-fill tax-thermometer__value-fill--${value.tone}`}
-                style={positionStyle(value.amount)}
-                aria-hidden="true"
-              />
-            ))}
-            <div className="tax-thermometer__heat" />
-            {visibleMarkers.map((marker) => {
-              const isLowerBoundary = lowerBracketBoundary?.amount === marker.amount;
-              const isUpperBoundary = upperBracketBoundary?.amount === marker.amount;
-              const distance = isLowerBoundary
-                ? Math.max(taxableIncome - marker.amount, 0)
-                : Math.max(marker.amount - taxableIncome, 0);
-              const distanceLabel = isLowerBoundary
-                ? `Subtract ${formatCurrencyDetailed(distance)}`
-                : isUpperBoundary
-                  ? `Add ${formatCurrencyDetailed(distance)}`
-                  : "";
-              const titleDistance = isLowerBoundary
-                ? `${distanceLabel} of taxable income to reach the prior bracket boundary`
-                : isUpperBoundary
-                  ? `${distanceLabel} of taxable income to enter the ${marker.label} bracket`
-                  : `${formatSignedCurrency(taxableIncome - marker.amount)} vs current taxable income`;
-              const distanceBubbleAmount = (taxableIncome + marker.amount) / 2;
-
-              return (
-                <Fragment key={`${marker.label}-${marker.amount}`}>
-                  <div
-                    className={`tax-thermometer__tick tax-thermometer__tick--${marker.tone || "default"} ${isLowerBoundary || isUpperBoundary ? "tax-thermometer__tick--adjacent" : ""}`.trim()}
-                    style={positionStyle(marker.amount)}
-                    title={`${marker.detail}: ${formatCurrency(marker.amount)} (${titleDistance})`}
-                    aria-label={`${marker.detail}: ${formatCurrency(marker.amount)}. ${titleDistance}`}
-                    tabIndex={0}
-                  >
-                    <span className="tax-thermometer__tick-label">
-                      <strong>{formatCurrency(marker.amount)}</strong>
-                    </span>
-                  </div>
-                  {distanceLabel && (
-                    <div
-                      className={`tax-thermometer__distance-bubble ${isLowerBoundary ? "tax-thermometer__distance-bubble--past" : "tax-thermometer__distance-bubble--away"}`}
-                      style={positionStyle(distanceBubbleAmount)}
-                      title={titleDistance}
-                      aria-label={titleDistance}
-                      tabIndex={0}
-                    >
-                      <span className="tax-thermometer__distance-arrow">{isLowerBoundary ? "↓" : "↑"}</span>
-                      <span>{distanceLabel}</span>
-                    </div>
-                  )}
-                </Fragment>
-              );
-            })}
-            {values.map((value) => (
-              <div
-                key={`${value.label}-${value.tone}`}
-                className={`tax-thermometer__value tax-thermometer__value--${value.tone}`}
-                style={positionStyle(value.amount)}
-                title={`${value.label}: ${value.value}`}
-                aria-label={`${value.label}: ${value.value}`}
-                tabIndex={0}
-              >
-                <span className="tax-thermometer__value-label">
-                  <em>{value.label}</em>
-                  <strong>{value.content || value.value.split("\n").map((line) => <span key={line}>{line}</span>)}</strong>
-                </span>
-              </div>
-            ))}
-          </div>
-          {stats.length > 0 && (
-            <div className="tax-thermometer__stats">
-              {stats.map((stat) => (
-                <div key={`${stat.label}-${stat.value}`}>
-                  {stat.tone && <span className={`tax-thermometer__dot tax-thermometer__dot--${stat.tone}`} />}
-                  <span>{stat.label}</span>
-                  <strong>{stat.value}</strong>
-                </div>
-              ))}
-            </div>
-          )}
-          {(footerLabel || footerValue) && (
-            <div className="tax-thermometer__footer">
-              <span>{footerLabel}</span>
-              <strong>{footerValue}</strong>
-            </div>
-          )}
-      </>
-    </div>
-  );
-}
 
 function getReachedTaxRateLabel(markers: ThermometerMarker[], taxableIncome: number, fallback: string) {
   let reached = fallback;
@@ -4122,53 +3757,34 @@ function rateLabelToDecimal(label: string) {
   return Number.isFinite(parsed) ? parsed / 100 : 0;
 }
 
-function rateLabelKey(label: string) {
-  return label.replace(/\s+/g, " ").trim();
-}
-
 function getReachedTaxRateValue(markers: ThermometerMarker[], taxableIncome: number, fallback: string) {
-  return rateLabelToDecimal(getReachedTaxRateLabel(markers, taxableIncome, fallback));
+  const reached = [...markers].sort((left, right) => right.amount - left.amount).find((marker) => marker.amount <= taxableIncome);
+  return reached?.rate ?? rateLabelToDecimal(reached?.label ?? fallback);
 }
 
 function buildCombinedTaxRateMarkers(federalMarkers: ThermometerMarker[], stateMarkers: ThermometerMarker[], stateCode: string, stateName: string, stateBaseRateLabel: string, filingStatus: FilingStatus, localMarkers: ThermometerMarker[] = [], localName = "Local", localBaseRateLabel = "0%") {
-  const niitThreshold = niitThresholdForStatus(filingStatus);
-  const thresholdRowsByAmount = [
-    ...federalMarkers.map((marker) => ({ amount: marker.amount, source: "Federal" })),
-    ...stateMarkers.map((marker) => ({ amount: marker.amount, source: stateCode })),
-    ...localMarkers.map((marker) => ({ amount: marker.amount, source: localName })),
-    { amount: niitThreshold, source: "NIIT" },
-  ]
-    .filter((row) => row.amount > 0)
-    .reduce<Record<number, string[]>>((groups, row) => {
-      groups[row.amount] = [...(groups[row.amount] || []), row.source];
-      return groups;
-    }, {});
-  const uniqueThresholds = Object.entries(thresholdRowsByAmount)
-    .map(([amount, sources]) => ({ amount: Number(amount), sources }))
-    .sort((left, right) => left.amount - right.amount);
-
-  let highestCombinedRate = 0;
-  const combinedMarkers = uniqueThresholds
-    .map((row) => {
-      const federalRate = getReachedTaxRateValue(federalMarkers, row.amount, "10%");
-      const stateRate = getReachedTaxRateValue(stateMarkers, row.amount, stateBaseRateLabel);
-      const localRate = getReachedTaxRateValue(localMarkers, row.amount, localBaseRateLabel);
-      const niitRate = row.amount >= niitThreshold ? 0.038 : 0;
-      const combinedRate = federalRate + stateRate + localRate + niitRate;
-      highestCombinedRate = Math.max(highestCombinedRate, combinedRate);
-      const sourceLabel = row.sources
-        .map((source) => source === "NIIT" ? "NIIT investment-income threshold" : `${source} threshold`)
-        .join(" + ");
-      return {
-        amount: row.amount,
-        label: formatPercent(highestCombinedRate),
-        detail: `Combined federal + ${stateName}${localRate > 0 ? ` + ${localName}` : ""} marginal rate starts (${sourceLabel})`,
-        tone: "tax",
-      };
-    });
-  return combinedMarkers.filter((marker, index, allMarkers) => {
-    const previousMarker = allMarkers[index - 1];
-    return !previousMarker || rateLabelKey(previousMarker.label) !== rateLabelKey(marker.label);
+  const combinedMarkers = buildCombinedTaxThermometerMarkers(
+    federalMarkers.map((marker) => ({ amount: marker.amount, rate: marker.rate ?? rateLabelToDecimal(marker.label), source: "Federal" })),
+    stateMarkers.map((marker) => ({ amount: marker.amount, rate: marker.rate ?? rateLabelToDecimal(marker.label), source: stateCode })),
+    localMarkers.map((marker) => ({ amount: marker.amount, rate: marker.rate ?? rateLabelToDecimal(marker.label), source: localName })),
+    {
+      federalBaseRate: 0.10,
+      stateBaseRate: rateLabelToDecimal(stateBaseRateLabel),
+      localBaseRate: rateLabelToDecimal(localBaseRateLabel),
+      niitThreshold: niitThresholdForStatus(filingStatus),
+    },
+  );
+  return combinedMarkers.map((marker) => {
+    const sourceLabel = marker.sources
+      .map((source) => source === "NIIT" ? "NIIT investment-income threshold" : `${source} threshold`)
+      .join(" + ");
+    return {
+      amount: marker.amount,
+      rate: marker.rate,
+      label: formatPercent(marker.rate),
+      detail: `Combined ordinary-income schedule + ${stateName}${localMarkers.length || rateLabelToDecimal(localBaseRateLabel) > 0 ? ` + ${localName}` : ""}; NIIT for eligible investment income (${sourceLabel})`,
+      tone: "tax",
+    };
   });
 }
 
@@ -4253,11 +3869,11 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
   const stateMarkers: ThermometerMarker[] = [...stateBrackets]
     .sort((first, second) => first.threshold - second.threshold)
     .filter((bracket) => bracket.threshold > 0)
-    .map((bracket) => ({ amount: bracket.threshold, label: formatPercent(bracket.rate), detail: `${stateName} ${formatPercent(bracket.rate)} bracket starts`, tone: "state" }));
-  const stateBaseRateLabel = formatPercent([...stateBrackets].sort((first, second) => first.threshold - second.threshold)[0]?.rate || 0);
-  const localMarkers: ThermometerMarker[] = localEnabled ? localBrackets.filter((bracket) => bracket.threshold > 0).map((bracket) => ({ amount: bracket.threshold, label: formatPercent(bracket.rate), detail: `${localName} local tax bracket starts`, tone: "tax" })) : [];
-  const localBaseRateValue = localEnabled ? (localBrackets[0]?.rate ?? localMarginalRate) : 0;
-  const localBaseRateLabel = formatPercent(localBaseRateValue);
+    .map((bracket) => ({ amount: bracket.threshold, rate: bracket.rate, label: formatTaxBracketRate(bracket.rate), detail: `${stateName} ${formatTaxBracketRate(bracket.rate)} bracket starts`, tone: "state" }));
+  const stateBaseRateLabel = formatTaxBracketRate(taxScheduleBaseRate(stateBrackets));
+  const localMarkers: ThermometerMarker[] = localEnabled ? localBrackets.filter((bracket) => bracket.threshold > 0).map((bracket) => ({ amount: bracket.threshold, rate: bracket.rate, label: formatTaxBracketRate(bracket.rate), detail: `${localName} local tax bracket starts`, tone: "tax" })) : [];
+  const localBaseRateValue = localEnabled ? (localBrackets.length ? taxScheduleBaseRate(localBrackets) : localMarginalRate) : 0;
+  const localBaseRateLabel = formatTaxBracketRate(localBaseRateValue);
   const hasNoStateIncomeTax = stateMarkers.length === 0 && stateTax === 0;
   const allTaxRateBase = Math.max(totalIncome, federalTaxable, stateTaxable, localEnabled ? localTaxable : 0);
   const federalEffectiveRate = allTaxRateBase > 0 ? federalTax / allTaxRateBase : 0;
@@ -4271,12 +3887,11 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
   const activeAllocationRows = thermometerMode === "accountTax" ? accountTaxAllocationRows : thermometerMode === "accountType" ? accountTypeAllocationRows : thermometerMode === "taxTreatment" ? taxTreatmentAllocationRows : allocationRows;
   const allocationTotal = activeAllocationRows.reduce((sum, row) => sum + row.amount, 0);
   const allocationColors = ["#0b63f6", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#22c55e", "#06b6d4", "#ec4899"];
-  let allocationCursor = 0;
   const allocationSegments = activeAllocationRows.map((row, index) => {
-    const start = allocationCursor;
-    allocationCursor += allocationTotal > 0 ? row.amount / allocationTotal * 100 : 0;
-    const angle = ((start + allocationCursor) / 2 / 100 * 360 - 90) * Math.PI / 180;
-    return { ...row, index, start, end: allocationCursor, angle, percent: allocationTotal > 0 ? row.amount / allocationTotal : 0 };
+    const start = allocationTotal > 0 ? activeAllocationRows.slice(0, index).reduce((total, previous) => total + previous.amount / allocationTotal * 100, 0) : 0;
+    const end = start + (allocationTotal > 0 ? row.amount / allocationTotal * 100 : 0);
+    const angle = ((start + end) / 2 / 100 * 360 - 90) * Math.PI / 180;
+    return { ...row, index, start, end, angle, percent: allocationTotal > 0 ? row.amount / allocationTotal : 0 };
   });
   const allocationGradient = allocationTotal > 0
     ? `conic-gradient(${allocationSegments.map((segment) => `${allocationColors[segment.index % allocationColors.length]} ${segment.start}% ${segment.end}%`).join(", ")})`
@@ -4414,10 +4029,10 @@ function TaxThermometerPanel({ federalTaxable, stateTaxable, federalTax, federal
   );
 }
 
-function readAssistantPromptHistory() {
+function readAssistantPromptHistory(userId?: string | null) {
   if (typeof window === "undefined") return [];
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(ASSISTANT_PROMPT_HISTORY_KEY) || "[]");
+    const parsed = readAssistantHistory(window.localStorage, ASSISTANT_PROMPT_HISTORY_KEY, userId);
     const history = Array.isArray(parsed)
       ? parsed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT)
       : [];
@@ -4427,15 +4042,19 @@ function readAssistantPromptHistory() {
   }
 }
 
-function writeAssistantPromptHistory(history: string[]) {
+function writeAssistantPromptHistory(history: string[], userId?: string | null) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(ASSISTANT_PROMPT_HISTORY_KEY, JSON.stringify([...new Set(history)].slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT)));
+  try {
+    writeAssistantHistory(window.localStorage, ASSISTANT_PROMPT_HISTORY_KEY, userId, [...new Set(history)].slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT));
+  } catch {
+    return;
+  }
 }
 
-function readAssistantMessageHistory() {
+function readAssistantMessageHistory(userId?: string | null) {
   if (typeof window === "undefined") return [];
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(ASSISTANT_MESSAGE_HISTORY_KEY) || "[]");
+    const parsed = readAssistantHistory(window.localStorage, ASSISTANT_MESSAGE_HISTORY_KEY, userId);
     if (!Array.isArray(parsed)) return [];
 
     return parsed
@@ -4452,49 +4071,61 @@ function readAssistantMessageHistory() {
   }
 }
 
-function writeAssistantMessageHistory(messages: ChatMessage[]) {
+function writeAssistantMessageHistory(messages: ChatMessage[], userId?: string | null) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(ASSISTANT_MESSAGE_HISTORY_KEY, JSON.stringify(messages.slice(-ASSISTANT_MESSAGE_HISTORY_LIMIT)));
+  try {
+    writeAssistantHistory(window.localStorage, ASSISTANT_MESSAGE_HISTORY_KEY, userId, messages.slice(-ASSISTANT_MESSAGE_HISTORY_LIMIT));
+  } catch {
+    return;
+  }
 }
 
-function clearAssistantHistory() {
+function clearAssistantHistory(userId?: string | null) {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(ASSISTANT_MESSAGE_HISTORY_KEY);
-  window.localStorage.removeItem(ASSISTANT_PROMPT_HISTORY_KEY);
+  try {
+    clearAssistantHistoryStorage(window.localStorage, userId);
+  } catch {
+    return;
+  }
 }
 
 function AssistantPanel({
   portfolioSnapshot,
   authToken,
+  userId,
   onExecuteAction,
   onClose,
 }: {
   portfolioSnapshot: PortfolioSnapshot;
   authToken?: string;
+  userId?: string;
   onExecuteAction: (action: AssistantAction) => AssistantActionResult;
   onClose: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(readAssistantMessageHistory);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => readAssistantMessageHistory(userId));
   const [draft, setDraft] = useState("");
-  const [promptHistory, setPromptHistory] = useState<string[]>(readAssistantPromptHistory);
+  const [promptHistory, setPromptHistory] = useState<string[]>(() => readAssistantPromptHistory(userId));
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [historyDraft, setHistoryDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const askInputRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const activePanelRef = useRef(true);
 
   const visibleMetrics = portfolioSnapshot.metrics;
   useEffect(() => {
-    setMessages(readAssistantMessageHistory());
-    setPromptHistory(readAssistantPromptHistory());
+    activePanelRef.current = true;
     const focusTimer = window.setTimeout(() => askInputRef.current?.focus(), 0);
-    return () => window.clearTimeout(focusTimer);
+    return () => {
+      activePanelRef.current = false;
+      window.clearTimeout(focusTimer);
+    };
   }, []);
 
   useEffect(() => {
-    writeAssistantMessageHistory(messages);
-  }, [messages]);
+    writeAssistantMessageHistory(messages, userId);
+  }, [messages, userId]);
 
   const scrollAssistantMessagesToBottom = (behavior: ScrollBehavior = "smooth") => {
     const container = messagesScrollRef.current;
@@ -4515,8 +4146,9 @@ function AssistantPanel({
 
   useEffect(() => {
     const refreshStoredAssistantState = () => {
-      setMessages(readAssistantMessageHistory());
-      setPromptHistory(readAssistantPromptHistory());
+      if (!userId || isLoading) return;
+      setMessages(readAssistantMessageHistory(userId));
+      setPromptHistory(readAssistantPromptHistory(userId));
     };
     window.addEventListener("focus", refreshStoredAssistantState);
     window.addEventListener("storage", refreshStoredAssistantState);
@@ -4524,19 +4156,19 @@ function AssistantPanel({
       window.removeEventListener("focus", refreshStoredAssistantState);
       window.removeEventListener("storage", refreshStoredAssistantState);
     };
-  }, []);
+  }, [userId, isLoading]);
 
   const rememberPrompt = (content: string) => {
-    const current = readAssistantPromptHistory();
+    const current = userId ? readAssistantPromptHistory(userId) : promptHistory;
     const next = [content, ...current.filter((entry) => entry !== content)].slice(0, ASSISTANT_PROMPT_HISTORY_LIMIT);
-    writeAssistantPromptHistory(next);
+    writeAssistantPromptHistory(next, userId);
     setPromptHistory(next);
     setHistoryCursor(null);
     setHistoryDraft("");
   };
 
   const recallPromptFromHistory = (direction: "older" | "newer", textarea: HTMLTextAreaElement) => {
-    const latestHistory = promptHistory.length ? promptHistory : readAssistantPromptHistory();
+    const latestHistory = promptHistory.length ? promptHistory : readAssistantPromptHistory(userId);
     if (latestHistory.length === 0) return;
     if (latestHistory !== promptHistory) setPromptHistory(latestHistory);
 
@@ -4571,7 +4203,7 @@ function AssistantPanel({
   const clearAllAssistantHistory = () => {
     if (isLoading || (messages.length === 0 && promptHistory.length === 0)) return;
     if (!window.confirm("Clear all AI Portfolio Assistant history? This permanently removes saved messages and prompt recall history from this browser.")) return;
-    clearAssistantHistory();
+    clearAssistantHistory(userId);
     setMessages([]);
     setPromptHistory([]);
     setHistoryCursor(null);
@@ -4593,7 +4225,7 @@ function AssistantPanel({
     };
     const nextMessages = [...messages, userMessage];
     rememberPrompt(content);
-    writeAssistantMessageHistory(nextMessages);
+    writeAssistantMessageHistory(nextMessages, userId);
     setMessages(nextMessages);
     setDraft("");
     setIsLoading(true);
@@ -4605,6 +4237,7 @@ function AssistantPanel({
         portfolioSnapshot,
         authToken
       );
+      if (!activePanelRef.current) return;
       const actionResults = (response.actions || []).map((action) => {
         const needsConfirmation =
           action.requiresConfirmation ||
@@ -4635,9 +4268,10 @@ function AssistantPanel({
         createdAt: new Date().toISOString(),
       };
       const finalMessages = [...nextMessages, assistantMessage];
-      writeAssistantMessageHistory(finalMessages);
+      writeAssistantMessageHistory(finalMessages, userId);
       setMessages(finalMessages);
     } catch (err) {
+      if (!activePanelRef.current) return;
       const message = err instanceof Error ? err.message : "Portfolio assistant failed.";
       const errorMessages = [
         ...nextMessages,
@@ -4650,7 +4284,7 @@ function AssistantPanel({
         },
       ];
       setError(message);
-      writeAssistantMessageHistory(errorMessages);
+      writeAssistantMessageHistory(errorMessages, userId);
       setMessages(errorMessages);
     } finally {
       setIsLoading(false);
@@ -5146,7 +4780,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
 
 function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, showRowNumbers, isWhatIfActive, initialEditor = null, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; showRowNumbers: boolean; isWhatIfActive: boolean; initialEditor?: Pick<FocusedModelSurface, "action" | "recordId" | "editorKind"> | null; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
-  const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(false);
+  const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(selectedAssetIds.length > 0);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
   const filteredAndSortedRows = useMemo(() => {
     const accountFilter = normalizeLookupKey(filters.account);
@@ -5235,6 +4869,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const [quickAssetDraft, setQuickAssetDraft] = useState<QuickAssetInput>({ symbol: "", dividendPercent: "", assetClass: categoryOptions[1] || categoryOptions[0] || "", taxTreatment: taxTreatmentOptions.find(Boolean) || "income", description: "", exDividend: "", divPayout: "" });
   const [quickAddTargetRowId, setQuickAddTargetRowId] = useState<number | null>(null);
   const quickAddSelectRef = useRef<((value: string) => void) | null>(null);
+  const openQuickAdd = useCallback((kind: "account" | "asset" | "assetType" | "taxTreatment", targetRowId: number | null = null) => {
+    setQuickAddKind(kind);
+    setQuickAddTargetRowId(targetRowId);
+    setQuickAddValue("");
+    if (kind === "asset") setQuickAssetDraft({ symbol: "", dividendPercent: "", assetClass: categoryOptions[1] || categoryOptions[0] || "", taxTreatment: taxTreatmentOptions.find(Boolean) || "income", description: "", exDividend: "", divPayout: "" });
+  }, [categoryOptions, taxTreatmentOptions]);
   useEffect(() => {
     const handleQuickAdd = (event: Event) => {
       const detail = (event as CustomEvent<{ kind: "account" | "asset"; select: (value: string) => void }>).detail;
@@ -5243,13 +4883,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     };
     window.addEventListener("aftertax:quick-add", handleQuickAdd);
     return () => window.removeEventListener("aftertax:quick-add", handleQuickAdd);
-  }, []);
-  const openQuickAdd = (kind: "account" | "asset" | "assetType" | "taxTreatment", targetRowId: number | null = null) => {
-    setQuickAddKind(kind);
-    setQuickAddTargetRowId(targetRowId);
-    setQuickAddValue("");
-    if (kind === "asset") setQuickAssetDraft({ symbol: "", dividendPercent: "", assetClass: categoryOptions[1] || categoryOptions[0] || "", taxTreatment: taxTreatmentOptions.find(Boolean) || "income", description: "", exDividend: "", divPayout: "" });
-  };
+  }, [openQuickAdd]);
   const confirmQuickAdd = () => {
     const value = quickAddKind === "asset" ? quickAssetDraft.symbol.trim() : quickAddValue.trim();
     if (!value || !quickAddKind) return;
@@ -5294,8 +4928,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const [draggingRowId, setDraggingRowId] = useState<number | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
-  const previousWhatIfActiveRef = useRef(isWhatIfActive);
+  const [previousWhatIfActive, setPreviousWhatIfActive] = useState(isWhatIfActive);
   const [isWhatIfRevealAnimating, setIsWhatIfRevealAnimating] = useState(false);
+  if (previousWhatIfActive !== isWhatIfActive) {
+    setPreviousWhatIfActive(isWhatIfActive);
+    setIsWhatIfRevealAnimating(isWhatIfActive);
+  }
   const dragPointerYRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const scrollInvestmentElementIntoTableView = (element: HTMLElement, options: { block?: "center" | "nearest"; inline?: "center" | "nearest" } = {}) => {
@@ -5331,22 +4969,20 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     });
   };
   const selectedIdsSignature = selectedAssetIds.join("|");
-  useEffect(() => {
-    if (selectedAssetIds.length === 0) {
-      setShowOnlyHighlightedRows(false);
-      return;
-    }
-    setShowOnlyHighlightedRows(true);
-  }, [selectedAssetIds.length, selectedIdsSignature]);
+  const [previousSelectedIdsSignature, setPreviousSelectedIdsSignature] = useState(selectedIdsSignature);
+  if (previousSelectedIdsSignature !== selectedIdsSignature) {
+    setPreviousSelectedIdsSignature(selectedIdsSignature);
+    setShowOnlyHighlightedRows(Boolean(selectedIdsSignature));
+  }
   useEffect(() => {
     window.localStorage.setItem(INVESTMENT_COLUMN_WIDTH_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
   useEffect(() => {
-    if (selectedAssetIds.length === 0) return;
+    if (!selectedIdsSignature) return;
     const container = tableScrollRef.current;
     if (!container) return;
     const frame = window.requestAnimationFrame(() => {
-      const firstSelectedRow = container.querySelector<HTMLElement>(`tr[data-investment-id="${selectedAssetIds[0]}"]`);
+      const firstSelectedRow = container.querySelector<HTMLElement>(`tr[data-investment-id="${selectedIdsSignature.split("|")[0]}"]`);
       if (firstSelectedRow) scrollInvestmentElementIntoTableView(firstSelectedRow, { block: "center", inline: "nearest" });
     });
     return () => window.cancelAnimationFrame(frame);
@@ -5397,17 +5033,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     () => [...favorites].sort((a, b) => a.name.localeCompare(b.name)),
     [favorites]
   );
-  useEffect(() => {
-    if (filteredFavorites.length === 0) {
-      setSelectedFavoriteName("");
-      return;
-    }
-    setSelectedFavoriteName((current) =>
-      filteredFavorites.some((favorite) => favorite.name === current)
-        ? current
-        : filteredFavorites[0].name
-    );
-  }, [filteredFavorites]);
+  const validSelectedFavoriteName = filteredFavorites.some((favorite) => favorite.name === selectedFavoriteName) ? selectedFavoriteName : filteredFavorites[0]?.name || "";
+  if (selectedFavoriteName !== validSelectedFavoriteName) setSelectedFavoriteName(validSelectedFavoriteName);
   const favoriteMatchCount = (favorite: InvestmentFavorite) => {
     const keys = new Set(favorite.investmentKeys);
     return rows.reduce((count, row) => {
@@ -5455,6 +5082,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const canNavigateActiveRows = highlightedInvestmentRows.length > 1;
   const showRowNavigationControls = hasHighlightedNavigation;
   const rowNavigationLabel = `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
+  const lastSymbolFinderSelectSubmitRef = useRef("");
+  const lastSymbolFinderTypedSubmitRef = useRef("");
   const openBlankSymbolFinder = () => {
     lastSymbolFinderSelectSubmitRef.current = "";
     lastSymbolFinderTypedSubmitRef.current = "";
@@ -5498,8 +5127,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       applySymbolFinderQuery(query);
     }, 0);
   };
-  const lastSymbolFinderSelectSubmitRef = useRef("");
-  const lastSymbolFinderTypedSubmitRef = useRef("");
+  const submitSymbolFinderOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    lastSymbolFinderTypedSubmitRef.current = "";
+    submitSymbolFinderQueryAfterEvent(event.currentTarget.value);
+  };
   const symbolFinderHasExactOption = (value: string) => symbolFinderOptions.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(value));
   const submitSymbolFinderTypedValue = (value: string) => {
     const typedSymbol = value.trim();
@@ -5601,7 +5234,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     });
     closeIncomeDialog();
   };
-  const openAddEntryDialog = () => {
+  const openAddEntryDialog = useCallback(() => {
     setEditTarget(null);
     setAddEntryKind(null);
     setIncomeSourceName("");
@@ -5622,8 +5255,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       divPayout: "",
     });
     setIsAddEntryOpen(true);
-  };
-  const openEditEntryDialog = (row: InvestmentRow) => {
+  }, [accountOptions, categoryOptions, taxTreatmentOptions]);
+  const openEditEntryDialog = useCallback((row: InvestmentRow) => {
     const derived = derivedMap[row.id];
     const ticker = tickerMap[normalizeLookupKey(row.symbol)];
     setEditTarget(row);
@@ -5650,7 +5283,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       });
     }
     setIsAddEntryOpen(true);
-  };
+  }, [derivedMap, tickerMap, taxTreatmentOptions]);
   const closeAddEntryDialog = () => {
     setIsAddEntryOpen(false);
     setAddEntryKind(null);
@@ -5662,8 +5295,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     const requestKey = `${initialEditor.action}:${initialEditor.recordId ?? "new"}:${initialEditor.editorKind ?? "picker"}`;
     if (initialEditorRequestRef.current === requestKey) return;
     if (initialEditor.action === "add") {
-      initialEditorRequestRef.current = requestKey;
       const timeoutId = window.setTimeout(() => {
+        initialEditorRequestRef.current = requestKey;
         openAddEntryDialog();
         if (initialEditor.editorKind) setAddEntryKind(initialEditor.editorKind);
       }, 0);
@@ -5672,8 +5305,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     if (initialEditor.recordId === null) return;
     const row = rows.find((candidate) => candidate.id === initialEditor.recordId || candidate.spreadsheetRowNumber === initialEditor.recordId);
     if (!row) return;
-    initialEditorRequestRef.current = requestKey;
-    const timeoutId = window.setTimeout(() => openEditEntryDialog(row), 0);
+    const timeoutId = window.setTimeout(() => {
+      initialEditorRequestRef.current = requestKey;
+      openEditEntryDialog(row);
+    }, 0);
     return () => window.clearTimeout(timeoutId);
   }, [initialEditor, openAddEntryDialog, openEditEntryDialog, rows]);
   const updateInvestmentDraft = (field: keyof typeof investmentDraft, value: string | number) => {
@@ -5983,23 +5618,30 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   ].filter(Boolean).join(" ");
 
   useEffect(() => {
-    const wasWhatIfActive = previousWhatIfActiveRef.current;
-    previousWhatIfActiveRef.current = isWhatIfActive;
-    if (!isWhatIfActive || wasWhatIfActive) return;
+    if (!isWhatIfActive) return;
 
     const scrollContainer = tableScrollRef.current;
     if (!scrollContainer) return;
 
-    setIsWhatIfRevealAnimating(true);
-    window.setTimeout(() => setIsWhatIfRevealAnimating(false), 900);
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
+    let scrollFrame = 0;
+    const animationFrame = window.requestAnimationFrame(() => {
+      scrollFrame = window.requestAnimationFrame(() => {
         const firstWhatIfColumn = scrollContainer.querySelector(".investment-column--override");
         if (!firstWhatIfColumn) return;
         scrollInvestmentElementIntoTableView(firstWhatIfColumn as HTMLElement, { block: "nearest", inline: "center" });
       });
     });
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.cancelAnimationFrame(scrollFrame);
+    };
   }, [isWhatIfActive]);
+
+  useEffect(() => {
+    if (!isWhatIfRevealAnimating) return;
+    const timeoutId = window.setTimeout(() => setIsWhatIfRevealAnimating(false), 900);
+    return () => window.clearTimeout(timeoutId);
+  }, [isWhatIfRevealAnimating]);
 
   const cancelRowActionClose = () => {
     if (rowActionCloseTimer.current !== null) {
@@ -6158,13 +5800,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   value={symbolFinderQuery}
                   onInput={(event) => submitSymbolFinderTypedValue(event.currentTarget.value)}
                   onChange={(event) => submitSymbolFinderTypedValue(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    const query = event.currentTarget.value;
-                    lastSymbolFinderTypedSubmitRef.current = "";
-                    submitSymbolFinderQueryAfterEvent(query);
-                  }}
+                  onKeyDown={submitSymbolFinderOnEnter}
                   placeholder="Enter symbol"
                   autoFocus
                 />
@@ -6818,6 +6454,10 @@ function SummaryReportStandalone({ payload }: { payload: SummaryReportPayload })
 export default function App() {
   const authEnabled = isCognitoEnabled();
   const [authState, setAuthState] = useState<AuthState>(readStoredAuth);
+  const assistantUserId = authState.status === "signedIn" ? authState.user.sub : undefined;
+  useEffect(() => {
+    clearAssistantHistory();
+  }, [assistantUserId]);
   const [authEntryMode, setAuthEntryMode] = useState<AuthEntryMode>("signIn");
   const [isAuthEntryOpen, setIsAuthEntryOpen] = useState(false);
   const [signInPublicUsername, setSignInPublicUsername] = useState(readStoredPublicUsername);
@@ -6925,6 +6565,9 @@ export default function App() {
   const saveTimeout = useRef<number | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const hasLoadedStorage = useRef(false);
+  const workbookSync = useRef(new WorkbookSyncGuard());
+  const workbookSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const [workbookSaveError, setWorkbookSaveError] = useState("");
   const latestWorkbookUpdatedAt = useRef<string | null>(null);
   const latestWorkbookRefreshMarker = useRef<string | null>(null);
   const suppressNextAutosave = useRef(false);
@@ -6934,6 +6577,8 @@ export default function App() {
   const skipNextHistoryRecord = useRef(false);
   const [historyVersion, setHistoryVersion] = useState(0);
   const authToken = authState.status === "signedIn" ? authState.tokens.idToken : undefined;
+  const currentAuthToken = useRef(authToken);
+  useLayoutEffect(() => { currentAuthToken.current = authToken; }, [authToken]);
   const publicUsername = resolvePublicUsername(
     authState.status === "signedIn" ? authState.user : null,
     uiSettings.publicUsername
@@ -7058,12 +6703,12 @@ export default function App() {
 
   useEffect(() => {
     const receiveMcpSurface = (event: MessageEvent) => {
-      if (event.source !== window.parent) return;
+      if (!isTrustedMcpNotification(event)) return;
       const message = event.data as { jsonrpc?: string; method?: string; params?: { structuredContent?: unknown } } | null;
       if (!message || message.jsonrpc !== "2.0" || message.method !== "ui/notifications/tool-result") return;
       const nextSurface = rememberFocusedModelSurface(message.params?.structuredContent);
       if (nextSurface) {
-        installMcpApiFetchBridge();
+        installMcpApiFetchBridge(`${API_BASE_URL}/hello`);
         setMcpWorkbookSnapshot(readMcpWorkbookSnapshot() as WorkbookResponse | null);
         setFocusedModelSurface(nextSurface);
       }
@@ -7397,19 +7042,15 @@ export default function App() {
         if (field === "includeIncome" || field === "overrideProposal") {
           const checked = Boolean(value);
           const nextRow = { ...row, [field]: checked };
-          if (field === "overrideProposal") {
-            const nextSymbol = nextRow.newSymbol || nextRow.symbol;
-            return {
-              ...nextRow,
-              newSymbol: nextSymbol,
-              newPercent: overridePercentForSymbol(nextSymbol),
-            };
-          }
           return nextRow;
         }
 
         if (field === "totalInvestment" || field === "yearlyIncome") {
           return { ...row, [field]: toNumber(value) };
+        }
+
+        if (field === "newPercent") {
+          return { ...row, newPercent: String(value).trim() === "" ? undefined : toNumber(value), overrideProposal: true };
         }
 
         if (field === "newSymbol") {
@@ -7419,18 +7060,18 @@ export default function App() {
             ...row,
             newSymbol: nextSymbol,
             overrideProposal: hasNewWhatIfAsset,
-            newPercent: overridePercentForSymbol(nextSymbol),
+            newPercent: hasNewWhatIfAsset ? overridePercentForSymbol(nextSymbol) : undefined,
           };
         }
 
         if (field === "symbol") {
           const nextSymbol = String(value || "").trim();
-          const nextRow = { ...row, symbol: nextSymbol };
+          const nextRow = { ...row, symbol: nextSymbol, incomeMode: undefined };
           if (!nextRow.overrideProposal) {
             return {
               ...nextRow,
               newSymbol: nextSymbol,
-              newPercent: overridePercentForSymbol(nextSymbol),
+              newPercent: undefined,
             };
           }
           return nextRow;
@@ -7442,21 +7083,6 @@ export default function App() {
   };
 
   const toggleInvestmentWhatIf = () => {
-    if (!isWhatIfActive) {
-      flushSync(() => {
-        setInvestments((rows) =>
-          rows.map((row) => {
-            const nextSymbol = String(row.newSymbol || row.symbol || "").trim();
-            if (!nextSymbol) return row;
-            return {
-              ...row,
-              newSymbol: nextSymbol,
-              newPercent: row.newPercent || overridePercentForSymbol(nextSymbol),
-            };
-          })
-        );
-      });
-    }
     setIsWhatIfActive((current) => !current);
   };
 
@@ -7491,28 +7117,30 @@ export default function App() {
     const effectiveTicker = isPlaceholderAssetSymbol(effectiveSymbol) ? undefined : tickerMap[normalizeLookupKey(effectiveSymbol)] || currentTicker;
     const totalInvestment = toNumber(row.totalInvestment);
     const currentPercent = normalizeRate(currentTicker?.percentReturn || 0);
-    const proposedPercent = normalizeRate(proposedTicker?.percentReturn ?? row.newPercent);
+    const proposedPercent = normalizeRate(proposedInvestmentRate(row.newPercent, proposedTicker?.percentReturn, currentPercent));
     const effectivePercent = effectiveInvestmentRate(currentPercent, proposedPercent, isRowWhatIfActive);
     const importedYearlyIncome = toNumber(row.yearlyIncome);
     const accountKey = normalizeLookupKey(row.account);
     const account = accountMap[accountKey];
     const isW2IncomeAccount = isW2AccountType(account?.accountType || inferAccountTypeFromAccountName(row.account));
-    const assetType = String(effectiveTicker?.assetType || "");
-    const incomeItem = isW2IncomeAccount || isIncomeAssetType(assetType) || (!assetType && Boolean(effectiveTicker?.incomeItem)) || (totalInvestment === 0 && importedYearlyIncome !== 0);
-    const yearlyIncome = incomeItem ? importedYearlyIncome : totalInvestment * effectivePercent;
-    const monthlyIncome = yearlyIncome / 12;
-    const filteredIncome = row.includeIncome ? yearlyIncome : 0;
-    const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
-    const includeInAfterTaxIncome = normalizeYesNo(account?.includeInFreeCashflow ?? "yes") === "yes";
-    const displayYearlyIncome = includeInAfterTaxIncome ? yearlyIncome : 0;
-    const displayMonthlyIncome = displayYearlyIncome / 12;
-    const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
+    const incomeMode = resolveIncomeMode({ incomeMode: row.incomeMode, incomeItem: currentTicker?.incomeItem, assetType: currentTicker?.assetType, wageAccount: isW2IncomeAccount });
+    const incomeItem = incomeMode === "annual-income";
     const accountTypeTaxStatus = inferAccountTypeTaxStatus(account?.accountType || inferAccountTypeFromAccountName(row.account));
     const taxStatus = String(isW2IncomeAccount ? "taxable" : accountTaxStatusByName[accountKey] || accountTypeTaxStatus || account?.taxStatus || "taxable").toLowerCase();
+    const shelteredAccrual = !incomeItem && !accountStatusAllowsCurrentTaxableIncome(taxStatus, false, isW2IncomeAccount);
+    const retirementDistribution = incomeItem && ["deferred", "taxdeferred"].includes(normalizeTaxTreatmentKey(taxStatus));
+    const yearlyIncome = investmentAnnualIncome(incomeMode, totalInvestment, effectivePercent, importedYearlyIncome);
+    const monthlyIncome = yearlyIncome / 12;
+    const filteredIncome = row.includeIncome && !shelteredAccrual ? yearlyIncome : 0;
+    const includedTotal = row.includeIncome && !incomeItem ? totalInvestment : 0;
+    const includeInAfterTaxIncome = normalizeYesNo(account?.includeInFreeCashflow ?? "yes") === "yes";
+    const displayYearlyIncome = includeInAfterTaxIncome && !shelteredAccrual ? yearlyIncome : 0;
+    const displayMonthlyIncome = displayYearlyIncome / 12;
+    const displayFilteredIncome = row.includeIncome ? displayYearlyIncome : 0;
     const accountAllowsCurrentTaxableIncome = accountStatusAllowsCurrentTaxableIncome(taxStatus, incomeItem, isW2IncomeAccount);
     const currentTaxTreatment = String(currentTicker?.taxTreatment || "income").toLowerCase();
     const proposedTaxTreatment = String(proposedTicker?.taxTreatment || "income").toLowerCase();
-    const taxTreatment = isW2IncomeAccount ? "W2 income" : String(effectiveTicker?.taxTreatment || "income").toLowerCase();
+    const taxTreatment = isW2IncomeAccount ? "W2 income" : retirementDistribution ? "retirement income" : String(effectiveTicker?.taxTreatment || "income").toLowerCase();
     const currentTaxTreatmentRule = taxTreatmentMap[normalizeLookupKey(currentTaxTreatment)] || defaultTaxTreatmentRule(currentTaxTreatment);
     const proposedTaxTreatmentRule = taxTreatmentMap[normalizeLookupKey(proposedTaxTreatment)] || defaultTaxTreatmentRule(proposedTaxTreatment);
     const taxTreatmentRule = taxTreatmentMap[normalizeLookupKey(taxTreatment)] || defaultTaxTreatmentRule(taxTreatment);
@@ -7537,6 +7165,7 @@ export default function App() {
     const localCategory = classifyLocalInvestmentIncome({ account: row.account, effectiveSymbol, filteredIncome, investmentType, localTaxCategory: taxTreatmentRule.localCategory || "", nonInvestmentIncome, taxStatus, taxTreatment, w2Income, incomeItem });
     return {
       ...row,
+      incomeMode,
       yearlyIncome,
       monthlyIncome,
       currentPercent,
@@ -7675,10 +7304,11 @@ export default function App() {
   }, { totalInvestmentAmount: 0, totalIncome: 0, investmentIncome: 0, displayInvestmentIncome: 0, investmentFederalOrdinary: 0, investmentFederalPreferred: 0, investmentStateTaxable: 0, niitIncome: 0, longTermCapitalGainIncome: 0, displayIncome: 0, federalOrdinary: 0, federalPreferred: 0, stateTaxable: 0, displayFederalOrdinary: 0, displayFederalPreferred: 0, displayStateTaxable: 0, w2Income: 0, nonTaxableIncome: 0, nonInvestmentIncome: 0, displayNonInvestmentIncome: 0, muniIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 }), [derivedRows]);
   const persistedInvestments = useMemo<InvestmentRow[]>(
     () => investments.map((row) => {
-      const proposedTicker = row.newSymbol ? tickerMap[normalizeLookupKey(row.newSymbol)] : undefined;
-      return persistInvestmentInputs(row, normalizeRate(proposedTicker?.percentReturn ?? row.newPercent));
+      const currentTicker = tickerMap[normalizeLookupKey(row.symbol)];
+      const account = accountMap[normalizeLookupKey(row.account)];
+      return { ...row, incomeMode: resolveIncomeMode({ incomeMode: row.incomeMode, incomeItem: currentTicker?.incomeItem, assetType: currentTicker?.assetType, wageAccount: isW2AccountType(account?.accountType || inferAccountTypeFromAccountName(row.account)) }) };
     }),
-    [investments, tickerMap]
+    [investments, tickerMap, accountMap]
   );
 
   const extraOrdinaryWhatIfTotal = sumTaxWhatIfItems(federalSettings.extraOrdinaryItems, federalSettings.extraOrdinaryIncome);
@@ -7894,9 +7524,9 @@ export default function App() {
     return accountStatusAllowsCurrentTaxableIncome(row.taxStatus, row.incomeItem) && isFederalTaxExemptInterestTreatment(treatment) ? total + row.filteredIncome : total;
   }, 0);
   const ordinaryIncomeExcludingSocialSecurity = Math.max(flows.federalOrdinary - scheduledSocialSecurityOrdinary + effectiveExtraOrdinaryIncome, 0);
-  const ordinaryBeforeDeductions = taxPlanResult?.federal.ordinaryIncome || ordinaryIncomeExcludingSocialSecurity;
+  const ordinaryBeforeDeductions = taxPlanResult?.federal.ordinaryIncome ?? ordinaryIncomeExcludingSocialSecurity;
   const preferredBeforeDeductions = flows.federalPreferred + effectiveExtraPreferredIncome;
-  const grossFederalTaxable = taxPlanResult?.federal.adjustedGrossIncome || ordinaryBeforeDeductions + preferredBeforeDeductions;
+  const grossFederalTaxable = taxPlanResult?.federal.adjustedGrossIncome ?? ordinaryBeforeDeductions + preferredBeforeDeductions;
   const federalTaxableInvestmentIncome = flows.federalOrdinary + flows.federalPreferred;
   const stateTaxFreeInvestmentBreakdown = useMemo(() => {
     const dividendsBySymbol = new Map<string, number>();
@@ -8003,14 +7633,14 @@ export default function App() {
       suppressNextAutosave.current = true;
       resetHistoryTracking();
     }
+    workbookSync.current.loaded(response.revision ?? 0);
+    setWorkbookSaveError("");
     latestWorkbookUpdatedAt.current = response.updatedAt || latestWorkbookUpdatedAt.current;
     latestWorkbookRefreshMarker.current = workbookRefreshMarker(response) || latestWorkbookRefreshMarker.current;
     setInvestments(activeInvestments);
-    if (options.resetWhatIf) {
-      setIsWhatIfActive(workbookSettings.ui?.investmentWhatIfOpen === true);
-    } else if (workbookSettings.ui?.investmentWhatIfOpen === true) {
-      setIsWhatIfActive(true);
-    }
+    setIsWhatIfActive(workbookSettings.ui?.investmentWhatIfOpen === true);
+    setIsFederalTaxWhatIfOpen(workbookSettings.ui?.federalWhatIfOpen === true);
+    setIsStateTaxWhatIfOpen(workbookSettings.ui?.stateWhatIfOpen === true);
     setTickers(
       mapWorkbookRows(initialTickers, response.tabs?.tickers, workbookToTickerRow)
     );
@@ -8057,6 +7687,8 @@ export default function App() {
       incomePrimaryPeriod: workbookSettings.ui?.incomePrimaryPeriod || "annual",
       darkMode: workbookSettings.ui?.darkMode === true,
       investmentWhatIfOpen: workbookSettings.ui?.investmentWhatIfOpen === true,
+      federalWhatIfOpen: workbookSettings.ui?.federalWhatIfOpen === true,
+      stateWhatIfOpen: workbookSettings.ui?.stateWhatIfOpen === true,
       mcpRefresh: workbookSettings.ui?.mcpRefresh,
     });
   }, [authEnabled, authState, focusedModelSurface, resetHistoryTracking]);
@@ -8097,7 +7729,8 @@ export default function App() {
     }).catch((error: Error) => {
       console.error(error);
       setStorageState("error");
-      hasLoadedStorage.current = true;
+      hasLoadedStorage.current = false;
+      setWorkbookSaveError("Unable to load your workbook. Saving is disabled to protect existing data.");
     });
     return () => { cancelled = true; };
   }, [authEnabled, authState.status, authToken, applyWorkbookResponse, focusedModelSurface, mcpWorkbookSnapshot, resetHistoryTracking]);
@@ -8110,24 +7743,15 @@ export default function App() {
     if (quickCalculatorImportHandledRef.current === importKey) return;
     quickCalculatorImportHandledRef.current = importKey;
 
-    const now = Date.now();
-    const ordinaryIncome = Math.max(0, toNumber(handoff.ordinaryIncome));
-    const investmentIncome = Math.max(0, toNumber(handoff.investmentIncome));
-    const ordinarySymbol = "Quick calculator ordinary income";
-    const investmentSymbol = "Quick calculator investment income";
-    const incomeAccount = "Income";
-    const treatment = String(handoff.investmentTaxTreatment || "income");
-    const nextRows: InvestmentRow[] = [
-      ...(ordinaryIncome > 0 ? [{ id: now, description: "Ordinary income imported from quick calculator", account: incomeAccount, category: "non investment income", totalInvestment: 0, yearlyIncome: ordinaryIncome, includeIncome: true, overrideProposal: false, symbol: ordinarySymbol, newSymbol: ordinarySymbol, newPercent: 0 }] : []),
-      ...(investmentIncome > 0 ? [{ id: now + 1, description: "Investment income imported from quick calculator", account: incomeAccount, category: "investment income", totalInvestment: 0, yearlyIncome: investmentIncome, includeIncome: true, overrideProposal: false, symbol: investmentSymbol, newSymbol: investmentSymbol, newPercent: 0 }] : []),
-    ];
-    setInvestments((current) => [...current, ...nextRows]);
-    setAccounts((current) => current.some((row) => normalizeLookupKey(row.account) === "income") ? current : [...current, { id: now, account: incomeAccount, accountType: "W2 income", taxStatus: "taxable", dividendAccrued: "no", includeInFreeCashflow: "yes" }]);
-    setTickers((current) => [
-      ...current,
-      ...(ordinaryIncome > 0 && !current.some((row) => normalizeLookupKey(row.symbol) === normalizeLookupKey(ordinarySymbol)) ? [{ id: now, symbol: ordinarySymbol, percentReturn: 0, assetType: "Income", category: "non investment income", taxTreatment: "W2 income", incomeItem: true, extraData: 0, description: "Ordinary income imported from quick calculator", exDividend: "", divPayout: "" }] : []),
-      ...(investmentIncome > 0 && !current.some((row) => normalizeLookupKey(row.symbol) === normalizeLookupKey(investmentSymbol)) ? [{ id: now + 1, symbol: investmentSymbol, percentReturn: 0, assetType: "Income", category: "investment income", taxTreatment: treatment, incomeItem: true, extraData: 0, description: "Investment income imported from quick calculator", exDividend: "", divPayout: "" }] : []),
-    ]);
+    const records = quickCalculatorIncomeRecords(handoff, Math.max(Date.now(), ...investments.map(row => row.id)) + 1);
+    if (investments.some(row => records.investments.some(imported => imported.symbol === row.symbol))) {
+      window.localStorage.removeItem(QUICK_CALCULATOR_HANDOFF_KEY);
+      return;
+    }
+    setInvestments(current => [...current, ...records.investments]);
+    setAccounts(current => [...current, records.account]);
+    setAccountTypes(current => [...current, records.accountType]);
+    setTickers(current => [...current, ...records.assets]);
     setFederalSettings((current) => ({
       ...current,
       filingStatus: normalizeFilingStatus(handoff.filingStatus),
@@ -8137,8 +7761,6 @@ export default function App() {
     setStateSettings((current) => ({
       ...current,
       stateCode: normalizeStateCode(handoff.stateCode),
-      deductionMode: normalizeFederalDeductionMode(handoff.deductionMode),
-      ...(handoff.deductionMode === "itemized" ? { deductionItems: [newDeductionItem("Other itemized deduction", Math.max(0, toNumber(handoff.itemizedDeduction)))], mortgageInterest: 0, propertyTax: 0 } : {}),
     }));
     const matchingLocality = localTaxProfiles.find((profile) => profile.id === handoff.localityId);
     if (matchingLocality && matchingLocality.id !== "none") {
@@ -8149,29 +7771,19 @@ export default function App() {
     window.localStorage.removeItem(QUICK_CALCULATOR_HANDOFF_KEY);
     setActiveTab("investments");
     setStorageState("ready");
-  }, [authState, focusedModelSurface, localTaxProfiles, storageState, taxConfig]);
+  }, [authState, focusedModelSurface, investments, localTaxProfiles, storageState, taxConfig]);
 
   useEffect(() => {
     if (focusedModelSurface) return;
     if (authEnabled && authState.status !== "signedIn" && !focusedModelSurface) return;
     let cancelled = false;
     const pollForRemoteWorkbookChanges = () => {
-      if (cancelled || !hasLoadedStorage.current || storageState === "saving") return;
-      loadWorkbook(WORKSPACE_ID, authToken).then((response) => {
-        if (cancelled) return;
-        const remoteUpdatedAt = response.updatedAt || null;
-        const remoteRefreshMarker = workbookRefreshMarker(response);
-        const knownUpdatedAt = latestWorkbookUpdatedAt.current;
-        const knownRefreshMarker = latestWorkbookRefreshMarker.current;
-        if (!remoteUpdatedAt && !remoteRefreshMarker) return;
-        if (!knownUpdatedAt && !knownRefreshMarker) {
-          latestWorkbookUpdatedAt.current = remoteUpdatedAt;
-          latestWorkbookRefreshMarker.current = remoteRefreshMarker;
-          return;
-        }
-        const hasNewRefreshMarker = Boolean(remoteRefreshMarker && remoteRefreshMarker !== knownRefreshMarker);
-        const hasNewUpdatedAt = Boolean(remoteUpdatedAt && knownUpdatedAt && remoteUpdatedAt > knownUpdatedAt);
-        if (!hasNewRefreshMarker && !hasNewUpdatedAt) return;
+      if (cancelled || !hasLoadedStorage.current || workbookSync.current.dirty || workbookSync.current.conflict || storageState === "saving") return;
+      const generation = workbookSync.current.generation;
+      loadWorkbookRevision(WORKSPACE_ID, authToken).then(async (metadata) => {
+        if (cancelled || !workbookSync.current.canApplyRemote(generation) || metadata.revision <= workbookSync.current.revision) return;
+        const response = await loadWorkbook(WORKSPACE_ID, authToken);
+        if (cancelled || !workbookSync.current.canApplyRemote(generation) || (response.revision ?? 0) <= workbookSync.current.revision) return;
         applyWorkbookResponse(response, { resetWhatIf: false, fromRemoteRefresh: true });
         hasLoadedStorage.current = true;
         setStorageState("ready");
@@ -8305,7 +7917,7 @@ export default function App() {
 
 
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (authEnabled && authState.status !== "signedIn" && !focusedModelSurface) return;
     if (!hasLoadedStorage.current) return;
     if (suppressNextAutosave.current) {
@@ -8316,24 +7928,34 @@ export default function App() {
     if (!hasRealData && investments.length > 0) {
       return;
     }
+    workbookSync.current.edited();
+    if (workbookSync.current.conflict) return;
+    const generation = workbookSync.current.generation;
     if (saveTimeout.current) window.clearTimeout(saveTimeout.current);
     setStorageState("saving");
     let cancelled = false;
     saveTimeout.current = window.setTimeout(() => {
       saveTimeout.current = null;
-      saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, local: localTaxSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: [], selectedInvestmentHashes: buildSelectedInvestmentHashes(persistedInvestments, selectedInvestmentIds), investmentWhatIfOpen: isWhatIfActive } } }, authToken).then((result) => {
+      workbookSaveQueue.current = workbookSaveQueue.current.catch(() => {}).then(async () => {
+        if (cancelled || currentAuthToken.current !== authToken || workbookSync.current.conflict) return;
+        const result = await saveWorkbook(WORKSPACE_ID, { workspaceId: WORKSPACE_ID, tabs: { investments: persistedInvestments, tickers, categories, taxTreatment: taxTreatments, accounts, accountTaxType: accountTaxTypes, accountType: accountTypes }, settings: { federal: federalSettings, state: stateSettings, local: localTaxSettings, planner: plannerSettings, ui: { ...uiSettings, selectedAssetIds: [], selectedInvestmentHashes: buildSelectedInvestmentHashes(persistedInvestments, selectedInvestmentIds), investmentWhatIfOpen: isWhatIfActive, federalWhatIfOpen: isFederalTaxWhatIfOpen, stateWhatIfOpen: isStateTaxWhatIfOpen } } }, workbookSync.current.revision, authToken);
+        if (currentAuthToken.current !== authToken) return;
+        workbookSync.current.saved(result.revision, generation);
         if (!cancelled) {
           latestWorkbookUpdatedAt.current = result.updatedAt || latestWorkbookUpdatedAt.current;
           latestWorkbookRefreshMarker.current = result.updatedAt || latestWorkbookRefreshMarker.current;
           setStorageState("saved");
+          setWorkbookSaveError("");
         }
-      }).catch((error: Error) => {
-        console.error(error);
-        if (!cancelled) { setStorageState("error"); }
+      }).catch((error: Error & { status?: number }) => {
+        if (currentAuthToken.current !== authToken) return;
+        if (error.status === 409) workbookSync.current.conflict = true;
+        setStorageState("error");
+        setWorkbookSaveError(error.message);
       });
     }, 700);
     return () => { cancelled = true; if (saveTimeout.current) window.clearTimeout(saveTimeout.current); };
-  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, localTaxSettings, plannerSettings, uiSettings, selectedInvestmentIds, isWhatIfActive, hasRealData, authEnabled, authState.status, authToken, focusedModelSurface]);
+  }, [investments, persistedInvestments, tickers, categories, taxTreatments, accounts, accountTaxTypes, accountTypes, federalSettings, stateSettings, localTaxSettings, plannerSettings, uiSettings, selectedInvestmentIds, isWhatIfActive, isFederalTaxWhatIfOpen, isStateTaxWhatIfOpen, hasRealData, authEnabled, authState.status, authToken, focusedModelSurface]);
 
   const federalIncomeTaxTotal = taxPlanResult?.federal.incomeTax || 0;
   const federalTaxWithPayroll = taxPlanResult?.federal.total || 0;
@@ -8439,8 +8061,7 @@ export default function App() {
   }, [currentTaxPlanRequestKey, currentTaxPlanWithoutInvestmentsRequestKey]);
   const federalTaxWithoutInvestments = taxPlanWithoutInvestmentsResult?.federal.incomeTax || 0;
   const stateTaxWithoutInvestments = taxPlanWithoutInvestmentsResult?.state.incomeTax || 0;
-  const localTaxWithoutInvestments = taxPlanWithoutInvestmentsResult?.local.tax || 0;
-  const investmentTaxBurden = Math.max((federalIncomeTaxTotal - federalTaxWithoutInvestments) + (displayedStateResult.tax - stateTaxWithoutInvestments) + (localTaxTotal - localTaxWithoutInvestments), 0);
+  const investmentTaxBurden = incrementalInvestmentTax(taxPlanResult, taxPlanWithoutInvestmentsResult) ?? 0;
   const investmentAfterTaxIncome = flows.investmentIncome - investmentTaxBurden;
   const portfolioBeforeTaxYield = flows.totalInvestmentAmount > 0 ? flows.investmentIncome / flows.totalInvestmentAmount : 0;
   const portfolioAfterTaxYield = flows.totalInvestmentAmount > 0 ? investmentAfterTaxIncome / flows.totalInvestmentAmount : 0;
@@ -10087,8 +9708,8 @@ export default function App() {
           tab: "investments",
           rows: asEditable(investments),
           setRows: wrapSetter(setInvestments),
-          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol"],
-          numericFields: ["totalInvestment", "yearlyIncome"],
+          allowedFields: ["description", "account", "category", "totalInvestment", "yearlyIncome", "includeIncome", "overrideProposal", "symbol", "newSymbol", "newPercent"],
+          numericFields: ["totalInvestment", "yearlyIncome", "newPercent"],
           booleanFields: ["includeIncome", "overrideProposal"],
           defaultRow: (id) => ({ id, description: "New Investment", account: accountOptions[1] || "", category: "core", totalInvestment: 0, yearlyIncome: 0, includeIncome: true, overrideProposal: false, symbol: symbolOptions[1] || "", newSymbol: symbolOptions[1] || "", newPercent: 0 }),
         };
@@ -10423,7 +10044,8 @@ export default function App() {
       if (section === "ui") {
         if (values.darkMode !== undefined && typeof values.darkMode !== "boolean") return { ok: false, message: "Rejected updateSettings: darkMode must be true or false." };
         if (values.incomePrimaryPeriod !== undefined && values.incomePrimaryPeriod !== "annual" && values.incomePrimaryPeriod !== "monthly") return { ok: false, message: "Rejected updateSettings: incomePrimaryPeriod must be annual or monthly." };
-        if (values.investmentFavorites !== undefined && !Array.isArray(values.investmentFavorites)) return { ok: false, message: "Rejected updateSettings: investmentFavorites must be an array." };
+        const favoritesError = values.investmentFavorites === undefined ? null : investmentFavoritesError(values.investmentFavorites);
+        if (favoritesError) return { ok: false, message: `Rejected updateSettings: ${favoritesError}` };
         if (values.selectedAssetIds !== undefined && !Array.isArray(values.selectedAssetIds)) return { ok: false, message: "Rejected updateSettings: selectedAssetIds must be an array." };
       }
 
@@ -10448,9 +10070,9 @@ export default function App() {
           ...current,
           ...uiValues,
           investmentFavorites: Array.isArray(uiValues.investmentFavorites)
-            ? uiValues.investmentFavorites.map(String).filter(Boolean)
+            ? normalizeInvestmentFavorites(uiValues.investmentFavorites)
             : current.investmentFavorites,
-        } as UiSettings));
+        }));
       }
       return { ok: true, message: `Updated ${Object.keys(values).join(", ")} in ${section} settings; recalculation and backend save are queued.` };
     }
@@ -11295,6 +10917,8 @@ export default function App() {
         )}
         {isAssistantOpen && (
           <AssistantPanel
+            key={assistantUserId || "anonymous"}
+            userId={assistantUserId}
             portfolioSnapshot={portfolioSnapshot}
             authToken={authToken}
             onExecuteAction={executeAssistantAction}
@@ -11343,6 +10967,7 @@ export default function App() {
           </Section>
         ) : (
           <>
+        {workbookSaveError && <div role="alert" className="error-panel">{workbookSaveError} Your unsaved edits remain in this window. Export them before reloading.</div>}
         {activeTab === "investments" && storageState === "loading" && (
           <Section title="Investments / Income" subtitle="Loading workbook data from storage...">
             <div className="status-card status-card--note">Loading account and tax-status mappings...</div>

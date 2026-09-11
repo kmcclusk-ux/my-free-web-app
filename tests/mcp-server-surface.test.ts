@@ -50,14 +50,14 @@ describe("focused MCP model surfaces", () => {
     }
   });
 
-  it("does not allow the embedded UI to reload workbook data through the private bridge", async () => {
+  it("does not allow credential-management operations through the private bridge", async () => {
     const apiFetch = vi.fn();
     vi.stubGlobal("fetch", apiFetch);
     const { client, server } = await connectTestClient();
     try {
       const result = await client.callTool({
         name: "run_model_surface_api",
-        arguments: { body: { calc: "WORKBOOK_GET", workspaceId: "default" } },
+        arguments: { body: { calc: "MCP_TOKEN_CREATE", workspaceId: "default" } },
       });
       expect(result.isError).toBe(true);
       expect(result.content).toEqual(expect.arrayContaining([
@@ -67,6 +67,27 @@ describe("focused MCP model surfaces", () => {
     } finally {
       await client.close();
       await server.close();
+    }
+  });
+
+  it("allows authenticated revision reads and preserves write conflicts for the UI", async () => {
+    const apiFetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("X-Portfolio-MCP-Token")).toBe("test-token");
+      const body = JSON.parse(String(init?.body));
+      return body.calc === "WORKBOOK_SAVE"
+        ? Response.json({ error: "Workbook changed" }, { status: 409 })
+        : Response.json({ workspaceId: "default", revision: 5 });
+    });
+    vi.stubGlobal("fetch", apiFetch);
+    const { client, server } = await connectTestClient();
+    try {
+      const revision = await client.callTool({ name: "run_model_surface_api", arguments: { body: { calc: "WORKBOOK_REVISION" } } });
+      expect(revision.structuredContent).toEqual({ status: 200, body: { workspaceId: "default", revision: 5 } });
+      const conflict = await client.callTool({ name: "run_model_surface_api", arguments: { body: { calc: "WORKBOOK_SAVE", expectedRevision: 4, tabs: {} } } });
+      expect(conflict.structuredContent).toEqual({ status: 409, body: { error: "Workbook changed" } });
+      expect(apiFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await client.close(); await server.close();
     }
   });
 

@@ -27,7 +27,7 @@ export function investmentNetIncome(input: { amount: number; currentlyTaxable: b
 }
 
 export function whatIfInvestmentIncome(items: readonly { amount: number; incomeType?: unknown }[] | undefined, legacyAmount = 0) {
-  if (!Array.isArray(items) || items.length === 0) return Math.max(legacyAmount, 0);
+  if (!Array.isArray(items)) return Math.max(legacyAmount, 0);
   return items.reduce((total, item) => {
     const type = compactIncomeKey(item?.incomeType);
     const amount = Number(item?.amount);
@@ -42,19 +42,30 @@ export function persistInvestmentInputs<Row extends { totalInvestment: number; y
 export const localIncomeCategories = ["wages", "selfEmployment", "interest", "dividends", "capitalGains", "rentalIncome", "businessIncome", "retirementIncome", "socialSecurity"] as const;
 export type LocalIncomeCategory = typeof localIncomeCategories[number];
 
-export function localIncomeCategory(row: { account: string; effectiveSymbol: string; investmentType: string; localTaxCategory: string; nonInvestmentIncome: number; taxStatus: string; taxTreatment: string; w2Income: number; incomeItem?: boolean }): LocalIncomeCategory {
+export const incomeCalculationModes = ["principalYield", "annualIncome"] as const;
+export type IncomeCalculationMode = typeof incomeCalculationModes[number];
+
+export function resolveIncomeCalculationMode(input: { incomeMode?: unknown; incomeCalculationMode?: unknown; incomeItem?: unknown; assetType?: unknown; wageAccount?: boolean }): IncomeCalculationMode {
+  if (input.wageAccount) return "annualIncome";
+  if (input.incomeMode === "annual-income") return "annualIncome";
+  if (input.incomeMode === "principal-yield") return "principalYield";
+  if (incomeCalculationModes.includes(input.incomeCalculationMode as IncomeCalculationMode)) return input.incomeCalculationMode as IncomeCalculationMode;
+  if (input.incomeItem !== undefined && input.incomeItem !== null) {
+    return ["true", "yes", "y", "1"].includes(String(input.incomeItem).toLowerCase()) ? "annualIncome" : "principalYield";
+  }
+  return compactIncomeKey(input.assetType) === "income" || input.wageAccount ? "annualIncome" : "principalYield";
+}
+
+export function localIncomeCategory(row: { account: string; effectiveSymbol: string; investmentType: string; localTaxCategory: string; nonInvestmentIncome: number; taxStatus: string; taxTreatment: string; w2Income: number; incomeItem?: boolean; incomeKind?: string }): LocalIncomeCategory {
   const treatment = compactIncomeKey(row.taxTreatment);
   const type = String(row.investmentType || "").toLowerCase();
-  const status = String(row.taxStatus || "").toLowerCase();
-  const account = String(row.account || "").toLowerCase();
-  const symbol = String(row.effectiveSymbol || "").toLowerCase();
+  const status = compactIncomeKey(row.taxStatus);
+  if (["deferred", "taxdeferred"].includes(status)) return "retirementIncome";
+  if (localIncomeCategories.includes(row.incomeKind as LocalIncomeCategory)) return row.incomeKind as LocalIncomeCategory;
+  if (localIncomeCategories.includes(row.localTaxCategory as LocalIncomeCategory)) return row.localTaxCategory as LocalIncomeCategory;
   if (row.w2Income > 0 || /w2|wage/.test(treatment)) return "wages";
-  if (/socialsecurity|ss85fed/.test(treatment) || /social.security/.test(type) || symbol === "ss" || symbol.includes("aux-ss")) return "socialSecurity";
-  if (row.nonInvestmentIncome > 0 || isNonInvestmentIncomeType(type)) return "businessIncome";
-  if (localIncomeCategories.includes(row.localTaxCategory as LocalIncomeCategory) && (row.incomeItem || (!status.includes("deferred") && !/ira|401k|pension|deferred/.test(account)))) {
-    return row.localTaxCategory as LocalIncomeCategory;
-  }
-  if (status.includes("deferred") || /ira|401k|pension|deferred/.test(account)) return "retirementIncome";
+  if (/socialsecurity|ss85fed/.test(treatment) || /social.security/.test(type)) return "socialSecurity";
+  if (/retirement|pension|distribution|deferredcompensation/.test(treatment)) return "retirementIncome";
   if (/real estate|rental/.test(type) || treatment === "realestate") return "rentalIncome";
   if (/div/.test(treatment) || type.includes("dividend")) return "dividends";
   if (/gain|section1256|index6040/.test(treatment)) return "capitalGains";

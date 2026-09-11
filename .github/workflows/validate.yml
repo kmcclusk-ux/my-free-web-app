@@ -1,0 +1,58 @@
+name: Validate product (no deployment)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      VITE_APP_VERSION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            amplify/backend/function/helloWorld/package-lock.json
+            frontend/package-lock.json
+            mcp-server/package-lock.json
+            snapshot-calculator/package-lock.json
+      - run: npm ci
+      - run: npm run install:packages
+      - run: npm run validate
+      - name: Hash validated artifacts
+        shell: pwsh
+        run: |
+          $paths = @('frontend/dist', 'snapshot-calculator/dist', 'mcp-server/dist', 'amplify/backend/function/helloWorld/build')
+          $manifest = foreach ($path in $paths) {
+            Get-ChildItem -LiteralPath $path -File -Recurse | ForEach-Object {
+              @{ path = [System.IO.Path]::GetRelativePath($PWD.Path, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+            }
+          }
+          New-Item -ItemType Directory -Path build -Force | Out-Null
+          @{ revision = $env:GITHUB_SHA; files = @($manifest) } | ConvertTo-Json -Depth 5 | Set-Content build/validated-artifacts.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-${{ matrix.os }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            build/validated-artifacts.json
+            frontend/dist/
+            snapshot-calculator/dist/
+            mcp-server/dist/
+            amplify/backend/function/helloWorld/build/

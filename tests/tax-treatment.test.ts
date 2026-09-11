@@ -6,7 +6,7 @@ import {
   defaultTaxTreatmentRule,
   fedTaxAdjust,
   stateTaxAdjust,
-} from "../frontend/src/App";
+} from "../frontend/src/taxTreatmentRules";
 import { calculateTaxableSocialSecurity2025 } from "../amplify/backend/function/helloWorld/taxCalcs.js";
 
 const amount = 100;

@@ -1,89 +1,91 @@
-type McpToolResult = {
-  structuredContent?: { status?: unknown; body?: unknown };
-  content?: Array<{ type?: string; text?: string }>;
-  isError?: boolean;
-};
+type McpToolResult = { structuredContent?: { status?: unknown; body?: unknown }; isError?: boolean };
+type OpenAiBridge = { callTool?: (name: string, args: Record<string, unknown>) => Promise<McpToolResult> };
+let teardown: (() => void) | undefined;
 
-type OpenAiBridge = {
-  callTool?: (name: string, args: Record<string, unknown>) => Promise<McpToolResult>;
-};
-
-let installed = false;
-let nextRequestId = 1;
-const pendingRequests = new Map<number, { resolve: (value: McpToolResult) => void; reject: (reason: unknown) => void }>();
-
-function standardMcpRequest(name: string, args: Record<string, unknown>) {
-  const id = nextRequestId++;
-  window.parent.postMessage({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } }, "*");
-  return new Promise<McpToolResult>((resolve, reject) => {
-    pendingRequests.set(id, { resolve, reject });
-    window.setTimeout(() => {
-      const pending = pendingRequests.get(id);
-      if (!pending) return;
-      pendingRequests.delete(id);
-      pending.reject(new Error("The ChatGPT model editor connection timed out."));
-    }, 20000);
-  });
-}
-
-function receiveStandardMcpResponse(event: MessageEvent) {
-  if (event.source !== window.parent) return;
-  const message = event.data as { jsonrpc?: string; id?: number; result?: McpToolResult; error?: unknown } | null;
-  if (!message || message.jsonrpc !== "2.0" || message.id === undefined) return;
-  const pending = pendingRequests.get(message.id);
-  if (!pending) return;
-  pendingRequests.delete(message.id);
-  if (message.error) pending.reject(message.error);
-  else pending.resolve(message.result || {});
-}
-
-async function callFocusedUiApi(body: Record<string, unknown>) {
-  const openai = (window as Window & { openai?: OpenAiBridge }).openai;
-  const result = openai?.callTool
-    ? await openai.callTool("run_model_surface_api", { body })
-    : await standardMcpRequest("run_model_surface_api", { body });
-  if (result.isError) throw new Error(result.content?.find((item) => item.type === "text")?.text || "Focused model request failed.");
-  return result.structuredContent;
+function hostBridge(): OpenAiBridge | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return (window as Window & { openai?: OpenAiBridge }).openai;
 }
 
 export function isMcpUiHost() {
-  if (typeof window === "undefined") return false;
-  const openai = (window as Window & { openai?: OpenAiBridge }).openai;
-  return window.parent !== window || Boolean(openai?.callTool);
+  return typeof hostBridge()?.callTool === 'function';
+}
+
+export function isTrustedMcpNotification(event: MessageEvent) {
+  return isMcpUiHost() && event.source === window.parent;
 }
 
 function requestUrl(input: RequestInfo | URL) {
-  if (typeof input === "string") return new URL(input, window.location.href);
-  if (input instanceof URL) return input;
-  return new URL(input.url, window.location.href);
+  return new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, window.location.href);
 }
 
 async function requestBody(input: RequestInfo | URL, init?: RequestInit) {
-  if (typeof init?.body === "string") return JSON.parse(init.body) as Record<string, unknown>;
-  if (typeof Request !== "undefined" && input instanceof Request) return JSON.parse(await input.clone().text()) as Record<string, unknown>;
-  return null;
+  const raw = typeof init?.body === 'string' ? init.body : input instanceof Request ? await input.clone().text() : null;
+  if (raw === null) throw new Error('The model editor requires a JSON request body.');
+  if (new TextEncoder().encode(raw).length > 1024 * 1024) throw new Error('The model editor request exceeds 1 MiB.');
+  const body: unknown = JSON.parse(raw);
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !('calc' in body) || typeof body.calc !== 'string') {
+    throw new Error('The model editor requires a calculation or workbook operation.');
+  }
+  return body as Record<string, unknown>;
 }
 
-export function installMcpApiFetchBridge() {
-  if (installed || typeof window === "undefined") return installed;
+export function uninstallMcpApiFetchBridge() {
+  teardown?.();
+  teardown = undefined;
+}
+
+export function installMcpApiFetchBridge(endpoint = '/api/hello') {
+  if (teardown) return true;
   if (!isMcpUiHost()) return false;
-
-  installed = true;
-  const originalFetch = window.fetch.bind(window);
-  window.addEventListener("message", receiveStandardMcpResponse);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = requestUrl(input);
-    const method = String(init?.method || (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET")).toUpperCase();
-    if (method !== "POST" || !url.pathname.endsWith("/api/hello")) return originalFetch(input, init);
-
-    const body = await requestBody(input, init);
-    if (!body || typeof body.calc !== "string") return originalFetch(input, init);
-    const response = await callFocusedUiApi(body);
-    const status = Number(response?.status);
-    return new Response(JSON.stringify(response?.body ?? {}), {
-      status: Number.isFinite(status) ? status : 200,
-      headers: { "content-type": "application/json", "cache-control": "no-store" },
+  const expectedUrl = new URL(endpoint, window.location.href);
+  const originalFetch = window.fetch;
+  const pending = new Set<(reason: Error) => void>();
+  const callTool = (body: Record<string, unknown>, signal?: AbortSignal | null) => {
+    if (signal?.aborted) return Promise.reject(new DOMException('Request aborted.', 'AbortError'));
+    if (pending.size >= 8) return Promise.reject(new Error('Too many pending model editor requests.'));
+    const bridge = hostBridge();
+    if (!bridge?.callTool) return Promise.reject(new Error('The authenticated model editor bridge is unavailable.'));
+    return new Promise<McpToolResult>((resolve, reject) => {
+      const finish = () => {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', abort);
+        pending.delete(fail);
+      };
+      const fail = (error: Error) => { finish(); reject(error); };
+      const abort = () => fail(new DOMException('Request aborted; a dispatched write may still finish. Reload before retrying.', 'AbortError'));
+      const timeout = setTimeout(() => fail(new Error('The model editor request timed out. A write may still finish; reload before retrying.')), 20000);
+      pending.add(fail);
+      signal?.addEventListener('abort', abort, { once: true });
+      Promise.resolve().then(() => bridge.callTool!('run_model_surface_api', { body })).then(
+        result => { finish(); resolve(result); },
+        () => fail(new Error('The model editor request failed. Reload to verify whether changes were saved.')),
+      );
     });
+  };
+  const bridgeFetch: typeof fetch = async (input, init) => {
+    const url = requestUrl(input);
+    const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    if (method !== 'POST' || url.origin !== expectedUrl.origin || url.pathname !== expectedUrl.pathname || url.search !== expectedUrl.search) {
+      return originalFetch.call(window, input, init);
+    }
+    const result = await callTool(await requestBody(input, init), init?.signal ?? (input instanceof Request ? input.signal : undefined));
+    if (!result || result.isError) throw new Error('The model editor rejected the request.');
+    const response = result.structuredContent;
+    const status = response?.status;
+    if (typeof status !== 'number' || !Number.isInteger(status) || status < 200 || status > 599 || !response || !('body' in response)) {
+      throw new Error('The model editor returned an invalid response.');
+    }
+    const serialized = JSON.stringify(response.body);
+    if (serialized === undefined || new TextEncoder().encode(serialized).length > 4 * 1024 * 1024) throw new Error('The model editor response exceeds application limits.');
+    return new Response([204, 205, 304].includes(status) ? null : serialized, {
+      status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+    });
+  };
+  window.fetch = bridgeFetch;
+  teardown = () => {
+    if (window.fetch === bridgeFetch) window.fetch = originalFetch;
+    for (const reject of [...pending]) reject(new Error('The model editor connection was closed.'));
   };
   return true;
 }
