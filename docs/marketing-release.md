@@ -1,5 +1,9 @@
 # Public marketing release
 
+Published September 13, 2026: source commit `c1b09f1`; public Amplify job `54` succeeded; comparison Worker version `38aa7a3e-b74f-4493-ba39-a080eaf4c382`. Windows and Linux CI both pass with 538 tests. Live homepage assets match the release, and the portfolio bundle remains `index-L9cKKW84.js`.
+
+Cloudflare prepends managed content signals and training-bot exclusions to the comparison subdomain's robots file. These were preserved. The appended application directives and sitemap remain present; Googlebot, OAI-SearchBot and Claude-SearchBot are not in those training-bot exclusions. A user-agent smoke request checks delivery, not a provider's actual indexing.
+
 ## Production surfaces
 
 - Homepage and income estimator: https://aftertaxus.com/ and https://aftertaxus.com/calculator.html
