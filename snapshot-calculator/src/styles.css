@@ -40,8 +40,7 @@ select {
 .investment-card,
 .results-panel,
 .tax-drag-card,
-.embed-footer,
-.cta-card {
+.embed-footer {
   border: 1px solid rgba(226, 232, 240, .16);
   background: linear-gradient(180deg, rgba(15, 23, 42, .84), rgba(2, 6, 23, .72));
   box-shadow: 0 24px 64px rgba(0, 0, 0, .34), inset 0 0 0 1px rgba(255, 255, 255, .03);
@@ -900,97 +899,208 @@ select option {
   line-height: 1.5;
 }
 
-.cta-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
+.full-app-upgrade {
   margin-top: 18px;
   padding: 22px;
-  border-radius: 26px;
+  border: 1px solid rgba(94, 234, 212, .35);
+  border-radius: 24px;
+  background:
+    radial-gradient(ellipse at top right, rgba(13, 148, 136, .2), transparent 60%),
+    linear-gradient(135deg, #102b36, #0f172a 70%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .2);
 }
 
-.cta-card strong,
-.cta-card span {
-  display: block;
-}
-
-.cta-card strong {
-  color: #fff;
-  font-size: 1.1rem;
-}
-
-.cta-card span {
-  margin-top: 4px;
+.full-app-upgrade__intro p {
+  margin: 8px 0 0;
   color: #cbd5e1;
+  font-size: .84rem;
+  line-height: 1.5;
 }
 
-.cta-card button,
-.cta-card a {
+.full-app-upgrade__intro .full-app-upgrade__eyebrow {
+  margin: 0 0 10px;
+  color: #99f6e4;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.full-app-upgrade h2 {
+  margin: 0;
+  color: #f0fdfa;
+  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+
+.full-app-upgrade__benefits {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.full-app-upgrade__benefits li {
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, .28);
+}
+
+.full-app-upgrade__benefits strong {
+  color: #f0fdfa;
+  font-size: .82rem;
+  line-height: 1.4;
+}
+
+.full-app-upgrade__benefits p {
+  margin: 6px 0 0;
+  color: #cbd5e1;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.full-app-upgrade__footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.full-app-upgrade__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.full-app-upgrade__notes {
+  flex: 1 1 260px;
+  color: #cbd5e1;
+  font-size: .72rem;
+  line-height: 1.5;
+}
+
+.full-app-upgrade__notes p {
+  margin: 0;
+}
+
+.full-app-upgrade__notes p + p {
+  margin-top: 4px;
+}
+
+.full-app-upgrade__actions a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(45, 212, 191, .38);
-  border-radius: 999px;
-  padding: 13px 18px;
-  background: linear-gradient(135deg, #0f766e, #1d4ed8);
-  color: #fff;
-  font-weight: 950;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.cta-card button:disabled {
-  cursor: wait;
-  opacity: .72;
-}
-
-.waitlist-card {
-  flex-wrap: wrap;
-}
-
-.waitlist-form {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 10px;
-  align-items: center;
-  min-width: min(100%, 480px);
-}
-
-.waitlist-form input {
-  width: 100%;
-  border: 1px solid rgba(148, 163, 184, .34);
-  border-radius: 999px;
-  padding: 13px 16px;
-  background: rgba(15, 23, 42, .78);
-  color: #fff;
-  font: inherit;
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 1px solid #5eead4;
+  border-radius: 10px;
+  font-size: .82rem;
   font-weight: 800;
-  outline: none;
+  text-decoration: none;
 }
 
-.waitlist-form input::placeholder {
-  color: #94a3b8;
+.full-app-upgrade__primary {
+  background: #5eead4;
+  color: #082f49;
 }
 
-.waitlist-form input:focus {
-  border-color: rgba(45, 212, 191, .72);
-  box-shadow: 0 0 0 4px rgba(45, 212, 191, .14);
+.full-app-upgrade__primary:hover {
+  background: #99f6e4;
 }
 
-.waitlist-status {
-  grid-column: 1 / -1;
-  color: #cbd5e1;
-  font-weight: 800;
-  line-height: 1.35;
+.full-app-upgrade__secondary {
+  color: #ccfbf1;
+  background: transparent;
 }
 
-.waitlist-status--success {
-  color: #86efac;
+.full-app-upgrade__secondary:hover {
+  background: rgba(94, 234, 212, .12);
 }
 
-.waitlist-status--error {
-  color: #fecaca;
+.full-app-upgrade__actions a:focus-visible {
+  outline: 3px solid #f0fdfa;
+  outline-offset: 4px;
+}
+
+.snapshot-summary {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.snapshot-summary a {
+  color: #99f6e4;
+}
+
+.snapshot-text-link {
+  color: #99f6e4;
+  text-underline-offset: 3px;
+}
+
+.snapshot-text-link:hover {
+  color: #f0fdfa;
+}
+
+.snapshot-text-link:focus-visible {
+  outline: 2px solid #f0fdfa;
+  outline-offset: 3px;
+}
+
+@media (max-width: 860px) {
+  .full-app-upgrade__benefits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  body {
+    min-width: 0;
+  }
+
+  .results-main,
+  .bar-group {
+    min-width: 0;
+  }
+
+  .bar-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+  }
+
+  .bar-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .bar-name-text,
+  .bar-row strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .bar-name .difference-badge {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .full-app-upgrade {
+    padding: 16px;
+  }
+
+  .full-app-upgrade__benefits {
+    grid-template-columns: 1fr;
+  }
+
+  .full-app-upgrade__actions,
+  .full-app-upgrade__actions a {
+    width: 100%;
+  }
 }
 
 .sr-only {
@@ -1021,8 +1131,7 @@ select option {
   .deductions-panel,
   .compare-grid,
   .tax-drag-card--featured,
-  .results-panel,
-  .cta-card {
+  .results-panel {
     grid-template-columns: 1fr;
   }
 
@@ -1040,14 +1149,6 @@ select option {
 
   .tax-drag-card--featured {
     width: auto;
-  }
-
-  .cta-card {
-    align-items: stretch;
-  }
-
-  .waitlist-form {
-    grid-template-columns: 1fr;
   }
 
   .embed-summary,

@@ -1,0 +1,17 @@
+.calculator-scope { font-size: .82rem; line-height: 1.65; color: #4a626a; }
+.calculator-scope a, .calculator-marketing-footer a { color: #075d58; text-underline-offset: 3px; }
+.full-app-callout { background: #e8f6ee; border: 1px solid #bad5c4; border-radius: 16px; gap: 28px; }
+.full-app-callout .eyebrow { color: #0b6150; }
+.full-app-callout h3 { color: #173d35; line-height: 1.25; }
+.full-app-callout__intro { font-size: .9rem; line-height: 1.7; max-width: 620px; color: #3e6055; }
+.full-app-callout li { color: #284e41; line-height: 1.65; margin-block: 10px; }
+.full-app-callout__action { display: flex; flex-direction: column; gap: 14px; }
+.full-app-callout__action small { color: #405f52; line-height: 1.65; }
+.full-app-sign-in { color: #085d50; font-size: .85rem; font-weight: 650; text-underline-offset: 3px; }
+.calculator-marketing-footer { max-width: 1180px; margin: 30px auto; padding: 20px 24px; border-top: 1px solid #d4e1d8; }
+.calculator-marketing-footer a { display: inline-block; font-size: .85rem; margin: 0 22px 10px 0; }
+.calculator-marketing-footer p { font-size: .8rem; color: #526665; line-height: 1.65; }
+@media (max-width: 650px) {
+  .full-app-callout { display: grid; grid-template-columns: 1fr; padding: 20px; }
+  .full-app-callout__action .button { white-space: normal; }
+}

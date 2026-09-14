@@ -1,0 +1,45 @@
+{
+  "name": "AfterTaxUS",
+  "url": "https://aftertaxus.com/",
+  "description": "Free educational after-tax investment comparison and portfolio income planning.",
+  "updated": "2026-09-12",
+  "taxModelYear": 2025,
+  "methodology": "https://aftertaxus.com/how-it-works.html",
+  "tools": [
+    {
+      "name": "Investment comparison",
+      "url": "https://calculator.aftertaxus.com/",
+      "priceUSD": 0,
+      "accountRequired": false,
+      "scope": "Two investments; incremental federal/state tax estimate; illustrative sample yields."
+    },
+    {
+      "name": "Income calculator",
+      "url": "https://aftertaxus.com/calculator.html",
+      "priceUSD": 0,
+      "accountRequired": false,
+      "scope": "Broad income estimate using backend federal/state and supported local tax settings."
+    },
+    {
+      "name": "Portfolio app",
+      "url": "https://aftertaxus.com/app/",
+      "priceUSD": 0,
+      "accountRequiredToSave": true,
+      "scope": "Multiple accounts and income rows; what-ifs; baseline; saved versions; tax breakdowns; supported local and W-2 payroll settings."
+    }
+  ],
+  "limitations": [
+    "2025 model, not a complete 2026 tax calculation.",
+    "Not a tax filing service or investment recommendation.",
+    "Sample yields are not current market data.",
+    "Not every state/local rule, deduction, credit or personal circumstance is modeled or independently validated."
+  ],
+  "optionalAIConnection": {
+    "protocol": "MCP",
+    "requiresAuthorization": true,
+    "clientSupportVaries": true,
+    "affiliationWithOpenAIOrAnthropic": false
+  },
+  "privacy": "https://aftertaxus.com/privacy.html",
+  "terms": "https://aftertaxus.com/terms.html"
+}

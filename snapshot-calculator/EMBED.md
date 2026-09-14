@@ -62,6 +62,20 @@ iframe.contentWindow.postMessage({
 
 Messaging requires an HTTP(S) embedding parent whose origin is available in the iframe's referrer. The calculator checks both message source and origin and sends results only to that origin, never a wildcard. With a suppressed referrer the calculator remains usable, but cross-window messaging is disabled. Do not put personal information or credentials in share-link parameters.
 
+## Free full-app links
+
+The standalone calculator shows a free full-app section after the results. The compact embed keeps its existing footer and does not show the upgrade section. The app link is `https://aftertaxus.com/app/`; account creation uses `https://aftertaxus.com/app/?auth=create`. A free account is required to save portfolios and scenarios. These fixed links suppress the referrer and never transfer calculator inputs. Share/embed links and trusted parent-window messaging retain their existing behavior described above.
+
+The standalone header also offers a small "Open free portfolio app" link. The scope note links to `https://aftertaxus.com/how-it-works.html` in both layouts. Both links suppress the referrer and include no calculator inputs.
+
+## Discovery and static fallback
+
+`public/robots.txt` advertises `https://calculator.aftertaxus.com/sitemap.xml`, whose only page is the query-free snapshot canonical. Vite copies both files to the build root. The existing Worker passes these asset requests and non-HTML responses through unchanged; no Worker edit is needed.
+
+The initial `#root` HTML contains a visible summary and links, replaced when React renders the calculator. A nested `noscript` retains the enable-JavaScript hint. Social metadata references the parent-owned `https://aftertaxus.com/aftertaxus-social.png` image at 1200×630; the parent is responsible for creating and publishing that image and the methodology page.
+
+Below 560px, comparison labels and values share a row with the bar below them; long values can wrap. Desktop calculator sizing and calculation behavior are unchanged.
+
 ## Calculation scope
 
 Uses the 2025 shared portfolio engine for incremental federal ordinary/preferred income tax, NIIT and state bracket tax. The baseline is ordinary income, not a complete existing portfolio. Existing investment-income NIIT effects, Social Security taxation, local/payroll taxes, AMT, credits and automatic state exclusions are not modeled. A municipal exemption must match residency and the fund's actual eligible income; the symbol alone does not establish tax treatment.

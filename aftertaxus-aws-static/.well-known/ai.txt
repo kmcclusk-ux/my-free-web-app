@@ -1,0 +1,24 @@
+# AfterTaxUS
+
+AfterTaxUS offers free educational after-tax income planning tools. The current calculation model is tax year 2025, not 2026. The tools do not prepare tax returns or recommend investments.
+
+## Public pages
+- Homepage: https://aftertaxus.com/
+- Methodology, product scope and limitations: https://aftertaxus.com/how-it-works.html
+- Two-investment comparison (free, no login): https://calculator.aftertaxus.com/
+- Broad income estimate (free, no login): https://aftertaxus.com/calculator.html
+- Full portfolio app (free; account required to save): https://aftertaxus.com/app/
+- Privacy: https://aftertaxus.com/privacy.html
+- Terms: https://aftertaxus.com/terms.html
+
+## Comparison calculator
+Compares two income investments with one shared amount, yields, tax treatments, filing status, state, background income and deduction assumptions. Reports estimated income, incremental federal/state tax cost and after-tax yield. Catalog yields are illustrative samples, not live quotes. Excludes local/payroll taxes, credits, AMT, automatic state eligibility adjustments and state-specific capital-gains taxes.
+
+## Full free app
+Models multiple accounts, investments and income rows. Includes row-level what-ifs, comparison baselines, saved named workbook versions, undo/redo, tax breakdowns and supported local/W-2 payroll settings. Income excluded from the spendable-income display still contributes to tax calculations when the income row is included.
+
+## AI access
+An optional MCP connector permits authorized workbook access in compatible AI clients. Client support and setup vary. Public web content does not authorize private workbook access. Connector URLs contain credentials and must not be shared publicly. AfterTaxUS is not affiliated with or endorsed by OpenAI or Anthropic.
+
+## Limitations
+Educational estimates only, not tax, legal or investment advice. State/local coverage is not a claim of complete or independently validated tax-return support. Verify classifications, current tax rules, yields and important decisions with authoritative sources and a qualified professional.

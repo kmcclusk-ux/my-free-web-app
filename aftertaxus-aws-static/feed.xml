@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AfterTaxUS after-tax calculator guides</title>
+    <link>https://aftertaxus.com/</link>
+    <description>Free educational after-tax calculator pages and guides from AfterTaxUS.</description>
+    <language>en-us</language>
+    <lastBuildDate>Sat, 12 Sep 2026 00:00:00 GMT</lastBuildDate>
+    <atom:link href="https://aftertaxus.com/feed.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Compare two investments, then explore the full free portfolio app</title>
+      <link>https://aftertaxus.com/how-it-works.html</link>
+      <guid>https://aftertaxus.com/how-it-works.html</guid>
+      <description>Understand the free tools, their 2025 tax model, sample yields, calculation limitations and optional AI access.</description>
+      <pubDate>Sat, 12 Sep 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Free No-Login After-Tax Calculator</title>
+      <link>https://aftertaxus.com/calculator.html</link>
+      <guid>https://aftertaxus.com/calculator.html</guid>
+      <description>Estimate after-tax income without signing in.</description>
+      <pubDate>Tue, 01 Sep 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>After-Tax Calculator Guide</title>
+      <link>https://aftertaxus.com/after-tax-calculator.html</link>
+      <guid>https://aftertaxus.com/after-tax-calculator.html</guid>
+      <description>Understand how to estimate dollars remaining after federal, state, local, and investment taxes.</description>
+      <pubDate>Tue, 01 Sep 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>After-Tax Investment Calculator Guide</title>
+      <link>https://aftertaxus.com/after-tax-investment-calculator.html</link>
+      <guid>https://aftertaxus.com/after-tax-investment-calculator.html</guid>
+      <description>Understand tax drag and after-tax investment return concepts.</description>
+      <pubDate>Tue, 01 Sep 2026 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

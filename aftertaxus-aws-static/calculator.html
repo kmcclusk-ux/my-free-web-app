@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Free After-Tax Income Calculator — No Login | AfterTaxUS</title>
+    <meta name="description" content="Estimate income after federal, state and supported local taxes. No login needed. Explore deductions, then build your whole income picture in the free portfolio app." />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1" />
+    <link rel="canonical" href="https://aftertaxus.com/calculator.html" />    <link rel="alternate" type="text/plain" title="LLM summary" href="/llms.txt" />
+    <link rel="alternate" type="text/plain" title="Full LLM context" href="/llms-full.txt" />
+    <link rel="alternate" type="text/plain" title="AI discovery" href="/ai.txt" />
+    <link rel="alternate" type="application/json" title="AI manifest" href="/ai.json" />
+    <link rel="alternate" type="application/rss+xml" title="AfterTaxUS updates" href="/feed.xml" />
+    <link rel="stylesheet" href="/styles.css?v=20260905-full-app-callout" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/calculator-marketing.css?v=20260912" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://aftertaxus.com/calculator.html" />
+    <meta property="og:title" content="What income could you keep after tax?" />
+    <meta property="og:description" content="Try the free no-login income calculator. Explore the bigger picture in the full free portfolio app." />
+    <meta property="og:image" content="https://aftertaxus.com/aftertaxus-social.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://aftertaxus.com/aftertaxus-social.png" />
+  </head>
+  <body>
+    <main>
+      <section class="calculator-hero">
+        <nav class="top-nav" aria-label="Calculator navigation">
+          <a class="brand" href="/" aria-label="AfterTaxUS home">
+            <span class="brand-mark">AT</span>
+            <span>AfterTaxUS</span>
+          </a>
+          <div class="nav-links">
+            <a class="nav-app-link" href="/">Home</a>
+            <a href="https://calculator.aftertaxus.com/">Compare two investments</a>
+            <a class="nav-app-link" href="/app/" data-quick-calculator-handoff>Open free full app</a>
+          </div>
+        </nav>
+        <div class="calculator-hero-copy">
+          <p class="eyebrow">Free no-login calculator</p>
+          <h1>Estimate your after-tax income</h1>
+          <p>
+            Get a quick income estimate without an account. Adjust your income and tax assumptions,
+            then open the full free portfolio app to explore all your accounts and investment what-ifs together.
+          </p>
+          <p class="calculator-scope">2025 tax model · Educational estimates, not tax filing. Calculations use AfterTaxUS backend services.
+            <a href="/how-it-works.html#limitations">See coverage and limitations.</a></p>
+        </div>
+      </section>
+
+      <section class="calculator-card calculator-card--standalone" id="calculator" aria-labelledby="calculator-heading">
+        <div>
+          <p class="eyebrow">Quick estimate</p>
+          <h2 id="calculator-heading">Start with four simple assumptions.</h2>
+          <p>
+            Adjust ordinary income, investment income, state, and local jurisdiction. Results are
+            educational estimates only and are not tax, legal, financial, fiduciary, or investment advice.
+          </p>
+        </div>
+
+        <div class="calculator-results-column">
+          <div class="calculator-grid calculator-grid--amounts">
+            <div class="ordinary-income-panel calculator-range-panel">
+              <div class="calculator-range-panel__heading">
+                <label for="income">Ordinary income</label>
+                <div class="calculator-range-controls" role="group" aria-label="Ordinary income range controls">
+                  <button type="button" data-range-target="income" data-range-action="decrease" aria-label="Halve ordinary income range" title="Halve range">−</button>
+                  <span id="incomeRangeValue">Max $750,000</span>
+                  <button type="button" data-range-target="income" data-range-action="increase" aria-label="Double ordinary income range" title="Double range">+</button>
+                </div>
+              </div>
+              <input id="income" min="0" max="750000" step="5000" type="range" value="185000" />
+              <strong id="incomeValue">$185,000</strong>
+            </div>
+            <div class="investment-income-panel calculator-range-panel">
+              <div class="calculator-range-panel__heading">
+                <label for="investmentIncome">Investment income</label>
+                <div class="calculator-range-controls" role="group" aria-label="Investment income range controls">
+                  <button type="button" data-range-target="investmentIncome" data-range-action="decrease" aria-label="Halve investment income range" title="Halve range">−</button>
+                  <span id="investmentIncomeRangeValue">Max $250,000</span>
+                  <button type="button" data-range-target="investmentIncome" data-range-action="increase" aria-label="Double investment income range" title="Double range">+</button>
+                </div>
+              </div>
+              <input id="investmentIncome" min="0" max="250000" step="2500" type="range" value="24000" />
+              <div class="investment-income-panel__footer">
+                <strong id="investmentValue">$24,000</strong>
+                <select id="investmentTaxTreatment" aria-label="Investment income tax treatment">
+                  <option value="income">Interest / ordinary income</option>
+                  <option value="muni-bonds">Muni bonds</option>
+                  <option value="state tax free">Treasury / state tax free</option>
+                  <option value="fed tax free">Federal tax free</option>
+                  <option value="qualified-div">Qualified dividends</option>
+                  <option value="non-qualified-div">Ordinary dividends</option>
+                  <option value="short term gain">Short-term capital gains</option>
+                  <option value="long term gain">Long-term capital gains</option>
+                  <option value="section 1256">Section 1256 / 60-40</option>
+                  <option value="return of capital">Return of capital</option>
+                  <option value="social security">Social Security</option>
+                  <option value="W2 income">W-2 income</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="calculator-grid calculator-grid--settings">
+            <label>
+              Filing status
+              <select id="filingStatus" aria-label="Filing status">
+                <option value="single" selected>Single</option>
+                <option value="mfj">Married filing jointly</option>
+                <option value="mfs">Married filing separately</option>
+                <option value="hoh">Head of household</option>
+              </select>
+              <strong id="filingStatusValue">Single</strong>
+            </label>
+            <label>
+              Deduction
+              <select id="deductionMode" aria-label="Federal deduction mode">
+                <option value="standard" selected>Standard deduction</option>
+                <option value="itemized">Itemized deductions</option>
+              </select>
+              <input id="standardDeduction" type="text" value="$15,750" readonly />
+              <input id="itemizedDeduction" min="0" step="500" type="number" value="0" disabled />
+            </label>
+          </div>
+
+          <div class="calculator-grid calculator-grid--jurisdictions">
+            <label class="state-panel">
+              State
+              <select id="stateCode" aria-label="State">
+                <option value="AL">AL - Alabama</option>
+                <option value="AK">AK - Alaska (no individual income tax)</option>
+                <option value="AZ">AZ - Arizona</option>
+                <option value="AR">AR - Arkansas</option>
+                <option value="CA" selected>CA - California</option>
+                <option value="CO">CO - Colorado</option>
+                <option value="CT">CT - Connecticut</option>
+                <option value="DE">DE - Delaware</option>
+                <option value="FL">FL - Florida (no individual income tax)</option>
+                <option value="GA">GA - Georgia</option>
+                <option value="HI">HI - Hawaii</option>
+                <option value="ID">ID - Idaho</option>
+                <option value="IL">IL - Illinois</option>
+                <option value="IN">IN - Indiana</option>
+                <option value="IA">IA - Iowa</option>
+                <option value="KS">KS - Kansas</option>
+                <option value="KY">KY - Kentucky</option>
+                <option value="LA">LA - Louisiana</option>
+                <option value="ME">ME - Maine</option>
+                <option value="MD">MD - Maryland</option>
+                <option value="MA">MA - Massachusetts</option>
+                <option value="MI">MI - Michigan</option>
+                <option value="MN">MN - Minnesota</option>
+                <option value="MS">MS - Mississippi</option>
+                <option value="MO">MO - Missouri</option>
+                <option value="MT">MT - Montana</option>
+                <option value="NE">NE - Nebraska</option>
+                <option value="NV">NV - Nevada (no individual income tax)</option>
+                <option value="NH">NH - New Hampshire (no individual income tax)</option>
+                <option value="NJ">NJ - New Jersey</option>
+                <option value="NM">NM - New Mexico</option>
+                <option value="NY">NY - New York</option>
+                <option value="NC">NC - North Carolina</option>
+                <option value="ND">ND - North Dakota</option>
+                <option value="OH">OH - Ohio</option>
+                <option value="OK">OK - Oklahoma</option>
+                <option value="OR">OR - Oregon</option>
+                <option value="PA">PA - Pennsylvania</option>
+                <option value="RI">RI - Rhode Island</option>
+                <option value="SC">SC - South Carolina</option>
+                <option value="SD">SD - South Dakota (no individual income tax)</option>
+                <option value="TN">TN - Tennessee (no individual income tax)</option>
+                <option value="TX">TX - Texas (no individual income tax)</option>
+                <option value="UT">UT - Utah</option>
+                <option value="VT">VT - Vermont</option>
+                <option value="VA">VA - Virginia</option>
+                <option value="WA">WA - Washington (no broad-based income tax)</option>
+                <option value="WV">WV - West Virginia</option>
+                <option value="WI">WI - Wisconsin</option>
+                <option value="WY">WY - Wyoming (no individual income tax)</option>
+              </select>
+              <strong id="stateValue">Calculating...</strong>
+            </label>
+            <label id="localityPanel">
+              Local
+              <select id="localityId" aria-label="Local tax jurisdiction">
+                <option value="none" selected>No local income tax</option>
+              </select>
+              <strong id="localValue">No local income tax</strong>
+            </label>
+          </div>
+
+          <div class="after-tax-chart" aria-label="Bar chart comparing gross amount with estimated after-tax amount kept">
+            <div class="estimate-panel" aria-live="polite">
+              <span>Estimated after-tax amount</span>
+              <strong id="afterTaxValue">$170,667</strong>
+              <small id="taxSummary">Estimated taxes: $38,333 · blended rate 18.3%</small>
+              <button id="openTaxReport" class="tax-report-button" type="button">Open report</button>
+            </div>
+            <div class="after-tax-plot">
+              <div id="afterTaxScale" class="after-tax-scale" aria-hidden="true"></div>
+              <div class="after-tax-bars" role="img" aria-label="Bar chart comparing gross amount with estimated after-tax amount kept">
+                <div class="after-tax-bar after-tax-bar--gross">
+                  <span>Gross</span>
+                  <div class="after-tax-bar__track">
+                    <div id="grossBar" class="after-tax-bar__fill" style="height: 100%"></div>
+                  </div>
+                  <strong id="grossBarValue">$209,000</strong>
+                </div>
+                <div class="after-tax-bar after-tax-bar--keep">
+                  <span>Keep</span>
+                  <div class="after-tax-bar__track">
+                    <div id="keepBar" class="after-tax-bar__fill" style="height: 82%"></div>
+                  </div>
+                  <strong id="keepBarValue">$170,667</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section class="full-app-callout" aria-labelledby="full-app-callout-title">
+            <div>
+              <p class="eyebrow">Go deeper. Still free.</p>
+              <h3 id="full-app-callout-title">An income estimate is a start. See your whole portfolio.</h3>
+              <p class="full-app-callout__intro">One total can’t tell you which account or investment changed your spending income. The full app helps you follow the difference.</p>
+              <ul>
+                <li><strong>Bring your accounts together:</strong> investments, wages, retirement and rental income.</li>
+                <li><strong>Explore what-ifs:</strong> try replacement investments and compare with a baseline.</li>
+                <li><strong>Separate spending from taxes:</strong> excluded income still counts toward the tax calculation.</li>
+                <li><strong>Return to your work:</strong> save named workbook versions, with undo and redo.</li>
+                <li><strong>Follow the tax:</strong> inspect breakdowns and supported local and W-2 payroll settings.</li>
+              </ul>
+            </div>
+            <div class="full-app-callout__action">
+              <a class="button button-primary" href="/app/?auth=create" data-quick-calculator-handoff>Create a free account →</a>
+              <a class="full-app-sign-in" href="/app/" data-quick-calculator-handoff>Already have an account? Open the app</a>
+              <small>The full app is free, not a paid upgrade. An account is required to save your workbook.</small>
+              <small>These buttons prepare your quick-estimate inputs in this browser for the full app. Review them after opening.</small>
+            </div>
+          </section>
+        </div>
+      </section>
+      <footer class="calculator-marketing-footer"><a href="/how-it-works.html">Methodology & limitations</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><p>Estimates are not tax, legal or investment advice. The model does not cover every tax rule, credit or personal circumstance.</p></footer>
+    </main>
+    <div id="taxReportModal" class="tax-report-modal" hidden>
+      <div class="tax-report-modal__backdrop" data-close-tax-report></div>
+      <section class="tax-report-dialog" role="dialog" aria-modal="true" aria-labelledby="taxReportTitle">
+        <header class="tax-report-dialog__header">
+          <div>
+            <span class="eyebrow">Tax estimate report</span>
+            <h2 id="taxReportTitle">Full tax summary</h2>
+          </div>
+          <button class="tax-report-dialog__close" type="button" data-close-tax-report aria-label="Close tax report">×</button>
+        </header>
+        <div id="taxReportContent" class="tax-report-dialog__content">
+          <p>Run a calculation to view the full tax summary.</p>
+        </div>
+      </section>
+    </div>
+    <script src="/app.js?v=20260905-income-ranges" defer></script>
+      <script src="/analytics.js" defer></script>
+  </body>
+</html>

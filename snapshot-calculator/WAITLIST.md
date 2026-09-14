@@ -1,22 +1,16 @@
-# Snapshot Calculator Waitlist
+# Snapshot Calculator: Retired Waitlist
 
-The calculator posts email signups to `/api/waitlist`. The Worker forwards each signup to a Google Apps Script web app URL stored in the `WAITLIST_WEBHOOK_URL` Worker secret.
+The full AfterTax US app is free and live. The calculator no longer collects email addresses or calls `/api/waitlist`.
 
-## Google Sheet setup
+The replacement section links directly to:
 
-1. Create or open the Google Sheet where you want waitlist emails.
-2. Open **Extensions → Apps Script**.
-3. Paste `snapshot-calculator/waitlist-appscript.js`.
-4. Deploy as a **Web app**.
-5. Set **Execute as** to yourself and **Who has access** to anyone with the link.
-6. Copy the Web app URL.
+- Full app: https://aftertaxus.com/app/
+- Free account creation: https://aftertaxus.com/app/?auth=create
 
-## Worker secret
+A free account is required to save portfolios and scenarios; this is not a paid upgrade. CTA destinations are fixed, do not include calculator inputs, and suppress the referrer. Existing user-requested share/embed links are separate and still include calculator inputs.
 
-Set the URL as a Cloudflare Worker secret:
+## Ownership and legacy infrastructure
 
-```bash
-npx wrangler secret put WAITLIST_WEBHOOK_URL --config wrangler.snapshot-calculator.json
-```
+Presentation and copy live in `src/FullAppUpgrade.tsx`, with scoped styles in `src/styles.css`. Search/share metadata and the visible initial-HTML fallback live in `index.html`; React replaces the fallback on startup. Discovery files live in `public/`. Isolated marketing regressions live in `../tests/snapshot-marketing.test.ts`.
 
-Then redeploy the calculator Worker.
+`worker.ts` and `waitlist-appscript.js` are unchanged legacy infrastructure. The frontend no longer uses them for signups. Any endpoint retirement or secret cleanup belongs to the backend owner and is outside this marketing change; no new waitlist setup is needed.

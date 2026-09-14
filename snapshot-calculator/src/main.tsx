@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { FullAppUpgrade } from "./FullAppUpgrade";
 import { federalStandardDeduction2025, investmentResult } from "./calculation";
 import { embeddingParentOrigin, trustedEmbeddingMessage } from "./embedding";
 import { MAX_SNAPSHOT_AMOUNT, MAX_SNAPSHOT_YIELD_PERCENT, snapshotNumber } from "./numericInput";
@@ -449,9 +450,6 @@ function App() {
   const [investmentA, setInvestmentA] = useState<InvestmentInput>(initialSettings.inputs.investmentA);
   const [investmentB, setInvestmentB] = useState<InvestmentInput>(initialSettings.inputs.investmentB);
   const [copyStatus, setCopyStatus] = useState("");
-  const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const [waitlistMessage, setWaitlistMessage] = useState("");
 
   const scenarioA = useMemo(() => ({ ...investmentA, amount: investmentAmount }), [investmentA, investmentAmount]);
   const scenarioB = useMemo(() => ({ ...investmentB, amount: investmentAmount }), [investmentB, investmentAmount]);
@@ -547,33 +545,6 @@ function App() {
     window.setTimeout(() => setCopyStatus(""), 1600);
   }
 
-  async function submitWaitlist(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const email = waitlistEmail.trim();
-    if (!email) return;
-    setWaitlistStatus("submitting");
-    setWaitlistMessage("");
-    try {
-      const response = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          email,
-          source: "snapshot-calculator",
-          pageUrl: typeof window === "undefined" ? "" : window.location.href,
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.message === "string" ? data.message : "Unable to join right now.");
-      setWaitlistStatus("success");
-      setWaitlistMessage("You're on the list. I’ll send the portfolio app invite when it opens.");
-      setWaitlistEmail("");
-    } catch (error) {
-      setWaitlistStatus("error");
-      setWaitlistMessage(error instanceof Error ? error.message : "Unable to join right now.");
-    }
-  }
-
   return (
     <main className={`snapshot-app ${initialSettings.isEmbedMode ? "snapshot-app--embed" : ""}`}>
       {initialSettings.isEmbedMode ? (
@@ -598,9 +569,9 @@ function App() {
             <img src={US_FLAG} alt="US flag" />
           </div>
           <div className="hero-copy">
-            <p className="eyebrow">Free snapshot calculator</p>
+            <p className="eyebrow">Free snapshot calculator · 2025 estimate</p>
             <h1>Which wins after tax?</h1>
-            <p>Compare two investments using your filing status, state, taxable income, yield, and tax treatment.</p>
+            <p>Compare two investments after federal and state taxes. No account needed. <a className="snapshot-text-link" href="https://aftertaxus.com/app/" rel="noreferrer" referrerPolicy="no-referrer">Open free portfolio app</a></p>
           </div>
           <div className="winner-card">
             <span>After-tax winner</span>
@@ -696,30 +667,9 @@ function App() {
           <span>AI/chatbot ready: preload via URL parameters or update this frame with postMessage.</span>
         </section>
       ) : (
-        <section className="cta-card waitlist-card">
-          <div>
-            <strong>Want the full portfolio app?</strong>
-            <span>Join the waitlist for portfolio-level accounts, asset classes, state taxes, deductions, what-if rows, and income exclusions.</span>
-          </div>
-          <form className="waitlist-form" onSubmit={submitWaitlist}>
-            <label className="sr-only" htmlFor="waitlist-email">Email address</label>
-            <input
-              id="waitlist-email"
-              type="email"
-              value={waitlistEmail}
-              onChange={(event) => setWaitlistEmail(event.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-            />
-            <button type="submit" disabled={waitlistStatus === "submitting"}>
-              {waitlistStatus === "submitting" ? "Joining..." : "Join waitlist"}
-            </button>
-            {waitlistMessage && <small className={`waitlist-status waitlist-status--${waitlistStatus}`}>{waitlistMessage}</small>}
-          </form>
-        </section>
+        <FullAppUpgrade />
       )}
-      <p className="muted">2025 planning estimate using the portfolio tax engine, not a tax return. Federal and state deductions are separate. Excludes local/payroll taxes, credits, AMT, automatic state eligibility adjustments, and tax effects on existing Social Security or investment income. In-state muni treatment requires your residency and the fund's eligible income composition to match. Yields are samples or your entries, not current market data.</p>
+      <p className="muted">2025 planning estimate using the portfolio tax engine, not a tax return. Federal and state deductions are separate. Excludes local/payroll taxes, credits, AMT, automatic state eligibility adjustments, and tax effects on existing Social Security or investment income. In-state muni treatment requires your residency and the fund's eligible income composition to match. Yields are samples or your entries, not current market data. <a className="snapshot-text-link" href="https://aftertaxus.com/how-it-works.html" rel="noreferrer" referrerPolicy="no-referrer">How it works and methodology</a></p>
     </main>
   );
 }
