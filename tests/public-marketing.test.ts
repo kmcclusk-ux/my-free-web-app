@@ -15,6 +15,23 @@ const links = (html: string) => [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].m
 const graph = JSON.parse(home.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1])['@graph'];
 
 describe('public marketing pages', () => {
+  it('promotes real MCP capabilities and links three honest core-capability examples', () => {
+    expect(home).toContain('Core full-app capability · MCP connector');
+    expect(home).toContain('update individual rows or batches');
+    expect(home).toContain('portfolio tax calculations');
+    expect(home).toContain('Client support, exposed actions and account requirements vary');
+    expect(home.match(/data-video-topic=/g)).toHaveLength(3);
+    for (const topic of ['calculator', 'app', 'mcp']) expect(home).toContain(`data-video-topic="${topic}"`);
+    for (const anchor of ['calculator-example', 'portfolio-example', 'mcp-example']) {
+      expect(home).toContain(`href="/how-it-works.html#${anchor}"`);
+      expect(methodology).toContain(`id="${anchor}"`);
+    }
+    expect(home).toContain('Video not linked yet');
+    expect(home).not.toContain('VideoObject');
+    expect(home).not.toMatch(/mcp_token=|youtube\.com\/embed|href="#"/);
+    const app = graph.find((entry: { url?: string }) => entry.url === 'https://aftertaxus.com/app/');
+    expect(app.featureList.join(' ')).toContain('MCP access');
+  });
   it.each([['index.html', home], ['calculator.html', calculator], ['how-it-works.html', methodology]])('gives %s an indexable title, description, canonical and accessible structure', (name, html) => {
     const canonical = name === 'index.html' ? 'https://aftertaxus.com/' : `https://aftertaxus.com/${name}`;
     expect(html.match(/<h1\b/g)).toHaveLength(1);
@@ -31,8 +48,21 @@ describe('public marketing pages', () => {
 
   it('presents two clear primary paths, with honest signup expectations', () => {
     const hero = home.match(/<section class="shell hero"[\s\S]*?<\/section>/)![0];
-    expect(links(hero)).toEqual(['https://calculator.aftertaxus.com/', '/app/']);
-    expect(hero).toContain('No signup to compare. Full app is free, too.');
+    expect(links(hero)).toEqual(['#investment-comparison', '/app/', '/calculator.html']);
+    expect(hero).toContain('class="button secondary hero-tool" href="/calculator.html"');
+    expect(hero.match(/class="button (?:primary|secondary) hero-tool"/g)).toHaveLength(3);
+    expect(hero).toContain('aria-label="Choose a free tool"');
+    expect(hero.match(/class="hero-tool-icon" aria-hidden="true"/g)).toHaveLength(3);
+    expect(hero).toContain('Estimate your take-home income · Free, no login');
+    expect(hero).toContain('Plan all your accounts · Free account required');
+    expect(hero).not.toContain('Prefer the original income sliders?');
+    expect(hero).toContain('Two investments. One clear after-tax comparison.');
+    expect(hero).toContain('Your filing status + state · Free, no login');
+    const toolButtons = [...hero.matchAll(/<a class="button [^"]*hero-tool"[\s\S]*?<\/a>/g)].map(match => match[0]);
+    expect(toolButtons[1]).toContain('Connect compatible AI assistants through MCP.');
+    expect(toolButtons[2]).toContain('2025 tax model · Planning, not tax filing');
+    expect(home).not.toContain('class="shell benefit-strip"');
+    expect(hero).not.toContain('<p class="microcopy">');
     expect(home).toContain('A free account is required to save');
     expect(home).not.toMatch(/waitlist|coming soon|limited.time offer/i);
     for (const link of links(home)) {
@@ -40,6 +70,19 @@ describe('public marketing pages', () => {
       expect([...url.searchParams.keys()].every(key => key === 'auth')).toBe(true);
       expect(url.protocol).toBe('https:');
     }
+  });
+
+  it('embeds the two-investment comparison on the homepage and retains standalone calculator links', () => {
+    const section = home.match(/<section[^>]*id="investment-comparison"[\s\S]*?<\/section>/)![0];
+    expect(section).toContain('Which investment wins after tax?');
+    expect(section).toContain('src="https://calculator.aftertaxus.com/?embed=1"');
+    expect(section).toContain('title="Compare two investments after tax"');
+    expect(section).toContain('referrerpolicy="strict-origin-when-cross-origin"');
+    expect(section).toContain('allow="clipboard-write"');
+    expect(links(section)).toEqual(['https://calculator.aftertaxus.com/', 'https://calculator.aftertaxus.com/', '/how-it-works.html']);
+    expect(home).toContain('class="button secondary hero-tool" href="/calculator.html"');
+    expect(home).toContain('class="button secondary hero-tool" href="/app/"');
+    expect(read('marketing.css')).toMatch(/\.comparison-calculator-frame\s*\{[^}]*height:\s*1460px/);
   });
 
   it('makes the numerical illustration explicit rather than claiming a real return', () => {
@@ -58,8 +101,8 @@ describe('public marketing pages', () => {
 
   it('describes actual free applications without fabricated search or review markup', () => {
     const apps = graph.filter((entry: { '@type': string }) => entry['@type'] === 'WebApplication');
-    expect(apps).toHaveLength(2);
-    expect(apps.map((entry: { url: string }) => entry.url)).toEqual(['https://calculator.aftertaxus.com/', 'https://aftertaxus.com/app/']);
+    expect(apps).toHaveLength(3);
+    expect(apps.map((entry: { url: string }) => entry.url)).toEqual(['https://calculator.aftertaxus.com/', 'https://aftertaxus.com/calculator.html', 'https://aftertaxus.com/app/']);
     for (const app of apps) expect(app.offers).toEqual({ '@type': 'Offer', price: '0', priceCurrency: 'USD' });
     expect(graph.some((entry: { '@type': string }) => entry['@type'] === 'Organization')).toBe(true);
     expect(JSON.stringify(graph)).not.toMatch(/SearchAction|ratingValue|reviewCount/);
@@ -74,6 +117,26 @@ describe('public marketing pages', () => {
     expect(calculator).toContain('The full app is free, not a paid upgrade');
     expect(calculator).toContain('prepare your quick-estimate inputs in this browser');
     expect(calculator).toContain('Calculations use AfterTaxUS backend services');
+    expect(calculator).toContain('Original income calculator');
+    expect(home).toContain('The original homepage calculator, now on its own page');
+    expect(home).toContain('aria-labelledby="original-calculator-title"');
+    expect(links(calculator)).toContain('https://calculator.aftertaxus.com/');
+  });
+
+  it('presents the original income calculator as a third full-width card below the first two', () => {
+    const section = home.match(/<section[^>]*id="compare-tools"[\s\S]*?<\/section>/)![0];
+    const cards = [...section.matchAll(/<article class="tool-card[^>]*>[\s\S]*?<\/article>/g)].map(match => match[0]);
+    expect(cards).toHaveLength(3);
+    expect(links(cards[0])).toEqual(['https://calculator.aftertaxus.com/']);
+    expect(links(cards[1])).toEqual(['/app/']);
+    expect(links(cards[2])).toEqual(['/calculator.html']);
+    expect(cards[2]).toContain('class="tool-card income-tool"');
+    expect(cards[2]).toContain('Use the free income calculator');
+    expect(cards[2]).toContain('class="button primary"');
+    expect(cards[2].match(/<li>/g)).toHaveLength(4);
+    expect(section).toContain('All three are free.');
+    expect(section).not.toContain('alternative-tool');
+    expect(read('marketing.css')).toMatch(/\.income-tool\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/);
   });
 
   it('retains visible limitations and permission boundaries for AI users', () => {
