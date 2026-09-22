@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useMemo, useState } from "react";
+import { StrictMode, useEffect, useId, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { FullAppUpgrade } from "./FullAppUpgrade";
@@ -340,6 +340,7 @@ function symbolOptionLabel(option: InvestmentSymbolOption) {
 }
 
 function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { title: string; yearlyIncome: number; isWinner: boolean; value: InvestmentInput; onChange: (value: InvestmentInput) => void }) {
+  const symbolListId = useId();
   const taxType = taxTypeOptions.find((option) => option.value === value.taxType) || taxTypeOptions[0];
   const symbolOptions = investmentSymbolOptions(value.symbol);
   const changeSymbol = (symbol: string) => {
@@ -355,10 +356,10 @@ function InvestmentCard({ title, yearlyIncome, isWinner, value, onChange }: { ti
       <label className="field">
         <span>Asset / Symbol</span>
         <div className="symbol-field-row">
-          <input value={value.symbol} placeholder="Type symbol" onChange={(event) => changeSymbol(event.target.value)} />
-          <select value={value.symbol} onChange={(event) => changeSymbol(event.target.value)} aria-label={`${title} symbol dropdown`}>
-            {symbolOptions.map((option) => <option key={option.symbol} value={option.symbol}>{symbolOptionLabel(option)}</option>)}
-          </select>
+          <input list={symbolListId} value={value.symbol} placeholder="Select or type a symbol" autoComplete="off" aria-label={`${title} asset or symbol`} onChange={(event) => changeSymbol(event.target.value)} />
+          <datalist id={symbolListId}>
+            {symbolOptions.map((option) => <option key={option.symbol} value={option.symbol} label={symbolOptionLabel(option)} />)}
+          </datalist>
         </div>
       </label>
       <div className="yield-field-row">

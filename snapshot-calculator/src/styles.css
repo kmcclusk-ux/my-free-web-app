@@ -441,12 +441,11 @@ select {
 }
 
 .symbol-field-row {
-  display: grid;
-  grid-template-columns: minmax(72px, .38fr) minmax(0, 1fr);
-  gap: 6px;
+  width: 100%;
 }
 
 .symbol-field-row input {
+  width: 100%;
   font-weight: 900;
   text-transform: uppercase;
 }
