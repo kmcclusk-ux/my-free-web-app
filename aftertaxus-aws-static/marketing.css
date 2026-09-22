@@ -89,6 +89,33 @@ h1 em, h2 em { font-style: normal; color: var(--teal); }
 .comparison-calculator-frame-shell { overflow: hidden; border: 1px solid #203747; border-radius: 24px; background: #07111f; box-shadow: 0 24px 72px #102e3426; }
 .comparison-calculator-frame { display: block; width: 100%; height: 1460px; border: 0; background: #07111f; }
 .comparison-calculator-note { margin: 14px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.other-tools-section { padding-block: 76px 42px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+.other-tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.other-tool-card { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 18px; min-height: 250px; padding: 28px; border: 1px solid var(--line); border-radius: 18px; background: #fff; }
+.other-tool-card--portfolio { background: #eff7f1; border-color: #bcd7c3; }
+.other-tool-card .tool-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: #e0f3e7; color: var(--teal); font-size: 23px; font-weight: 850; }
+.other-tool-card .pill { display: inline-block; margin-bottom: 12px; }
+.other-tool-card h3 { margin-bottom: 8px; font-size: 24px; }
+.other-tool-card p { margin: 0; color: var(--muted); font-size: 14px; }
+.other-tool-card .button { grid-column: 1 / -1; align-self: end; justify-self: start; }
+.calculator-guide-links { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 20px; padding: 16px 2px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.calculator-guide-links span { color: var(--muted); font-weight: 700; }
+.video-gallery-section { padding-block: 44px 78px; scroll-margin-top: 24px; }
+.video-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.video-card { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 12px 32px #1738310a; }
+.video-placeholder { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; background: linear-gradient(135deg, #d9eee2, #edf5ee 58%, #c9f3dc); color: var(--teal); }
+.video-placeholder--income { background: linear-gradient(135deg, #dcecf4, #eff5f8 58%, #c9dfeb); color: #255a75; }
+.video-placeholder--portfolio { background: linear-gradient(135deg, #dfe8ee, #f1f5f7 58%, #cbd9df); color: #315966; }
+.video-placeholder--assistant { background: linear-gradient(135deg, #e6e1f2, #f4f1f8 58%, #d7ccec); color: #5b4779; }
+.video-play { display: grid; place-items: center; width: 68px; height: 68px; padding-left: 5px; border: 2px solid currentColor; border-radius: 50%; background: #ffffffcc; font-size: 25px; box-shadow: 0 8px 24px #1738311f; }
+.video-placeholder-tag { position: absolute; top: 16px; left: 16px; padding: 6px 9px; border-radius: 999px; background: #ffffffd9; font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
+.video-number { position: absolute; right: 17px; bottom: 13px; font-size: 13px; font-weight: 850; letter-spacing: 1px; }
+.video-card-copy { padding: 20px 22px 23px; }
+.video-card-copy h3 { margin-bottom: 7px; font-size: 20px; }
+.video-card-copy p { margin: 0; color: var(--muted); font-size: 13px; }
+.compact-disclaimer { display: flex; align-items: center; justify-content: space-between; gap: 28px; margin-bottom: 58px; padding: 24px 27px; border: 1px solid var(--line); border-radius: 14px; background: #f0f4ed; }
+.compact-disclaimer p { max-width: 820px; margin: 0; color: var(--muted); font-size: 12px; }
+.compact-disclaimer .text-link { flex: 0 0 auto; }
 .benefit-strip { display: flex; justify-content: space-between; gap: 24px; border-block: 1px solid var(--line); padding-block: 22px; font-size: 12px; line-height: 1.6; color: var(--muted); }
 .benefit-strip strong { color: var(--ink); }
 .section { padding-block: 78px; }
@@ -217,6 +244,11 @@ blockquote footer { font-size: 11px; letter-spacing: 0; color: var(--muted); mar
   .comparison-calculator-heading .button { width: 100%; }
   .comparison-calculator-frame-shell { border-radius: 18px; }
   .comparison-calculator-frame { height: 2160px; }
+  .other-tools-section { padding-block: 48px 26px; }
+  .other-tool-grid, .video-gallery { grid-template-columns: 1fr; }
+  .other-tool-card { min-height: 0; padding: 22px; }
+  .video-gallery-section { padding-block: 34px 48px; }
+  .compact-disclaimer { align-items: flex-start; flex-direction: column; margin-bottom: 35px; }
   .benefit-strip { flex-direction: column; gap: 9px; padding-block: 20px; font-size: 12px; }
   .section { padding-block: 48px; }
   .steps-grid { grid-template-columns: 1fr; gap: 22px; }
