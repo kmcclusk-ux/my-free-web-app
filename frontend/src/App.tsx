@@ -4836,6 +4836,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [isSymbolFinderOpen, setIsSymbolFinderOpen] = useState(false);
   const [symbolFinderQuery, setSymbolFinderQuery] = useState("");
+  const [symbolFinderSymbols, setSymbolFinderSymbols] = useState<string[]>([]);
   const [symbolFinderScope, setSymbolFinderScope] = useState<SymbolFinderScope>("current");
   const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
@@ -5064,17 +5065,20 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     .map((symbol) => symbol.trim())
     .filter(Boolean)))
     .sort((a, b) => a.localeCompare(b)), [rows, symbolFinderScope]);
-  const normalizedSymbolFinderQuery = normalizeLookupKey(symbolFinderQuery);
-  const rowMatchesSymbolFinder = (row: InvestmentRow, normalizedQuery: string, scope: SymbolFinderScope) => (
-    normalizeLookupKey(row.symbol) === normalizedQuery ||
-    (scope === "all" && normalizeLookupKey(row.newSymbol) === normalizedQuery)
+  const normalizedSymbolFinderSymbols = useMemo(
+    () => new Set(symbolFinderSymbols.map((symbol) => normalizeLookupKey(symbol)).filter(Boolean)),
+    [symbolFinderSymbols]
+  );
+  const rowMatchesSymbolFinder = (row: InvestmentRow, normalizedSymbols: Set<string>, scope: SymbolFinderScope) => (
+    normalizedSymbols.has(normalizeLookupKey(row.symbol)) ||
+    (scope === "all" && normalizedSymbols.has(normalizeLookupKey(row.newSymbol)))
   );
   const symbolFinderMatches = useMemo(() => {
-    if (!normalizedSymbolFinderQuery) return [];
+    if (normalizedSymbolFinderSymbols.size === 0) return [];
     return filteredAndSortedRows
       .map((row, index) => ({ row, index }))
-      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedSymbolFinderQuery, symbolFinderScope));
-  }, [filteredAndSortedRows, normalizedSymbolFinderQuery, symbolFinderScope]);
+      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedSymbolFinderSymbols, symbolFinderScope));
+  }, [filteredAndSortedRows, normalizedSymbolFinderSymbols, symbolFinderScope]);
   const highlightedInvestmentRows = useMemo(() => selectedAssetIds
     .map((id) => displayedRows.find((row) => row.id === id))
     .filter((row): row is InvestmentRow => Boolean(row)), [displayedRows, selectedAssetIds]);
@@ -5082,12 +5086,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const canNavigateActiveRows = highlightedInvestmentRows.length > 1;
   const showRowNavigationControls = hasHighlightedNavigation;
   const rowNavigationLabel = `${highlightedInvestmentRows.length} highlighted row${highlightedInvestmentRows.length === 1 ? "" : "s"}`;
-  const lastSymbolFinderSelectSubmitRef = useRef("");
-  const lastSymbolFinderTypedSubmitRef = useRef("");
+  const symbolFinderInputRef = useRef<HTMLInputElement | null>(null);
   const openBlankSymbolFinder = () => {
-    lastSymbolFinderSelectSubmitRef.current = "";
-    lastSymbolFinderTypedSubmitRef.current = "";
     setSymbolFinderQuery("");
+    setSymbolFinderSymbols([]);
     setSymbolFinderScope("current");
     setIsSymbolFinderOpen(true);
   };
@@ -5102,17 +5104,10 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       if (rowElement) scrollInvestmentElementIntoTableView(rowElement, { block: "center", inline: "nearest" });
     });
   };
-  const applySymbolFinderQuery = (query: string) => {
-    const trimmedQuery = query.trim();
-    const normalizedQuery = normalizeLookupKey(trimmedQuery);
-    if (!normalizedQuery) return false;
-    const matches = filteredAndSortedRows
-      .map((row, index) => ({ row, index }))
-      .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedQuery, symbolFinderScope));
-    const focusedRow = matches[0]?.row;
+  const applySymbolFinderMatches = () => {
+    const focusedRow = symbolFinderMatches[0]?.row;
     if (!focusedRow) return false;
-    setSymbolFinderQuery(trimmedQuery);
-    onHighlightRows(matches.map(({ row }) => row.id));
+    onHighlightRows(symbolFinderMatches.map(({ row }) => row.id));
     setHighlightedFinderRowId(focusedRow.id);
     setShowOnlyHighlightedRows(true);
     setIsSymbolFinderOpen(false);
@@ -5122,42 +5117,30 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     });
     return true;
   };
-  const submitSymbolFinderQueryAfterEvent = (query: string) => {
-    window.setTimeout(() => {
-      applySymbolFinderQuery(query);
-    }, 0);
+  const addSymbolFinderSymbol = () => {
+    const trimmedSymbol = symbolFinderQuery.trim();
+    if (!trimmedSymbol) return;
+    const canonicalSymbol = symbolFinderOptions.find((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(trimmedSymbol)) || trimmedSymbol.toUpperCase();
+    setSymbolFinderSymbols((current) => current.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(canonicalSymbol))
+      ? current
+      : [...current, canonicalSymbol]);
+    setSymbolFinderQuery("");
+    window.requestAnimationFrame(() => symbolFinderInputRef.current?.focus());
+  };
+  const removeSymbolFinderSymbol = (symbolToRemove: string) => {
+    setSymbolFinderSymbols((current) => current.filter((symbol) => normalizeLookupKey(symbol) !== normalizeLookupKey(symbolToRemove)));
   };
   const submitSymbolFinderOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    lastSymbolFinderTypedSubmitRef.current = "";
-    submitSymbolFinderQueryAfterEvent(event.currentTarget.value);
+    addSymbolFinderSymbol();
   };
-  const symbolFinderHasExactOption = (value: string) => symbolFinderOptions.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(value));
-  const submitSymbolFinderTypedValue = (value: string) => {
-    const typedSymbol = value.trim();
-    setSymbolFinderQuery(typedSymbol);
-    if (!typedSymbol) {
-      lastSymbolFinderTypedSubmitRef.current = "";
-      return;
-    }
-    if (!symbolFinderHasExactOption(typedSymbol)) return;
-    const submitKey = `${typedSymbol}|${symbolFinderScope}`;
-    if (lastSymbolFinderTypedSubmitRef.current === submitKey) return;
-    lastSymbolFinderTypedSubmitRef.current = submitKey;
-    submitSymbolFinderQueryAfterEvent(typedSymbol);
-  };
-  const submitSymbolFinderSelectValue = (value: string) => {
-    const selectedSymbol = value.trim();
-    setSymbolFinderQuery(selectedSymbol);
-    if (!selectedSymbol) {
-      lastSymbolFinderSelectSubmitRef.current = "";
-      return;
-    }
-    const submitKey = `${selectedSymbol}|${symbolFinderScope}`;
-    if (lastSymbolFinderSelectSubmitRef.current === submitKey) return;
-    lastSymbolFinderSelectSubmitRef.current = submitKey;
-    submitSymbolFinderQueryAfterEvent(selectedSymbol);
+  const symbolFinderMatchLabel = (row: InvestmentRow) => {
+    const currentMatches = normalizedSymbolFinderSymbols.has(normalizeLookupKey(row.symbol));
+    const whatIfMatches = symbolFinderScope === "all" && normalizedSymbolFinderSymbols.has(normalizeLookupKey(row.newSymbol));
+    if (currentMatches && whatIfMatches && normalizeLookupKey(row.symbol) !== normalizeLookupKey(row.newSymbol)) return `${row.symbol} + WhatIf ${row.newSymbol}`;
+    if (whatIfMatches) return `${row.symbol || "Current"} → ${row.newSymbol}`;
+    return row.symbol;
   };
   const focusInvestmentRow = (rowId: number) => {
     setHighlightedFinderRowId(rowId);
@@ -5787,38 +5770,32 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             <div className="symbol-finder-panel__header">
               <div>
                 <p className="eyebrow">Investment Rows</p>
-                <h3 id="symbol-finder-title">Find Asset</h3>
+                <h3 id="symbol-finder-title">Find Assets</h3>
               </div>
               <button className="ghost-button ghost-button--compact" type="button" onClick={() => setIsSymbolFinderOpen(false)}>Close</button>
             </div>
             <div className="symbol-finder-panel__controls">
-              <label>
-                <span>Type symbol</span>
-                <input
-                  type="text"
-                  list="symbol-finder-options"
-                  value={symbolFinderQuery}
-                  onInput={(event) => submitSymbolFinderTypedValue(event.currentTarget.value)}
-                  onChange={(event) => submitSymbolFinderTypedValue(event.currentTarget.value)}
-                  onKeyDown={submitSymbolFinderOnEnter}
-                  placeholder="Enter symbol"
-                  autoFocus
-                />
-              </label>
+              <div className="symbol-finder-panel__entry">
+                <label htmlFor="symbol-finder-input">Symbol to add</label>
+                <div className="symbol-finder-panel__add-row">
+                  <input
+                    id="symbol-finder-input"
+                    ref={symbolFinderInputRef}
+                    type="text"
+                    list="symbol-finder-options"
+                    value={symbolFinderQuery}
+                    onChange={(event) => setSymbolFinderQuery(event.currentTarget.value)}
+                    onKeyDown={submitSymbolFinderOnEnter}
+                    placeholder="BIL"
+                    autoFocus
+                  />
+                  <button className="primary-button ghost-button--compact symbol-finder-panel__add-button" type="button" onClick={addSymbolFinderSymbol} disabled={!symbolFinderQuery.trim()}>+ Add symbol</button>
+                </div>
+                <small>Type or choose a symbol, then select Add symbol. Repeat for BIL, CASH, FLOT, or any other symbols.</small>
+              </div>
               <datalist id="symbol-finder-options">
                 {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol} />)}
               </datalist>
-              <label>
-                <span>Select symbol</span>
-                <select
-                  value={symbolFinderQuery}
-                  onInput={(event) => submitSymbolFinderSelectValue(event.currentTarget.value)}
-                  onChange={(event) => submitSymbolFinderSelectValue(event.currentTarget.value)}
-                >
-                  <option value="">Choose symbol</option>
-                  {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol}>{symbol}</option>)}
-                </select>
-              </label>
               <label>
                 <span>Search in</span>
                 <select value={symbolFinderScope} onChange={(event) => setSymbolFinderScope(event.target.value as SymbolFinderScope)}>
@@ -5827,9 +5804,29 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                 </select>
               </label>
             </div>
+            <div className="symbol-finder-panel__selection" aria-live="polite">
+              <div className="symbol-finder-panel__selection-heading">
+                <strong>Symbols to find</strong>
+                {symbolFinderSymbols.length > 0 && <button className="ghost-button ghost-button--compact" type="button" onClick={() => setSymbolFinderSymbols([])}>Clear all</button>}
+              </div>
+              {symbolFinderSymbols.length === 0
+                ? <p>Add one or more symbols. Rows matching any added symbol will be included.</p>
+                : <div className="symbol-finder-panel__chips" role="list" aria-label="Symbols included in search">
+                    {symbolFinderSymbols.map((symbol) => (
+                      <span className="symbol-finder-chip" role="listitem" key={normalizeLookupKey(symbol)}>
+                        {symbol}
+                        <button type="button" onClick={() => removeSymbolFinderSymbol(symbol)} aria-label={`Remove ${symbol} from search`}>×</button>
+                      </span>
+                    ))}
+                  </div>}
+            </div>
+            <div className="symbol-finder-panel__results-heading">
+              <strong>{symbolFinderMatches.length} matching row{symbolFinderMatches.length === 1 ? "" : "s"}</strong>
+              <button className="primary-button ghost-button--compact" type="button" onClick={applySymbolFinderMatches} disabled={symbolFinderMatches.length === 0}>Find matching rows</button>
+            </div>
             <div className="symbol-finder-panel__results" role="list" aria-label="Matching investment rows">
-              {!normalizedSymbolFinderQuery && <p className="symbol-finder-panel__empty">Type or select an asset symbol to find matching visible rows.</p>}
-              {normalizedSymbolFinderQuery && symbolFinderMatches.length === 0 && <p className="symbol-finder-panel__empty">No visible rows match {symbolFinderQuery.trim()}.</p>}
+              {symbolFinderSymbols.length === 0 && <p className="symbol-finder-panel__empty">Add a symbol above to find matching visible investment rows.</p>}
+              {symbolFinderSymbols.length > 0 && symbolFinderMatches.length === 0 && <p className="symbol-finder-panel__empty">No visible rows match {symbolFinderSymbols.join(", ")}.</p>}
               {symbolFinderMatches.map(({ row, index }) => (
                 <button
                   key={row.id}
@@ -5840,7 +5837,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                 >
                   <strong>Row {row.spreadsheetRowNumber ?? index + 1}</strong>
                   <span>{row.description || row.account || "Investment row"}</span>
-                  <em>{row.newSymbol && normalizeLookupKey(row.newSymbol) === normalizedSymbolFinderQuery ? `${row.symbol || "Current"} → ${row.newSymbol}` : row.symbol}</em>
+                  <em>{symbolFinderMatchLabel(row)}</em>
                 </button>
               ))}
             </div>

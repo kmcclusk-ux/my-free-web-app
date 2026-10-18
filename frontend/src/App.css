@@ -4866,16 +4866,45 @@
 .symbol-finder-panel__controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  align-items: start;
   gap: 10px;
   margin-bottom: 14px;
 }
 
-.symbol-finder-panel__controls label {
+.symbol-finder-panel__controls label,
+.symbol-finder-panel__entry {
   display: grid;
   gap: 5px;
   color: #52616a;
   font-size: 12px;
   font-weight: 800;
+}
+
+.symbol-finder-panel__entry > label {
+  display: block;
+}
+
+.symbol-finder-panel__add-row {
+  display: flex;
+  gap: 8px;
+}
+
+.symbol-finder-panel__add-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.symbol-finder-panel__add-button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.symbol-finder-panel__entry small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .symbol-finder-panel__controls input,
@@ -4887,6 +4916,67 @@
   background: #fff;
   color: #172033;
   font-weight: 800;
+}
+
+.symbol-finder-panel__selection {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--poly-line, #d7dde8);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.symbol-finder-panel__selection-heading,
+.symbol-finder-panel__results-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.symbol-finder-panel__selection p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.symbol-finder-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.symbol-finder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 7px 4px 11px;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  font-weight: 900;
+}
+
+.symbol-finder-chip button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(30, 58, 138, 0.12);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.symbol-finder-panel__results-heading {
+  margin-bottom: 8px;
 }
 
 .symbol-finder-panel__results {
@@ -4939,6 +5029,17 @@
   color: #0f766e;
   font-style: normal;
   font-weight: 900;
+}
+
+@media (max-width: 600px) {
+  .symbol-finder-panel__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .symbol-finder-panel__add-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .split-row-overlay {
@@ -6517,8 +6618,15 @@ html.aftertaxus-dark-mode .auth-required-panel__username input {
 }
 
 .app-shell--dark .symbol-finder-panel__controls label,
-.app-shell--dark .symbol-finder-panel__controls label span {
+.app-shell--dark .symbol-finder-panel__controls label span,
+.app-shell--dark .symbol-finder-panel__entry,
+.app-shell--dark .symbol-finder-panel__entry > label {
   color: #cbd5e1 !important;
+}
+
+.app-shell--dark .symbol-finder-panel__entry small,
+.app-shell--dark .symbol-finder-panel__selection p {
+  color: #94a3b8 !important;
 }
 
 .app-shell--dark .symbol-finder-panel__controls input,
@@ -6544,6 +6652,27 @@ html.aftertaxus-dark-mode .auth-required-panel__username input {
 
 .app-shell--dark .symbol-finder-panel__results {
   scrollbar-color: #475569 #0f172a;
+}
+
+.app-shell--dark .symbol-finder-panel__selection {
+  border-color: rgba(226, 232, 240, .16) !important;
+  background: rgba(2, 6, 23, .62) !important;
+}
+
+.app-shell--dark .symbol-finder-panel__selection-heading,
+.app-shell--dark .symbol-finder-panel__results-heading {
+  color: #f8fafc !important;
+}
+
+.app-shell--dark .symbol-finder-chip {
+  border-color: rgba(96, 165, 250, .38) !important;
+  background: rgba(30, 64, 175, .32) !important;
+  color: #dbeafe !important;
+}
+
+.app-shell--dark .symbol-finder-chip button {
+  background: rgba(219, 234, 254, .14) !important;
+  color: #f8fafc !important;
 }
 
 .app-shell--dark .symbol-finder-panel__empty,
