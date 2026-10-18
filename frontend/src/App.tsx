@@ -3531,7 +3531,7 @@ function Section({ title, subtitle, children, className = "", hideHeading = fals
 }
 
 
-function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | "find" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
+function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | "find" | "fitColumns" | "lookup" | "previous" | "next" | "split" | "copy" | "paste" }) {
   if (name === "add") {
     return (
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3575,6 +3575,18 @@ function RowActionIcon({ name }: { name: "add" | "select" | "delete" | "edit" | 
       <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.5" cy="10.5" r="5.25" />
         <path d="m14.25 14.25 5 5" />
+      </svg>
+    );
+  }
+
+  if (name === "fitColumns") {
+    return (
+      <svg className="icon-button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4.5 5v14" />
+        <path d="M19.5 5v14" />
+        <path d="M7.5 12h9" />
+        <path d="m9.75 9.75-2.25 2.25 2.25 2.25" />
+        <path d="m14.25 9.75 2.25 2.25-2.25 2.25" />
       </svg>
     );
   }
@@ -5570,6 +5582,105 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp, { once: true });
   };
+  const investmentColumnText = (row: InvestmentRow, columnId: InvestmentColumnId) => {
+    const derived = derivedMap[row.id];
+    const incomeItem = Boolean(derived?.incomeItem);
+    const money = (value: number | undefined) => formatGridCurrency(value || 0);
+    const percent = (value: number | undefined) => formatPercent(value || 0);
+    switch (columnId) {
+      case "row": return String(row.spreadsheetRowNumber ?? "");
+      case "account": return row.account;
+      case "symbol": return row.symbol;
+      case "normalPercent": return incomeItem ? "N.A." : percent(derived?.currentPercent);
+      case "amount": return incomeItem ? "N.A." : money(row.totalInvestment);
+      case "year": return money(incomeItem ? row.yearlyIncome : derived?.yearlyIncome);
+      case "month": return money(derived?.monthlyIncome);
+      case "filtered": return money(derived?.filteredIncome);
+      case "total": return money(derived?.includedTotal);
+      case "taxStatus": return derived?.taxStatus || "";
+      case "ordinary": return money((derived?.ordinaryMonthly || 0) * 12);
+      case "preferred": return money((derived?.preferredMonthly || 0) * 12);
+      case "state": return money((derived?.stateMonthly || 0) * 12);
+      case "nonTaxable": return money((derived?.nonTaxableMonthly || 0) * 12);
+      case "investmentType": return derived?.investmentType || "";
+      case "nonInvestmentIncome": return money(derived?.nonInvestmentIncome);
+      case "cash": return money(derived?.cash);
+      case "stocks": return money(derived?.stocks);
+      case "preferredStock": return money(derived?.preferredStock);
+      case "bonds": return money(derived?.bonds);
+      case "muniBond": return money(derived?.muniBond);
+      case "muniInterest": return money(derived?.muniInterest);
+      case "businessDevelopment": return money(derived?.businessDevelopment);
+      case "coveredCall": return money(derived?.coveredCall);
+      case "realEstate": return money(derived?.realEstate);
+      case "bitcoin": return money(derived?.bitcoin);
+      case "overrideSymbol": return incomeItem ? "N.A." : row.newSymbol || row.symbol;
+      case "overridePercent": return incomeItem ? "N.A." : percent(derived?.newPercent);
+      case "usePercent": return incomeItem ? "N.A." : percent(derived?.effectivePercent);
+      case "useSymbol": return derived?.effectiveSymbol || "";
+      case "extraData": return money(derived?.extraData);
+      case "move":
+      case "included":
+      case "override":
+        return "";
+    }
+  };
+  const autoFitInvestmentColumns = () => {
+    const table = tableScrollRef.current?.querySelector<HTMLTableElement>("table");
+    const context = document.createElement("canvas").getContext("2d");
+    if (!table || !context) return;
+
+    const measureText = (text: string, font = "700 12px Inter, system-ui, sans-serif", letterSpacing = 0) => {
+      const normalized = text.replace(/\s+/g, " ").trim();
+      if (!normalized) return 0;
+      context.font = font;
+      return context.measureText(normalized).width + Math.max(0, normalized.length - 1) * letterSpacing;
+    };
+    const numericColumns = new Set<InvestmentColumnId>(["normalPercent", "amount", "year", "month", "filtered", "total", "ordinary", "preferred", "state", "nonTaxable", "nonInvestmentIncome", "cash", "stocks", "preferredStock", "bonds", "muniBond", "muniInterest", "businessDevelopment", "coveredCall", "realEstate", "bitcoin", "overridePercent", "usePercent", "extraData"]);
+    const columnChrome = (columnId: InvestmentColumnId) => {
+      if (columnId === "account") return 70;
+      if (columnId === "symbol" || columnId === "overrideSymbol") return 46;
+      if (numericColumns.has(columnId)) return 18;
+      return 20;
+    };
+    const nextWidths = { ...columnWidths };
+
+    for (const column of INVESTMENT_COLUMN_DEFS) {
+      if (["move", "included", "override"].includes(column.id)) {
+        nextWidths[column.id] = INVESTMENT_COLUMN_MIN_WIDTHS[column.id];
+        continue;
+      }
+
+      let widest = measureText(column.label.toUpperCase(), "800 10.5px Inter, system-ui, sans-serif", 0.35) + 24;
+      for (const row of rows) {
+        widest = Math.max(widest, measureText(investmentColumnText(row, column.id)) + columnChrome(column.id));
+      }
+
+      const renderedCells = table.querySelectorAll<HTMLElement>(`:is(th, td).investment-column--${column.id}`);
+      renderedCells.forEach((cell) => {
+        const cellStyle = window.getComputedStyle(cell);
+        const cellPadding = (Number.parseFloat(cellStyle.paddingLeft) || 0) + (Number.parseFloat(cellStyle.paddingRight) || 0);
+        const targets = cell.querySelectorAll<HTMLElement>(".resizable-header__label, input, select, .readonly-cell, .account-picker__trigger > span, .income-row-badge, .what-if-overridden-badge");
+        targets.forEach((target) => {
+          const style = window.getComputedStyle(target);
+          const value = target instanceof HTMLInputElement
+            ? target.value
+            : target instanceof HTMLSelectElement
+              ? target.selectedOptions[0]?.textContent || target.value
+              : target.textContent || "";
+          const targetPadding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+          const parent = target.parentElement;
+          const controlChrome = parent?.classList.contains("account-picker__trigger")
+            ? parent.classList.contains("asset-picker__trigger") ? 40 : 66
+            : 0;
+          widest = Math.max(widest, measureText(value, style.font, Number.parseFloat(style.letterSpacing) || 0) + targetPadding + controlChrome + cellPadding + 4);
+        });
+      });
+
+      nextWidths[column.id] = Math.min(INVESTMENT_COLUMN_MAX_WIDTH, Math.max(INVESTMENT_COLUMN_MIN_WIDTHS[column.id], Math.ceil(widest)));
+    }
+    setColumnWidths(nextWidths);
+  };
   const withInvestmentColumnClass = (cell: ReactElement<{ className?: string }>, columnId: InvestmentColumnId) => cloneElement(cell, {
     className: [cell.props.className, investmentColumnClassName(columnId)].filter(Boolean).join(" "),
   });
@@ -5660,6 +5771,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={() => setIsFavoritesPanelOpen(true)} aria-label="Select rows" title="Select rows"><RowActionIcon name="select" /></button>
         <button className="ghost-button icon-button action-icon-button action-icon-button--danger" type="button" onClick={handleRemoveIncludedRows} aria-label={`Delete ${includedRowsLabel}`} title={includedRowCount === 0 ? "No included rows to delete" : `Delete ${includedRowsLabel}`} disabled={includedRowCount === 0}><RowActionIcon name="delete" /></button>
         <button className="ghost-button icon-button action-icon-button" type="button" onClick={openBlankSymbolFinder} aria-label="Find asset rows" title="Find asset rows"><RowActionIcon name="find" /></button>
+        <button className="ghost-button icon-button action-icon-button" type="button" onClick={autoFitInvestmentColumns} aria-label="Auto-fit investment columns to their contents" title="Auto-fit columns to show their full contents"><RowActionIcon name="fitColumns" /></button>
         {showRowNavigationControls && (
           <div className="row-navigation-controls" role="group" aria-label="Cycle investment rows">
             <span className="row-navigation-controls__label">{rowNavigationLabel}</span>
