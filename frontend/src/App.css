@@ -2594,6 +2594,70 @@
   flex: 0 0 auto;
   gap: 10px;
 }
+.auth-only-screen {
+  display: grid;
+  min-height: 100vh;
+  box-sizing: border-box;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 28% 14%, rgba(41, 199, 163, .18), transparent 30%),
+    radial-gradient(circle at 74% 18%, rgba(35, 97, 201, .15), transparent 28%),
+    linear-gradient(180deg, #f8fbfb 0%, #edf5f3 58%, #ffffff 100%);
+}
+.auth-only-screen__card {
+  display: grid;
+  justify-items: center;
+  gap: 28px;
+  width: min(540px, 100%);
+  box-sizing: border-box;
+  padding: 42px 38px;
+  border: 1px solid rgba(16, 24, 40, .09);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 28px 80px rgba(16, 38, 43, .16);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+.auth-only-screen__card .aftertaxum-logo {
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: start;
+  color: #061b38;
+  text-align: left;
+}
+.auth-only-screen__card .aftertaxum-logo__mark {
+  width: 76px;
+  height: 76px;
+}
+.auth-only-screen__card .aftertaxum-logo__copy strong,
+.auth-only-screen__card .aftertaxum-logo__copy span,
+.auth-only-screen__card .aftertaxum-logo__copy small {
+  display: block;
+  color: #061b38;
+}
+.auth-only-screen__content {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  text-align: center;
+}
+.auth-only-screen__content h1 {
+  margin: 0;
+  color: #061b38;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  letter-spacing: -.045em;
+}
+.auth-only-screen__content > p:not(.eyebrow) {
+  margin: 0 auto;
+  max-width: 430px;
+  color: #52616a;
+  line-height: 1.55;
+}
+.auth-only-screen__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
 .auth-entry-dialog__backdrop {
   position: fixed;
   z-index: 1500;
@@ -2710,6 +2774,16 @@
   }
   .auth-required-panel__actions {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+  .auth-only-screen {
+    padding: 14px;
+  }
+  .auth-only-screen__card {
+    gap: 22px;
+    padding: 30px 22px;
+  }
+  .auth-only-screen__actions {
     grid-template-columns: 1fr;
   }
   .auth-entry-dialog__backdrop {
@@ -6131,6 +6205,31 @@ html.aftertaxus-dark-mode .auth-entry-dialog {
   border-color: #334155;
   background: #111827;
   color: #f8fafc;
+}
+
+html.aftertaxus-dark-mode .auth-only-screen {
+  background:
+    radial-gradient(circle at 20% -8%, rgba(96, 165, 250, .16), transparent 30%),
+    radial-gradient(circle at 90% 2%, rgba(52, 211, 153, .10), transparent 26%),
+    linear-gradient(180deg, #07111f, #0b1220 56%, #020617);
+}
+
+html.aftertaxus-dark-mode .auth-only-screen__card {
+  border-color: #334155;
+  background: rgba(15, 23, 42, .94);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .45);
+}
+
+html.aftertaxus-dark-mode .auth-only-screen__card .aftertaxum-logo,
+html.aftertaxus-dark-mode .auth-only-screen__card .aftertaxum-logo__copy strong,
+html.aftertaxus-dark-mode .auth-only-screen__card .aftertaxum-logo__copy span,
+html.aftertaxus-dark-mode .auth-only-screen__card .aftertaxum-logo__copy small,
+html.aftertaxus-dark-mode .auth-only-screen__content h1 {
+  color: #f8fafc;
+}
+
+html.aftertaxus-dark-mode .auth-only-screen__content > p:not(.eyebrow) {
+  color: #cbd5e1;
 }
 
 html.aftertaxus-dark-mode .auth-entry-dialog__header h3,

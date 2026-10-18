@@ -10372,6 +10372,31 @@ export default function App() {
     return <AppSplash message={splashMessage} />;
   }
 
+  if (requiresSignIn) {
+    return (
+      <main className="auth-only-screen">
+        {authEntryDialog}
+        <section className="auth-only-screen__card" aria-labelledby="auth-only-screen-title">
+          <AfterTaxUSLogo />
+          <div className="auth-only-screen__content">
+            <p className="eyebrow">Private Portfolio Workspace</p>
+            <h1 id="auth-only-screen-title">Sign in to AfterTax US</h1>
+            <p>Your holdings, saved scenarios, and publishing profile stay private to your account.</p>
+            {authState.error && <div className="status-card status-card--error">{authState.error}</div>}
+            <div className="auth-only-screen__actions">
+              <button className="primary-button" type="button" onClick={() => openAuthEntry("signIn")} disabled={authState.status === "loading"}>
+                {authState.status === "loading" ? "Completing sign in..." : "Sign In"}
+              </button>
+              <button className="ghost-button" type="button" onClick={() => openAuthEntry("create")} disabled={authState.status === "loading"}>
+                Create Account
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div
       className={`app-shell ${uiSettings.darkMode ? "app-shell--dark" : ""} ${focusedModelSurface ? "app-shell--mcp-surface" : ""} ${taxCalculationStatus === "recalculating" ? "app-shell--tax-recalculating" : ""}`.trim()}
