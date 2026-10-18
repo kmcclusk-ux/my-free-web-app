@@ -9,6 +9,7 @@ import { namespacedPublicReportSlug, normalizePublicReportSlug, resolvePublicUse
 import { readFocusedModelSurface, readMcpWorkbookSnapshot, rememberFocusedModelSurface, type FocusedModelSurface } from "./mcpSurface";
 import { installMcpApiFetchBridge, isMcpUiHost, isTrustedMcpNotification } from "./mcpApiBridge";
 import { buildInvestmentRowHash, buildSelectedInvestmentHashes, normalizeSelectedInvestmentHashes, resolveSelectedInvestmentIds } from "./investmentRowIdentity";
+import { synchronizeDuplicateAssetDividends, synchronizeInvestmentWhatIfDividends } from "./investmentAssetSync";
 import { isCurrentTaxCalculation, isTaxCalculationAbort, taxCalculationRequestKey, type TaxPlanRequest } from "./taxRecalculation";
 import { accountCashflowInclusion, incrementalInvestmentTax, investmentAnnualIncome, investmentFavoritesError, normalizeInvestmentFavorites, normalizeTaxWhatIfItems, proposedInvestmentRate, resolveIncomeMode, sumTaxWhatIfItems, WorkbookSyncGuard, type IncomeMode } from "./workbookAdapters";
 import "./App.css";
@@ -9620,6 +9621,19 @@ export default function App() {
       setter((current) => current.map((row) => row.id !== id ? row : booleanFields.includes(field) ? { ...row, [field]: Boolean(value) } : numericFields.includes(field) ? { ...row, [field]: toNumber(value) } : { ...row, [field]: value }));
     };
   }
+  const updateAssetRow = (id: number, field: keyof TickerRow, value: string | boolean) => {
+    if (field !== "percentReturn") {
+      updateCollection(setTickers, ["percentReturn", "extraData"])(id, field, value);
+      return;
+    }
+
+    const editedAsset = tickers.find((asset) => asset.id === id);
+    const dividendRate = toNumber(value);
+    setTickers((current) => synchronizeDuplicateAssetDividends(current, id, dividendRate));
+    if (editedAsset) {
+      setInvestments((current) => synchronizeInvestmentWhatIfDividends(current, editedAsset.symbol, dividendRate));
+    }
+  };
   function addRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>, row: T) { setter((current) => [...current, row]); }
   function removeRow<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) { return (id: number) => setter((current) => current.filter((row) => row.id !== id)); }
   function reorderCollection<T extends { id: number }>(setter: React.Dispatch<React.SetStateAction<T[]>>) {
@@ -11169,7 +11183,7 @@ export default function App() {
             onClearAllInc={() => setInvestments((current) => current.map((row) => ({ ...row, includeIncome: false })))}
           />
         )}
-        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} duplicateKey="symbol" columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateCollection(setTickers, ["percentReturn", "extraData"])} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onSplitRow={(id) => setTickers((current) => { const index = current.findIndex((row) => row.id === id); if (index < 0) return current; const nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1)); return [...current.slice(0, index + 1), { ...current[index], id: nextId }, ...current.slice(index + 1)]; })} onPasteRow={(id, values) => setTickers((current) => current.map((row) => row.id === id ? { ...row, ...values, id } : row))} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
+        {activeTab === "tickers" && <LookupTable title="Assets" subtitle="Workbook asset lookup. Dividend percentage, asset type, asset class, tax treatment, and extra tax data all flow into the investment sheet lookups." rows={tickers} duplicateKey="symbol" columns={[{ key: "symbol", label: "Asset ID" }, { key: "percentReturn", label: "Dividend", type: "percent" }, { key: "assetType", label: "Type", type: "select", options: assetTypeOptions }, { key: "category", label: "Asset Class", type: "select", options: categoryOptions }, { key: "taxTreatment", label: "Tax Treatment", type: "select", options: taxTreatmentOptions }, { key: "extraData", label: "Extra Data", type: "number" }, { key: "description", label: "Description" }, { key: "exDividend", label: "Ex-dividend" }, { key: "divPayout", label: "Div payout" }]} highlightedRowId={highlightedAssetRowId} onChange={updateAssetRow} onAdd={() => addRow(setTickers, { id: Date.now(), symbol: "", percentReturn: 0, assetType: "ETF", category: categoryOptions[1] || "", taxTreatment: "income", incomeItem: false, extraData: 0, description: "", exDividend: "", divPayout: "" })} onRemove={removeRow(setTickers)} onRemoveAll={() => setTickers([])} onReorder={reorderCollection(setTickers)} onSplitRow={(id) => setTickers((current) => { const index = current.findIndex((row) => row.id === id); if (index < 0) return current; const nextId = Math.max(Date.now(), ...current.map((row) => row.id + 1)); return [...current.slice(0, index + 1), { ...current[index], id: nextId }, ...current.slice(index + 1)]; })} onPasteRow={(id, values) => setTickers((current) => current.map((row) => row.id === id ? { ...row, ...values, id } : row))} onLookupRow={(row) => window.open(stockAnalysisDividendUrl(row.symbol, row.assetType), "_blank", "noopener,noreferrer")} showLookupRow={(row) => !isIncomeAssetType(row.assetType)} lookupRowLabel="Look up dividend for" showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "categories" && <LookupTable title="Asset Classes" subtitle="Reference list used by the Assets tab asset-class dropdown and portfolio-allocation rollup." rows={categories} columns={[{ key: "includeInAllocation", label: "Allocation", type: "checkbox" }, { key: "name", label: "Asset class" }]} onChange={updateCollection(setCategories)} onAdd={() => addRow(setCategories, { id: Date.now(), name: "", includeInAllocation: true })} onRemove={removeRow(setCategories)} onReorder={reorderCollection(setCategories)} showMoveHeaderLabel={false} rowDeleteNextToMove />}
         {activeTab === "taxTreatment" && taxTreatmentIssues.length > 0 && (
           <NavigableStatusCard
