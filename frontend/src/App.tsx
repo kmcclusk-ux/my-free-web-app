@@ -494,6 +494,7 @@ const AUTH_STORAGE_KEY = "portfolio-auth-session";
 const AUTH_PKCE_STORAGE_KEY = "portfolio-auth-pkce";
 const PUBLIC_USERNAME_STORAGE_KEY = "aftertaxus-public-username";
 const INVESTMENT_COLUMN_WIDTH_STORAGE_KEY = "aftertaxus-investment-column-widths-compact-v2";
+const INVESTMENT_SYMBOL_FINDER_STORAGE_KEY = "aftertaxus-investment-symbol-finder-v1";
 const INVESTMENT_COLUMN_DEFS = [
   { id: "row", label: "Row", className: "sheet-row-heading", defaultWidth: 30, minWidth: 28 },
   { id: "move", label: "", ariaLabel: "Row actions", className: "drag-handle-heading", defaultWidth: 42, minWidth: 42 },
@@ -554,6 +555,26 @@ const INVESTMENT_COLUMN_MIN_WIDTHS = INVESTMENT_COLUMN_DEFS.reduce((acc, column)
   return acc;
 }, {} as InvestmentColumnWidths);
 const INVESTMENT_COLUMN_MAX_WIDTH = 360;
+
+function storedSymbolFinderSettings() {
+  const fallback = { symbols: [] as string[], scope: "current" as SymbolFinderScope };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(INVESTMENT_SYMBOL_FINDER_STORAGE_KEY) || "null") as { symbols?: unknown; scope?: unknown } | null;
+    const symbols = Array.isArray(stored?.symbols)
+      ? stored.symbols
+          .filter((symbol): symbol is string => typeof symbol === "string")
+          .map((symbol) => symbol.trim())
+          .filter(Boolean)
+      : [];
+    return {
+      symbols: Array.from(new Map(symbols.map((symbol) => [normalizeLookupKey(symbol), symbol])).values()),
+      scope: stored?.scope === "all" ? "all" as SymbolFinderScope : "current" as SymbolFinderScope,
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 function isCognitoEnabled() {
   return Boolean(COGNITO_DOMAIN && COGNITO_CLIENT_ID && COGNITO_REDIRECT_URI);
@@ -4848,8 +4869,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
   const [isSymbolFinderOpen, setIsSymbolFinderOpen] = useState(false);
   const [symbolFinderQuery, setSymbolFinderQuery] = useState("");
-  const [symbolFinderSymbols, setSymbolFinderSymbols] = useState<string[]>([]);
-  const [symbolFinderScope, setSymbolFinderScope] = useState<SymbolFinderScope>("current");
+  const [symbolFinderSymbols, setSymbolFinderSymbols] = useState<string[]>(() => storedSymbolFinderSettings().symbols);
+  const [symbolFinderScope, setSymbolFinderScope] = useState<SymbolFinderScope>(() => storedSymbolFinderSettings().scope);
   const [highlightedFinderRowId, setHighlightedFinderRowId] = useState<number | null>(null);
   const [splitTarget, setSplitTarget] = useState<InvestmentRow | null>(null);
   const [splitCount, setSplitCount] = useState(2);
@@ -5101,8 +5122,6 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   const symbolFinderInputRef = useRef<HTMLInputElement | null>(null);
   const openBlankSymbolFinder = () => {
     setSymbolFinderQuery("");
-    setSymbolFinderSymbols([]);
-    setSymbolFinderScope("current");
     setIsSymbolFinderOpen(true);
   };
   const highlightSymbolFinderMatches = (focusedRowId: number) => {
@@ -5141,6 +5160,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
   };
   const removeSymbolFinderSymbol = (symbolToRemove: string) => {
     setSymbolFinderSymbols((current) => current.filter((symbol) => normalizeLookupKey(symbol) !== normalizeLookupKey(symbolToRemove)));
+  };
+  const clearSymbolFinderSettings = () => {
+    setSymbolFinderQuery("");
+    setSymbolFinderSymbols([]);
+    setSymbolFinderScope("current");
+    window.requestAnimationFrame(() => symbolFinderInputRef.current?.focus());
   };
   const submitSymbolFinderOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
@@ -5398,6 +5423,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isSymbolFinderOpen]);
+  useEffect(() => {
+    window.localStorage.setItem(INVESTMENT_SYMBOL_FINDER_STORAGE_KEY, JSON.stringify({
+      symbols: symbolFinderSymbols,
+      scope: symbolFinderScope,
+    }));
+  }, [symbolFinderScope, symbolFinderSymbols]);
   const handleSaveFavorite = () => {
     const name = normalizeFavoriteName(newFavoriteName);
     if (!name) return;
@@ -5903,7 +5934,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                   />
                   <button className="primary-button ghost-button--compact symbol-finder-panel__add-button" type="button" onClick={addSymbolFinderSymbol} disabled={!symbolFinderQuery.trim()}>+ Add symbol</button>
                 </div>
-                <small>Type or choose a symbol, then select Add symbol. Repeat for BIL, CASH, FLOT, or any other symbols.</small>
+                <small>Type or choose a symbol, then select Add symbol. Your symbol set and search scope are remembered until you clear them.</small>
               </div>
               <datalist id="symbol-finder-options">
                 {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol} />)}
@@ -5919,7 +5950,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             <div className="symbol-finder-panel__selection" aria-live="polite">
               <div className="symbol-finder-panel__selection-heading">
                 <strong>Symbols to find</strong>
-                {symbolFinderSymbols.length > 0 && <button className="ghost-button ghost-button--compact" type="button" onClick={() => setSymbolFinderSymbols([])}>Clear all</button>}
+                <button className="ghost-button ghost-button--compact" type="button" onClick={clearSymbolFinderSettings} disabled={symbolFinderSymbols.length === 0 && symbolFinderScope === "current"}>Clear search</button>
               </div>
               {symbolFinderSymbols.length === 0
                 ? <p>Add one or more symbols. Rows matching any added symbol will be included.</p>
