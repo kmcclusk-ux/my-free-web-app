@@ -18,6 +18,7 @@ import { parseQuickCalculatorHandoff, quickCalculatorIncomeRecords } from "./qui
 import { effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInterestTreatment, isNonInvestmentIncomeType, localIncomeCategory, whatIfInvestmentIncome } from "../../mcp-server/src/portfolioIncome";
 import { buildCombinedTaxThermometerMarkers, taxScheduleBaseRate, type ThermometerMarker } from "./taxThermometer";
 import { TaxThermometer, type ThermometerStat, type ThermometerValue } from "./TaxThermometerView";
+import { normalizeSymbolFinderPattern, parseSymbolFinderInput, symbolMatchesFinderPatterns } from "./symbolFinder";
 
 type TabKey =
   | "investments"
@@ -565,11 +566,11 @@ function storedSymbolFinderSettings() {
     const symbols = Array.isArray(stored?.symbols)
       ? stored.symbols
           .filter((symbol): symbol is string => typeof symbol === "string")
-          .map((symbol) => symbol.trim())
+          .flatMap(parseSymbolFinderInput)
           .filter(Boolean)
       : [];
     return {
-      symbols: Array.from(new Map(symbols.map((symbol) => [normalizeLookupKey(symbol), symbol])).values()),
+      symbols: Array.from(new Map(symbols.map((symbol) => [normalizeSymbolFinderPattern(symbol).toLowerCase(), symbol])).values()),
       scope: stored?.scope === "all" ? "all" as SymbolFinderScope : "current" as SymbolFinderScope,
     };
   } catch {
@@ -5117,15 +5118,15 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     .filter(Boolean)))
     .sort((a, b) => a.localeCompare(b)), [rows, symbolFinderScope]);
   const normalizedSymbolFinderSymbols = useMemo(
-    () => new Set(symbolFinderSymbols.map((symbol) => normalizeLookupKey(symbol)).filter(Boolean)),
+    () => symbolFinderSymbols.map(normalizeSymbolFinderPattern).filter(Boolean),
     [symbolFinderSymbols]
   );
-  const rowMatchesSymbolFinder = (row: InvestmentRow, normalizedSymbols: Set<string>, scope: SymbolFinderScope) => (
-    normalizedSymbols.has(normalizeLookupKey(row.symbol)) ||
-    (scope === "all" && normalizedSymbols.has(normalizeLookupKey(row.newSymbol)))
+  const rowMatchesSymbolFinder = (row: InvestmentRow, patterns: readonly string[], scope: SymbolFinderScope) => (
+    symbolMatchesFinderPatterns(row.symbol, patterns) ||
+    (scope === "all" && symbolMatchesFinderPatterns(row.newSymbol, patterns))
   );
   const symbolFinderMatches = useMemo(() => {
-    if (normalizedSymbolFinderSymbols.size === 0) return [];
+    if (normalizedSymbolFinderSymbols.length === 0) return [];
     return filteredAndSortedRows
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => rowMatchesSymbolFinder(row, normalizedSymbolFinderSymbols, symbolFinderScope));
@@ -5167,12 +5168,14 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     return true;
   };
   const addSymbolFinderSymbol = () => {
-    const trimmedSymbol = symbolFinderQuery.trim();
-    if (!trimmedSymbol) return;
-    const canonicalSymbol = symbolFinderOptions.find((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(trimmedSymbol)) || trimmedSymbol.toUpperCase();
-    setSymbolFinderSymbols((current) => current.some((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(canonicalSymbol))
-      ? current
-      : [...current, canonicalSymbol]);
+    const requestedSymbols = parseSymbolFinderInput(symbolFinderQuery).map((pattern) => pattern.endsWith("*")
+      ? pattern
+      : symbolFinderOptions.find((symbol) => normalizeLookupKey(symbol) === normalizeLookupKey(pattern)) || pattern);
+    if (requestedSymbols.length === 0) return;
+    setSymbolFinderSymbols((current) => {
+      const merged = [...current, ...requestedSymbols];
+      return Array.from(new Map(merged.map((symbol) => [normalizeSymbolFinderPattern(symbol).toLowerCase(), symbol])).values());
+    });
     setSymbolFinderQuery("");
     window.requestAnimationFrame(() => symbolFinderInputRef.current?.focus());
   };
@@ -5191,8 +5194,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     addSymbolFinderSymbol();
   };
   const symbolFinderMatchLabel = (row: InvestmentRow) => {
-    const currentMatches = normalizedSymbolFinderSymbols.has(normalizeLookupKey(row.symbol));
-    const whatIfMatches = symbolFinderScope === "all" && normalizedSymbolFinderSymbols.has(normalizeLookupKey(row.newSymbol));
+    const currentMatches = symbolMatchesFinderPatterns(row.symbol, normalizedSymbolFinderSymbols);
+    const whatIfMatches = symbolFinderScope === "all" && symbolMatchesFinderPatterns(row.newSymbol, normalizedSymbolFinderSymbols);
     if (currentMatches && whatIfMatches && normalizeLookupKey(row.symbol) !== normalizeLookupKey(row.newSymbol)) return `${row.symbol} + WhatIf ${row.newSymbol}`;
     if (whatIfMatches) return `${row.symbol || "Current"} → ${row.newSymbol}`;
     return row.symbol;
@@ -5937,7 +5940,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
             </div>
             <div className="symbol-finder-panel__controls">
               <div className="symbol-finder-panel__entry">
-                <label htmlFor="symbol-finder-input">Symbol to add</label>
+                <label htmlFor="symbol-finder-input">Symbols to add</label>
+                <div className="symbol-finder-panel__tip" role="note">
+                  <strong>Search tip</strong>
+                  <span>Add multiple symbols separated by commas or spaces. Add <b>*</b> after a sequence to match every symbol that starts with it, such as <b>VTI*</b>.</span>
+                </div>
                 <div className="symbol-finder-panel__add-row">
                   <input
                     id="symbol-finder-input"
@@ -5947,12 +5954,12 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
                     value={symbolFinderQuery}
                     onChange={(event) => setSymbolFinderQuery(event.currentTarget.value)}
                     onKeyDown={submitSymbolFinderOnEnter}
-                    placeholder="BIL"
+                    placeholder="BIL, VTI*"
                     autoFocus
                   />
-                  <button className="primary-button ghost-button--compact symbol-finder-panel__add-button" type="button" onClick={addSymbolFinderSymbol} disabled={!symbolFinderQuery.trim()}>+ Add symbol</button>
+                  <button className="primary-button ghost-button--compact symbol-finder-panel__add-button" type="button" onClick={addSymbolFinderSymbol} disabled={!symbolFinderQuery.trim()}>+ Add</button>
                 </div>
-                <small>Type or choose a symbol, then select Add symbol. Your symbol set and search scope are remembered until you clear them.</small>
+                <small>Type or choose symbols, then select Add. Your symbol set and search scope are remembered until you clear them.</small>
               </div>
               <datalist id="symbol-finder-options">
                 {symbolFinderOptions.map((symbol) => <option key={symbol} value={symbol} />)}

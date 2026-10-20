@@ -4958,6 +4958,45 @@
   display: block;
 }
 
+.symbol-finder-panel__tip {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  margin: 2px 0 5px;
+  padding: 8px 10px;
+  border: 1px solid rgba(14, 116, 144, 0.22);
+  border-radius: 10px;
+  background: #ecfeff;
+  color: #155e75;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.symbol-finder-panel__tip::after {
+  position: absolute;
+  bottom: -6px;
+  left: 20px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid rgba(14, 116, 144, 0.22);
+  border-bottom: 1px solid rgba(14, 116, 144, 0.22);
+  background: #ecfeff;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.symbol-finder-panel__tip strong {
+  color: #0e7490;
+  white-space: nowrap;
+}
+
+.symbol-finder-panel__tip b {
+  color: #164e63;
+  font-weight: 950;
+}
+
 .symbol-finder-panel__add-row {
   display: flex;
   gap: 8px;
@@ -6726,6 +6765,22 @@ html.aftertaxus-dark-mode .auth-required-panel__username input {
 .app-shell--dark .symbol-finder-panel__entry small,
 .app-shell--dark .symbol-finder-panel__selection p {
   color: #94a3b8 !important;
+}
+
+.app-shell--dark .symbol-finder-panel__tip {
+  border-color: rgba(34, 211, 238, .28) !important;
+  background: rgba(8, 145, 178, .18) !important;
+  color: #cffafe !important;
+}
+
+.app-shell--dark .symbol-finder-panel__tip::after {
+  border-color: rgba(34, 211, 238, .28) !important;
+  background: #123447 !important;
+}
+
+.app-shell--dark .symbol-finder-panel__tip strong,
+.app-shell--dark .symbol-finder-panel__tip b {
+  color: #67e8f9 !important;
 }
 
 .app-shell--dark .symbol-finder-panel__controls input,
