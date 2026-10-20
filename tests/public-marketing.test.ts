@@ -119,7 +119,7 @@ describe('public marketing pages', () => {
     expect(calculator).toContain('The full app is free, not a paid upgrade');
     expect(calculator).toContain('prepare your quick-estimate inputs in this browser');
     expect(calculator).toContain('Calculations use AfterTaxUS backend services');
-    expect(calculator).toContain('Original income calculator');
+    expect(calculator).toContain('Estimate your after-tax income');
     expect(home).toContain('After-tax income calculator');
     expect(home).toContain('href="/calculator.html"');
     expect(links(calculator)).toContain('https://calculator.aftertaxus.com/');
