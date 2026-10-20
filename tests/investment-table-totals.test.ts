@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectedRowsAfterTaxIncome, sumIncludedInvestmentIncome } from "../frontend/src/investmentTableTotals";
+import { selectedRowsAfterTaxIncome, setVisibleInvestmentRowsIncluded, sumIncludedInvestmentIncome } from "../frontend/src/investmentTableTotals";
 
 describe("investment table income totals", () => {
   it("updates annual and monthly dividends from included rows", () => {
@@ -21,5 +21,20 @@ describe("investment table income totals", () => {
   it("uses all selected income for the top after-tax total", () => {
     expect(selectedRowsAfterTaxIncome(640, 0)).toBe(640);
     expect(selectedRowsAfterTaxIncome(640, 140)).toBe(500);
+  });
+
+  it("changes inclusion only for rows currently visible", () => {
+    const rows = [
+      { id: 1, includeIncome: false, label: "visible" },
+      { id: 2, includeIncome: true, label: "hidden" },
+      { id: 3, includeIncome: false, label: "visible" },
+    ];
+
+    const selected = setVisibleInvestmentRowsIncluded(rows, [1, 3], true);
+    expect(selected.map((row) => row.includeIncome)).toEqual([true, true, true]);
+    expect(selected[1]).toBe(rows[1]);
+
+    const deselected = setVisibleInvestmentRowsIncluded(selected, [1, 3], false);
+    expect(deselected.map((row) => row.includeIncome)).toEqual([false, true, false]);
   });
 });

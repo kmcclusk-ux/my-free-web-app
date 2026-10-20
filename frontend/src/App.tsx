@@ -19,7 +19,7 @@ import { effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInteres
 import { buildCombinedTaxThermometerMarkers, taxScheduleBaseRate, type ThermometerMarker } from "./taxThermometer";
 import { TaxThermometer, type ThermometerStat, type ThermometerValue } from "./TaxThermometerView";
 import { normalizeSymbolFinderPattern, parseSymbolFinderInput, symbolMatchesFinderPatterns } from "./symbolFinder";
-import { selectedRowsAfterTaxIncome, sumIncludedInvestmentIncome } from "./investmentTableTotals";
+import { selectedRowsAfterTaxIncome, setVisibleInvestmentRowsIncluded, sumIncludedInvestmentIncome } from "./investmentTableTotals";
 
 type TabKey =
   | "investments"
@@ -4831,7 +4831,7 @@ function LookupTable<T extends { id: number }>({ title, subtitle, rows, columns,
   );
 }
 
-function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, showRowNumbers, isWhatIfActive, initialEditor = null, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; showRowNumbers: boolean; isWhatIfActive: boolean; initialEditor?: Pick<FocusedModelSurface, "action" | "recordId" | "editorKind"> | null; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
+function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions, taxTreatmentOptions, tickerMap, stateCode, accountTaxStatusByName, excludedAfterTaxAccountNames, derivedRows, favorites, filters, sort, selectedAssetIds, showRowNumbers, isWhatIfActive, initialEditor = null, onToggleWhatIf, onSaveFavorite, onApplyFavorite, onDeleteFavorite, onRenameFavorite, onChange, onCreateIncome, onCreateNewIncome, onEditIncome, onCreateInvestment, onEditInvestment, onCreateAccount, onCreateAsset, onCreateTaxTreatment, onRemove, onSplit, onReorder, onJumpToAccount, onJumpToAsset, onHighlightRows, onRemoveIncluded, onSetVisibleIncluded, onClearViewState, onSelectAllInc, onClearAllInc }: { rows: InvestmentRow[]; accountOptions: string[]; symbolOptions: string[]; categoryOptions: string[]; taxTreatmentOptions: string[]; tickerMap: Record<string, TickerRow>; stateCode: string; accountTaxStatusByName: Record<string, string>; excludedAfterTaxAccountNames: Set<string>; derivedRows: DerivedInvestmentRow[]; favorites: InvestmentFavorite[]; filters: InvestmentFilters; sort: InvestmentSort; selectedAssetIds: number[]; showRowNumbers: boolean; isWhatIfActive: boolean; initialEditor?: Pick<FocusedModelSurface, "action" | "recordId" | "editorKind"> | null; onToggleWhatIf: () => void; onSaveFavorite: (name: string) => void; onApplyFavorite: (name: string) => void; onDeleteFavorite: (name: string) => void; onRenameFavorite: (oldName: string, newName: string) => void; onChange: (id: number, field: keyof InvestmentRow, value: string | boolean) => void; onCreateIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateNewIncome: (input: IncomeEntryInput) => void; onEditIncome: (investmentId: number, input: IncomeEntryInput) => void; onCreateInvestment: (input: InvestmentEntryInput) => void; onEditInvestment: (investmentId: number, originalSymbol: string, input: InvestmentEntryInput) => void; onCreateAccount: (name: string) => void; onCreateAsset: (symbol: string) => void; onCreateTaxTreatment: (label: string) => void; onRemove: (id: number) => void; onSplit: (id: number, allocations: number[]) => void; onReorder: (sourceId: number, targetId: number) => void; onJumpToAccount: (accountName: string) => void; onJumpToAsset: (assetSymbol: string) => void; onHighlightRows: (ids: number[]) => void; onRemoveIncluded: () => void; onSetVisibleIncluded: (ids: number[], included: boolean) => void; onClearViewState: () => void; onSelectAllInc: () => void; onClearAllInc: () => void; }) {
   const derivedMap = useMemo(() => Object.fromEntries(derivedRows.map((row) => [row.id, row])), [derivedRows]);
   const [showOnlyHighlightedRows, setShowOnlyHighlightedRows] = useState(selectedAssetIds.length > 0);
   const selectedIdSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
@@ -4874,6 +4874,8 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       ? filteredAndSortedRows.filter((row) => selectedIdSet.has(row.id))
       : filteredAndSortedRows
   ), [filteredAndSortedRows, selectedIdSet, showOnlyHighlightedRows]);
+  const allVisibleRowsIncluded = displayedRows.length > 0 && displayedRows.every((row) => row.includeIncome);
+  const someVisibleRowsIncluded = displayedRows.some((row) => row.includeIncome);
   const displayedDerivedRows = displayedRows
     .map((row) => derivedMap[row.id])
     .filter((row): row is DerivedInvestmentRow => Boolean(row));
@@ -5742,12 +5744,24 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       className={[
         investmentColumnClassName(column.id),
         "className" in column ? column.className : "",
+        column.id === "included" ? "included-heading--interactive" : "",
         "group" in column ? `investment-column--${column.group}` : "",
       ].filter(Boolean).join(" ") || undefined}
       title={"title" in column ? column.title : undefined}
       aria-label={"ariaLabel" in column ? column.ariaLabel : undefined}
     >
-      <span className="resizable-header__label">{column.label}</span>
+      {column.id === "included" ? (
+        <input
+          className="included-heading__toggle"
+          type="checkbox"
+          checked={allVisibleRowsIncluded}
+          disabled={displayedRows.length === 0}
+          ref={(input) => { if (input) input.indeterminate = someVisibleRowsIncluded && !allVisibleRowsIncluded; }}
+          onChange={() => onSetVisibleIncluded(displayedRows.map((row) => row.id), !allVisibleRowsIncluded)}
+          aria-label={allVisibleRowsIncluded ? "Deselect all visible investment rows" : "Select all visible investment rows"}
+          title={allVisibleRowsIncluded ? "Deselect all visible rows" : "Select all visible rows"}
+        />
+      ) : <span className="resizable-header__label">{column.label}</span>}
       <button
         type="button"
         className="column-resizer"
@@ -11223,6 +11237,7 @@ export default function App() {
               setInvestments((current) => current.filter((row) => !row.includeIncome));
               setSelectedInvestmentIds((current) => current.filter((id) => !removedIds.has(id)));
             }}
+            onSetVisibleIncluded={(ids, included) => setInvestments((current) => setVisibleInvestmentRowsIncluded(current, ids, included))}
             onClearViewState={() => {
               setInvestmentFilters({ account: "", category: "", asset: "" });
               setInvestmentSort({ tableId: "investments", column: "", direction: "asc" });

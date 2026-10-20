@@ -1932,6 +1932,20 @@
   color: #2c5158;
   font-size: .72rem;
 }
+.included-heading--interactive::after {
+  content: none;
+}
+.included-heading__toggle {
+  width: 14px !important;
+  min-width: 14px !important;
+  height: 14px;
+  margin: 0;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.included-heading__toggle:disabled {
+  cursor: default;
+}
 .checkbox-cell--included input {
   width: 14px;
   min-width: 14px !important;
