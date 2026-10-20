@@ -42,3 +42,11 @@ export function isTaxCalculationAbort(error: unknown) {
     ? error.name === "AbortError"
     : error instanceof Error && error.name === "AbortError";
 }
+
+export function isRetryableTaxCalculationError(error: unknown) {
+  if (isTaxCalculationAbort(error)) return false;
+  const status = typeof error === "object" && error !== null && "status" in error
+    ? Number((error as { status?: unknown }).status)
+    : 0;
+  return status === 0 || status === 408 || status === 425 || status === 429 || status >= 500;
+}

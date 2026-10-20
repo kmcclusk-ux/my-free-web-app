@@ -10,7 +10,7 @@ import { readFocusedModelSurface, readMcpWorkbookSnapshot, rememberFocusedModelS
 import { installMcpApiFetchBridge, isMcpUiHost, isTrustedMcpNotification } from "./mcpApiBridge";
 import { buildInvestmentRowHash, buildSelectedInvestmentHashes, normalizeSelectedInvestmentHashes, resolveSelectedInvestmentIds } from "./investmentRowIdentity";
 import { synchronizeDuplicateAssetDividends, synchronizeInvestmentWhatIfDividends } from "./investmentAssetSync";
-import { isCurrentTaxCalculation, isTaxCalculationAbort, taxCalculationRequestKey, type TaxPlanRequest } from "./taxRecalculation";
+import { isCurrentTaxCalculation, isRetryableTaxCalculationError, isTaxCalculationAbort, taxCalculationRequestKey, type TaxPlanRequest } from "./taxRecalculation";
 import { accountCashflowInclusion, incrementalInvestmentTax, investmentAnnualIncome, investmentFavoritesError, normalizeInvestmentFavorites, normalizeTaxWhatIfItems, proposedInvestmentRate, resolveIncomeMode, sumTaxWhatIfItems, WorkbookSyncGuard, type IncomeMode } from "./workbookAdapters";
 import "./App.css";
 import { readAuthCallback } from "./authCallback";
@@ -2334,10 +2334,27 @@ function getAssetTaxTone(taxStatus: string, taxTreatment: string, stateCode: str
 }
 async function postTaxCalculation<T = TaxResult>(payload: object, signal?: AbortSignal) {
   if (!API_BASE_URL) throw new Error("Missing VITE_API_BASE_URL in frontend/.env");
-  const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal });
-  const json = (await response.json()) as T | ApiError;
-  if (!response.ok) throw new Error((json as ApiError).error || "API request failed");
-  return json as T;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/hello`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal });
+      const json = (await response.json()) as T | ApiError;
+      if (!response.ok) throw Object.assign(new Error((json as ApiError).error || "API request failed"), { status: response.status });
+      return json as T;
+    } catch (error) {
+      if (attempt >= 1 || !isRetryableTaxCalculationError(error)) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          window.clearTimeout(timeout);
+          reject(new DOMException("Request aborted.", "AbortError"));
+        };
+        const timeout = window.setTimeout(() => {
+          signal?.removeEventListener("abort", abort);
+          resolve();
+        }, 250);
+        signal?.addEventListener("abort", abort, { once: true });
+      });
+    }
+  }
 }
 
 async function loadWorkbook(workspaceId: string, idToken?: string, signal?: AbortSignal) {
@@ -8179,10 +8196,6 @@ export default function App() {
         setTaxCalculationStatus("ready");
       } else if (!isTaxCalculationAbort(taxPlanOutcome.reason)) {
         const error = taxPlanOutcome.reason instanceof Error ? taxPlanOutcome.reason : new Error("Tax calculation failed");
-        setTaxPlanResult(null);
-        setFederalResult(null);
-        setStateResult(null);
-        setLocalResult(null);
         setFederalError(error.message);
         setStateError(error.message);
         setTaxCalculationStatus("error");
@@ -8190,8 +8203,6 @@ export default function App() {
 
       if (withoutInvestmentsOutcome.status === "fulfilled") {
         setTaxPlanWithoutInvestmentsResult(withoutInvestmentsOutcome.value);
-      } else if (!isTaxCalculationAbort(withoutInvestmentsOutcome.reason)) {
-        setTaxPlanWithoutInvestmentsResult(null);
       }
     }, 80);
 

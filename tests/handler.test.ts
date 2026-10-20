@@ -259,6 +259,32 @@ describe("Lambda handler", () => {
     expect(json.afterTaxIncome).toBe(455000 - json.totalTax);
   });
 
+  test("TAX_PLAN_2025 calculates income tax for 293k of ordinary income", async () => {
+    const response = await post({
+      calc: "TAX_PLAN_2025",
+      filingStatus: "mfj",
+      state: "CA",
+      ordinaryIncomeExcludingSocialSecurity: 293000,
+      preferredIncome: 0,
+      netInvestmentIncome: 0,
+      w2Income: 0,
+      totalIncome: 293000,
+      displayIncome: 293000,
+      federalDeductionMode: "standard",
+      stateGrossIncome: 293000,
+      stateDeductionMode: "standard",
+      stateStandardDeduction: 11080,
+      local: { enabled: false },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = JSON.parse(response.body);
+    expect(json.federal.incomeTax).toBeGreaterThan(0);
+    expect(json.state.incomeTax).toBeGreaterThan(0);
+    expect(json.totalTax).toBeGreaterThan(0);
+    expect(json.afterTaxIncome).toBeLessThan(293000);
+  });
+
   test("aggregate endpoints reject unknown state and local schedules", async () => {
     const stateResponse = await post({
       calc: "TAX_PLAN_2025",

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   isCurrentTaxCalculation,
+  isRetryableTaxCalculationError,
   isTaxCalculationAbort,
   taxCalculationRequestKey,
   type TaxPlanRequest,
@@ -94,5 +95,26 @@ describe("tax recalculation coordination", () => {
   test("recognizes aborted requests without surfacing a tax error", () => {
     expect(isTaxCalculationAbort(new DOMException("Superseded", "AbortError"))).toBe(true);
     expect(isTaxCalculationAbort(new Error("Backend failed"))).toBe(false);
+  });
+
+  test("retries transient calculation failures but not invalid inputs or aborts", () => {
+    expect(isRetryableTaxCalculationError(Object.assign(new Error("Unavailable"), { status: 503 }))).toBe(true);
+    expect(isRetryableTaxCalculationError(Object.assign(new Error("Rate limited"), { status: 429 }))).toBe(true);
+    expect(isRetryableTaxCalculationError(Object.assign(new Error("Invalid input"), { status: 400 }))).toBe(false);
+    expect(isRetryableTaxCalculationError(new DOMException("Superseded", "AbortError"))).toBe(false);
+  });
+
+  test("a failed refresh keeps the last valid tax result visible", () => {
+    const appSource = readFileSync("frontend/src/App.tsx", "utf8");
+    const failureBranch = appSource.slice(
+      appSource.indexOf("} else if (!isTaxCalculationAbort(taxPlanOutcome.reason))"),
+      appSource.indexOf("if (withoutInvestmentsOutcome.status === \"fulfilled\")")
+    );
+
+    expect(failureBranch).not.toContain("setTaxPlanResult(null)");
+    expect(failureBranch).not.toContain("setFederalResult(null)");
+    expect(failureBranch).not.toContain("setStateResult(null)");
+    expect(failureBranch).not.toContain("setLocalResult(null)");
+    expect(failureBranch).toContain("setTaxCalculationStatus(\"error\")");
   });
 });
