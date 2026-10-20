@@ -19,6 +19,7 @@ import { effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInteres
 import { buildCombinedTaxThermometerMarkers, taxScheduleBaseRate, type ThermometerMarker } from "./taxThermometer";
 import { TaxThermometer, type ThermometerStat, type ThermometerValue } from "./TaxThermometerView";
 import { normalizeSymbolFinderPattern, parseSymbolFinderInput, symbolMatchesFinderPatterns } from "./symbolFinder";
+import { sumIncludedInvestmentIncome } from "./investmentTableTotals";
 
 type TabKey =
   | "investments"
@@ -5566,12 +5567,11 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     if (dragOverRowId === row.id && draggingRowId !== row.id) classes.push("investment-row--drag-over");
     return classes.join(" ");
   };
+  const includedInvestmentIncome = sumIncludedInvestmentIncome(displayedDerivedRows);
   const totals = displayedDerivedRows.reduce((acc, row) => {
     if (!row.includeIncome) return acc;
 
     acc.totalInvestment += row.includedTotal;
-    acc.yearlyIncome += row.displayYearlyIncome;
-    acc.monthlyIncome += row.displayMonthlyIncome;
     acc.extraData += row.extraData;
     acc.filteredIncome += row.displayFilteredIncome;
     acc.includedTotal += row.includedTotal;
@@ -5591,7 +5591,7 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
     acc.realEstate += row.realEstate;
     acc.bitcoin += row.bitcoin;
     return acc;
-  }, { totalInvestment: 0, yearlyIncome: 0, monthlyIncome: 0, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
+  }, { totalInvestment: 0, ...includedInvestmentIncome, extraData: 0, filteredIncome: 0, includedTotal: 0, ordinary: 0, preferred: 0, state: 0, nonTaxable: 0, nonInvestmentIncome: 0, cash: 0, stocks: 0, preferredStock: 0, bonds: 0, muniBond: 0, muniInterest: 0, businessDevelopment: 0, coveredCall: 0, realEstate: 0, bitcoin: 0 });
   const investmentColumnClassName = (columnId: InvestmentColumnId) => `investment-column investment-column--${columnId}`;
   const renderTotalCell = (key: InvestmentColumnId, value: number) => <td key={key} className={investmentColumnClassName(key)}><div className="readonly-cell readonly-cell--money readonly-cell--total">{formatGridCurrency(value)}</div></td>;
   const renderEmptyTotalCell = (key: InvestmentColumnId) => <td key={key} className={investmentColumnClassName(key)} />;
