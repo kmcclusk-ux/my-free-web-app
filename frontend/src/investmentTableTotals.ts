@@ -12,3 +12,9 @@ export function sumIncludedInvestmentIncome(rows: readonly InvestmentIncomeRow[]
     return totals;
   }, { yearlyIncome: 0, monthlyIncome: 0 });
 }
+
+export function selectedRowsAfterTaxIncome(totalIncome: number, totalTax: number) {
+  const includedIncome = Number.isFinite(totalIncome) ? totalIncome : 0;
+  const taxBurden = Number.isFinite(totalTax) ? Math.max(totalTax, 0) : 0;
+  return includedIncome - taxBurden;
+}

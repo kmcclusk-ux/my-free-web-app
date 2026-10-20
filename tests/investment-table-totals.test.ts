@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sumIncludedInvestmentIncome } from "../frontend/src/investmentTableTotals";
+import { selectedRowsAfterTaxIncome, sumIncludedInvestmentIncome } from "../frontend/src/investmentTableTotals";
 
 describe("investment table income totals", () => {
   it("updates annual and monthly dividends from included rows", () => {
@@ -16,5 +16,10 @@ describe("investment table income totals", () => {
 
     rows[0].includeIncome = false;
     expect(sumIncludedInvestmentIncome(rows)).toEqual({ yearlyIncome: 6_000, monthlyIncome: 500 });
+  });
+
+  it("uses all selected income for the top after-tax total", () => {
+    expect(selectedRowsAfterTaxIncome(640, 0)).toBe(640);
+    expect(selectedRowsAfterTaxIncome(640, 140)).toBe(500);
   });
 });

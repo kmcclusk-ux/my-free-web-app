@@ -19,7 +19,7 @@ import { effectiveInvestmentRate, investmentNetIncome, isFederalTaxExemptInteres
 import { buildCombinedTaxThermometerMarkers, taxScheduleBaseRate, type ThermometerMarker } from "./taxThermometer";
 import { TaxThermometer, type ThermometerStat, type ThermometerValue } from "./TaxThermometerView";
 import { normalizeSymbolFinderPattern, parseSymbolFinderInput, symbolMatchesFinderPatterns } from "./symbolFinder";
-import { sumIncludedInvestmentIncome } from "./investmentTableTotals";
+import { selectedRowsAfterTaxIncome, sumIncludedInvestmentIncome } from "./investmentTableTotals";
 
 type TabKey =
   | "investments"
@@ -8130,8 +8130,14 @@ export default function App() {
   const totalTax = calculatedTotalTax;
   const spendableTaxBurden = Math.max(totalTax, 0);
   const afterTaxIncome = taxPlanResult?.afterTaxIncome ?? flows.displayIncome;
-  const monthlyIncome = totalIncome / 12;
-  const afterTaxMonthlyIncome = afterTaxIncome / 12;
+  const selectedIncomeTotals = sumIncludedInvestmentIncome(derivedRows);
+  const selectedAnnualIncome = selectedIncomeTotals.yearlyIncome;
+  const selectedMonthlyIncome = selectedIncomeTotals.monthlyIncome;
+  const selectedInvestmentIncome = derivedRows.reduce((sum, row) => sum + (row.includeIncome && !row.incomeItem ? row.yearlyIncome : 0), 0);
+  const selectedNonInvestmentIncome = derivedRows.reduce((sum, row) => sum + (row.includeIncome && row.incomeItem ? row.yearlyIncome : 0), 0);
+  const selectedIncomeExcludedFromSpendable = Math.max(selectedAnnualIncome - flows.displayIncome, 0);
+  const selectedAfterTaxIncome = selectedRowsAfterTaxIncome(selectedAnnualIncome, totalTax);
+  const selectedAfterTaxMonthlyIncome = selectedAfterTaxIncome / 12;
   const isMonthlyIncomePrimary = uiSettings.incomePrimaryPeriod === "monthly";
   const ordinaryBeforeDeductionsWithoutInvestments = Math.max(ordinaryIncomeExcludingSocialSecurity - flows.investmentFederalOrdinary, 0);
   const preferredBeforeDeductionsWithoutInvestments = Math.max(preferredBeforeDeductions - flows.investmentFederalPreferred, 0);
@@ -8267,12 +8273,12 @@ export default function App() {
       },
     }));
   };
-  const hasExcludedAfterTaxIncome = hiddenFromAfterTaxIncome > 0.005;
-  const excludedIncomeBadge = hasExcludedAfterTaxIncome ? (
+  const hasExcludedAfterTaxIncome = selectedIncomeExcludedFromSpendable > 0.005;
+  const selectedIncomeBadge = hasExcludedAfterTaxIncome ? (
     <span className="kpi-pill__inline-badge">
-      Excluded income
+      All selected income
       <span className="kpi-pill__inline-note" role="tooltip">
-        {formatCurrencyDetailed(hiddenFromAfterTaxIncome)} is still included when calculating tax liability, but is excluded from the after-tax income calculation. Change this on the Accounts tab by clearing “Exclude from aftertax income” for the account.
+        This total includes {formatCurrencyDetailed(selectedIncomeExcludedFromSpendable)} from selected rows that are excluded from spendable after-tax calculations elsewhere.
       </span>
     </span>
   ) : undefined;
@@ -8285,7 +8291,7 @@ export default function App() {
       {taxCalculationStatus === "error" ? "Tax error" : "Updating tax"}
     </span>
   ) : undefined;
-  const afterTaxIncomeBadge = excludedIncomeBadge || taxCalculationBadge ? <>{excludedIncomeBadge}{taxCalculationBadge}</> : undefined;
+  const afterTaxIncomeBadge = selectedIncomeBadge || taxCalculationBadge ? <>{selectedIncomeBadge}{taxCalculationBadge}</> : undefined;
   const afterTaxBreakdownDetails = (
     <div className="tax-breakdown-popover">
       <div className="tax-breakdown-popover__header">
@@ -8369,20 +8375,20 @@ export default function App() {
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Annual income</h4>
-        <div><span>Total included income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div><span>Total selected income</span><strong>{formatCurrencyDetailed(selectedAnnualIncome)}</strong></div>
         {hasAnyExcludedAfterTaxIncome && <div><span>Total non-excluded income</span><strong>{formatCurrencyDetailed(flows.displayIncome)}</strong></div>}
-        <div><span>Investment dividends and interest</span><strong>{formatCurrencyDetailed(flows.investmentIncome)}</strong></div>
-        <div><span>Non-investment income</span><strong>{formatCurrencyDetailed(flows.nonInvestmentIncome)}</strong></div>
+        <div><span>Investment dividends and interest</span><strong>{formatCurrencyDetailed(selectedInvestmentIncome)}</strong></div>
+        <div><span>Non-investment income</span><strong>{formatCurrencyDetailed(selectedNonInvestmentIncome)}</strong></div>
         <div><span>Tax-free income</span><strong>{formatCurrencyDetailed(flows.nonTaxableIncome)}</strong></div>
-        <div><span>Excluded from after-tax calculation</span><strong>{formatCurrencyDetailed(Math.max(hiddenFromAfterTaxIncome, 0))}</strong></div>
-        <div><span>Total annual income</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
-        <div className="tax-breakdown-popover__total"><span>Annual after-tax income</span><strong>{formatCurrencyDetailed(afterTaxIncome)}</strong></div>
+        <div><span>Income used for tax calculation</span><strong>{formatCurrencyDetailed(totalIncome)}</strong></div>
+        <div><span>Total annual income</span><strong>{formatCurrencyDetailed(selectedAnnualIncome)}</strong></div>
+        <div className="tax-breakdown-popover__total"><span>Annual after-tax income from selected rows</span><strong>{formatCurrencyDetailed(selectedAfterTaxIncome)}</strong></div>
       </div>
       <div className="tax-breakdown-popover__section">
         <h4>Monthly income</h4>
-        <div><span>Total monthly income</span><strong>{formatCurrencyDetailed(monthlyIncome)}</strong></div>
+        <div><span>Total monthly income</span><strong>{formatCurrencyDetailed(selectedMonthlyIncome)}</strong></div>
         {hasAnyExcludedAfterTaxIncome && <div><span>Non-excluded monthly income</span><strong>{formatCurrencyDetailed(flows.displayIncome / 12)}</strong></div>}
-        <div><span>Monthly after-tax income</span><strong>{formatCurrencyDetailed(afterTaxMonthlyIncome)}</strong></div>
+        <div><span>Monthly after-tax income from selected rows</span><strong>{formatCurrencyDetailed(selectedAfterTaxMonthlyIncome)}</strong></div>
         <div className="tax-breakdown-popover__total"><span>Displayed period</span><strong>{isMonthlyIncomePrimary ? "Monthly" : "Annual"}</strong></div>
       </div>
     </div>
@@ -8454,10 +8460,10 @@ export default function App() {
     </div>
   );
   const currentIncomeSnapshot: IncomeSnapshotValues = {
-    beforeTaxAnnual: totalIncome,
-    beforeTaxMonthly: monthlyIncome,
-    afterTaxAnnual: afterTaxIncome,
-    afterTaxMonthly: afterTaxMonthlyIncome,
+    beforeTaxAnnual: selectedAnnualIncome,
+    beforeTaxMonthly: selectedMonthlyIncome,
+    afterTaxAnnual: selectedAfterTaxIncome,
+    afterTaxMonthly: selectedAfterTaxMonthlyIncome,
   };
   const incomeSnapshotDeltas: IncomeSnapshotValues | null = incomeSnapshot
     ? {
@@ -9410,10 +9416,10 @@ export default function App() {
   const kpiMetrics: KpiMetricConfig[] = [
     {
       label: `${isMonthlyIncomePrimary ? "Monthly" : "Annual"} after-tax income`,
-      value: formatCurrency(isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome),
+      value: formatCurrency(isMonthlyIncomePrimary ? selectedAfterTaxMonthlyIncome : selectedAfterTaxIncome),
       valueLabel: isMonthlyIncomePrimary ? "monthly after tax" : "annual after tax",
-      secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? afterTaxIncome : afterTaxMonthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
-      numericValue: isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome,
+      secondaryValue: `${formatCurrency(isMonthlyIncomePrimary ? selectedAfterTaxIncome : selectedAfterTaxMonthlyIncome)} ${isMonthlyIncomePrimary ? "annual" : "monthly"}`,
+      numericValue: isMonthlyIncomePrimary ? selectedAfterTaxMonthlyIncome : selectedAfterTaxIncome,
       primary: true,
       tone: "warning",
       details: incomeBreakdownDetails,
@@ -9423,10 +9429,10 @@ export default function App() {
         <>
           <span className="kpi-pill__alternate-label">{isMonthlyIncomePrimary ? "Monthly" : "Annual"} pre-tax income</span>
           <span className="kpi-pill__alternate-main-line">
-            <strong>{formatCurrency(isMonthlyIncomePrimary ? monthlyIncome : totalIncome)}</strong>
+            <strong>{formatCurrency(isMonthlyIncomePrimary ? selectedMonthlyIncome : selectedAnnualIncome)}</strong>
             <span>{isMonthlyIncomePrimary ? "monthly before tax" : "annual before tax"}</span>
           </span>
-          <small>{formatCurrency(isMonthlyIncomePrimary ? afterTaxMonthlyIncome : afterTaxIncome)} after tax</small>
+          <small>{formatCurrency(isMonthlyIncomePrimary ? selectedAfterTaxMonthlyIncome : selectedAfterTaxIncome)} after tax</small>
         </>
       ),
       inlineControl: (
