@@ -1935,6 +1935,18 @@
 .included-heading--interactive::after {
   content: none;
 }
+.included-heading__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #2c5158;
+}
+.included-heading__checkmark {
+  font-size: .68rem;
+  font-weight: 900;
+  line-height: 1;
+}
 .included-heading__toggle {
   width: 14px !important;
   min-width: 14px !important;
@@ -6795,6 +6807,10 @@ html.aftertaxus-dark-mode .auth-required-panel__username input {
 .app-shell--dark .symbol-finder-panel__tip strong,
 .app-shell--dark .symbol-finder-panel__tip b {
   color: #67e8f9 !important;
+}
+
+.app-shell--dark .included-heading__control {
+  color: #bae6fd !important;
 }
 
 .app-shell--dark .symbol-finder-panel__controls input,

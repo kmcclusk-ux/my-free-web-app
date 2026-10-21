@@ -5751,16 +5751,19 @@ function InvestmentsTable({ rows, accountOptions, symbolOptions, categoryOptions
       aria-label={"ariaLabel" in column ? column.ariaLabel : undefined}
     >
       {column.id === "included" ? (
-        <input
-          className="included-heading__toggle"
-          type="checkbox"
-          checked={allVisibleRowsIncluded}
-          disabled={displayedRows.length === 0}
-          ref={(input) => { if (input) input.indeterminate = someVisibleRowsIncluded && !allVisibleRowsIncluded; }}
-          onChange={() => onSetVisibleIncluded(displayedRows.map((row) => row.id), !allVisibleRowsIncluded)}
-          aria-label={allVisibleRowsIncluded ? "Deselect all visible investment rows" : "Select all visible investment rows"}
-          title={allVisibleRowsIncluded ? "Deselect all visible rows" : "Select all visible rows"}
-        />
+        <span className="included-heading__control">
+          <span className="included-heading__checkmark" aria-hidden="true">✓</span>
+          <input
+            className="included-heading__toggle"
+            type="checkbox"
+            checked={allVisibleRowsIncluded}
+            disabled={displayedRows.length === 0}
+            ref={(input) => { if (input) input.indeterminate = someVisibleRowsIncluded && !allVisibleRowsIncluded; }}
+            onChange={() => onSetVisibleIncluded(displayedRows.map((row) => row.id), !allVisibleRowsIncluded)}
+            aria-label={allVisibleRowsIncluded ? "Deselect all visible investment rows" : "Select all visible investment rows"}
+            title={allVisibleRowsIncluded ? "Deselect all visible rows" : "Select all visible rows"}
+          />
+        </span>
       ) : <span className="resizable-header__label">{column.label}</span>}
       <button
         type="button"
